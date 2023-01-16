@@ -1,0 +1,1 @@
+.\dist\Nikita\Nikita.exe stop
