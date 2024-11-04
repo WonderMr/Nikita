@@ -32,7 +32,7 @@ class parser(threading.Thread):
         self.files_list_updater                             =   self.files_list_updater_thread_class("list " + name)    # создаём поток в зависиомсти от вызываемого
         self.files_list_updater.start()
         self.stopMe                                         =   False
-        self.chclient                                       =   ch(host='m1-1c-sme-bi', user='default', password='2X+eLPTO')
+        self.chclient                                       =   ch(host='m1-1c-sme-bi', user='default', password='')
         t.debug_print("Thread initialized", self.name)
     # ------------------------------------------------------------------------------------------------------------------
     # Запуск и работа класса
