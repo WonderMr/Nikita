@@ -1,5 +1,10 @@
 # -*- coding: utf-8 -*-
-import  win32event
+import platform
+is_windows                                                  =   platform.system() == "Windows"
+if is_windows:
+    import  win32event
+else:
+    import  signal
 import  os
 import  datetime
 import  servicemanager
@@ -21,21 +26,36 @@ class tools():
         tools.debug_print("Exit program with code = " + str(s_code))
         if not g.execution.running_in_console:
             tools.debug_print("Stopping service")
-            win32event.SetEvent(win32event.CreateEvent(None, 0, 0, None))
+            if is_windows:
+                win32event.SetEvent(win32event.CreateEvent(None, 0, 0, None))
         else:
-            from subprocess import call
-            # Я пока не научился хорошо и корректно завершать свой процесс, поэтому просто занимаюсь самоубийством
-            sys32                                           =   os.path.expandvars("%SystemRoot%")+'\\system32\\'
-            cmd                                             =   sys32+"cmd.exe"
-            taskkill                                        =   sys32+"taskkill.exe"
-            temp                                            =   os.path.expandvars("%temp%")+'\\suicide.cmd'
-            suicide                                         =   open(temp,'w')
-            print(taskkill+" /f /pid "+str(os.getpid()))
-            suicide.write(taskkill+" /f /pid "+str(os.getpid()))
-            suicide.close()
-            murder                                          =  cmd+" /c "+temp
-            print(str([cmd,'/c',temp]))
-            call([cmd,'/c',temp])
+            if is_windows:
+                from subprocess import call
+                # Я пока не научился хорошо и корректно завершать свой процесс, поэтому просто занимаюсь самоубийством
+                sys32                                       =   os.path.expandvars("%SystemRoot%")+'\\system32\\'
+                cmd                                         =   sys32+"cmd.exe"
+                taskkill                                    =   sys32+"taskkill.exe"
+                temp                                        =   os.path.expandvars("%temp%")+'\\suicide.cmd'
+                suicide                                     =   open(temp,'w')
+                print(taskkill+" /f /pid "+str(os.getpid()))
+                suicide.write(taskkill+" /f /pid "+str(os.getpid()))
+                suicide.close()
+                murder                                      =  cmd+" /c "+temp
+                print(str([cmd,'/c',temp]))
+                call([cmd,'/c',temp])
+            else: #linux
+                try:
+                    tools.debug_print("Sending SIGTERM to process")
+                    os.kill(os.getpid(), signal.SIGTERM)
+                except Exception as e:
+                    tools.debug_print("Failed to send SIGTERM: " + str(e))
+                    try:
+                        tools.debug_print("Sending SIGKILL to process")
+                        os.kill(os.getpid(), signal.SIGKILL)
+                    except Exception as e:
+                        tools.debug_print("Failed to send SIGKILL: " + str(e))
+                    finally:
+                        sys.exit(s_code)
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     # печать отладочного сообщения, работает только на взведённом глобально флаге отладки
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -129,7 +149,7 @@ class tools():
     # запись сообщения об ошибке авторизации
     # ------------------------------------------------------------------------------------------------------------------
     def log_msg(dp_msg):
-        g.notify.filename                                   =   g.execution.self_dir+"\\log_msg.txt"
+        g.notify.filename                                   =   os.path.join(g.execution.self_dir, "log_msg.txt")
         dp_dt                                               =   datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
         dp_msg                                              =   dp_dt + ":::" + dp_msg
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

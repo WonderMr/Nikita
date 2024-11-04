@@ -1,7 +1,12 @@
 # _*_ coding: UTF-8 _*_
+import platform
+is_windows                                               = platform.system() == "Windows"
 import  sys, os, configparser
-import  win32timezone                                                                                                   # нужен для скомпилированного
-import  win32serviceutil, win32service, win32event, servicemanager, winerror
+if is_windows:
+    import  win32timezone                                                                                               # нужен для скомпилированного
+    import  win32serviceutil, win32service, win32event, servicemanager, winerror
+else:
+    import  subprocess
 import  psutil
 import  time
 import  multiprocessing
@@ -23,50 +28,51 @@ from    src                 import  globals                 as  g
 # ======================================================================================================================
 # собственно, сервис windows
 # ======================================================================================================================
-class journal2ct_service(win32serviceutil.ServiceFramework):
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    _svc_name_                                              =   g.service.name
-    _svc_display_name_                                      =   g.service.display_name
-    _svc_description_                                       =   g.service.description
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    def __init__(self, args):
-        win32serviceutil.ServiceFramework.__init__(self, args)
-        self.hWaitStop                                      =   win32event.CreateEvent(None, 0, 0, None)
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    def log(self, msg):
-        servicemanager.LogInfoMsg(str(msg))
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    def SvcStop(self):
-        stop_exp                                            =   ""
-        try:
-            t.debug_print('service stop')
-            stop_exp                                        =   "ReportServiceStatus"
-            self.ReportServiceStatus(win32service.SERVICE_STOP_PENDING)
-            stop_exp                                        =   "stop"
-            self.Stop                                       =   True
-            stop_exp                                        =   "stop_all"
-            stop_all()
-            #stop_exp                                        =   "ReportServiceStatus"
-            #self.ReportServiceStatus(win32service.SERVICE_STOPPED)
-            stop_exp                                        =   "SetEvent"
-            win32event.SetEvent(self.hWaitStop)
-        except Exception as e:
-            t.debug_print("Exception1 "+str(e)+" exp is "+stop_exp)
-        t.debug_print("Service stopped")
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    def SvcDoRun(self):
-        try:
-            self.log("start")
-            t.debug_print('service start')
-            self.Stop                                       =   False
-            self.ReportServiceStatus(win32service.SERVICE_RUNNING)
-            t.debug_print('service start threads')
-            start_all()
-            while self.Stop                                 ==  False:
-                time.sleep(g.waits.in_cycle_we_trust)
-            #win32event.WaitforSingleObject(self.hWaitStop, win32event.INFINITE)
-        except Exception as e:
-            t.debug_print("Exception2 "+str(e))
+if is_windows:
+    class journal2ct_service(win32serviceutil.ServiceFramework):
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        _svc_name_                                          =   g.service.name
+        _svc_display_name_                                  =   g.service.display_name
+        _svc_description_                                   =   g.service.description
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        def __init__(self, args):
+            win32serviceutil.ServiceFramework.__init__(self, args)
+            self.hWaitStop                                  =   win32event.CreateEvent(None, 0, 0, None)
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        def log(self, msg):
+            servicemanager.LogInfoMsg(str(msg))
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        def SvcStop(self):
+            stop_exp                                        =   ""
+            try:
+                t.debug_print('service stop')
+                stop_exp                                    =   "ReportServiceStatus"
+                self.ReportServiceStatus(win32service.SERVICE_STOP_PENDING)
+                stop_exp                                    =   "stop"
+                self.Stop                                   =   True
+                stop_exp                                    =   "stop_all"
+                stop_all()
+                #stop_exp                                        =   "ReportServiceStatus"
+                #self.ReportServiceStatus(win32service.SERVICE_STOPPED)
+                stop_exp                                    =   "SetEvent"
+                win32event.SetEvent(self.hWaitStop)
+            except Exception as e:
+                t.debug_print("Exception1 "+str(e)+" exp is "+stop_exp)
+            t.debug_print("Service stopped")
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        def SvcDoRun(self):
+            try:
+                self.log("start")
+                t.debug_print('service start')
+                self.Stop                                   =   False
+                self.ReportServiceStatus(win32service.SERVICE_RUNNING)
+                t.debug_print('service start threads')
+                start_all()
+                while self.Stop ==  False:
+                    time.sleep(g.waits.in_cycle_we_trust)
+                #win32event.WaitforSingleObject(self.hWaitStop, win32event.INFINITE)
+            except Exception as e:
+                t.debug_print("Exception2 "+str(e))
 # ======================================================================================================================
 # Определение, сохранение и загрузка конфигурации
 # ======================================================================================================================
@@ -187,30 +193,114 @@ class conf:
     # ------------------------------------------------------------------------------------------------------------------
     def detect(fake_param=0,initial=False):
         t.debug_print("Conf detection")
-        # ~~~~~~~ получение первой активной службы 1C ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         d_found                                             =   False
-        for service in psutil.win_service_iter():
-            try:
-                d_service                                   =   (psutil.win_service_get(service.name())).as_dict()
-            except Exception as e:
-                t.debug_print("failed to parse "+str(service),'detect')
-            if g.rexp.service_is_1c.search(d_service["binpath"]) and d_service["start_type"] == 'automatic':
-                t.debug_print("found "+d_service["binpath"])
-                d_found                                     =   True
+        if is_windows:
+        # ~~~~~~~ получение первой активной службы 1C ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+            for service in psutil.win_service_iter():
                 try:
-                    #g.conf.c1.srvinfo                      =   g.rexp.service_1c_workdir.findall(service.binpath())[0]   #берем только первое значение
-                    detect_srvinfos                         =   g.rexp.service_1c_workdir.findall(service.binpath())
-                    if not len(detect_srvinfos)>0 :
-                        t.debug_print("can't detect srvinfo")
-                        t.seppuku()
-                    srv_dir                                 =   re.sub(r'\\\\\\','\\\\' ,detect_srvinfos[0])
-                    thread_name                             =   g.threads.config_updater.name \
-                                                                if g.threads.config_updater \
-                                                                else "initial configuration detection"
-                    t.debug_print("processing "+srv_dir,thread_name)
-                    conf.detect2(initial2=initial,d2_srvinfo=srv_dir)
+                    d_service                               =   (psutil.win_service_get(service.name())).as_dict()
                 except Exception as e:
-                    t.debug_print("Exception srv_1c "+str(e))
+                    t.debug_print("failed to parse "+str(service),'detect')
+                if g.rexp.service_is_1c.search(d_service["binpath"]) and d_service["start_type"] == 'automatic':
+                    t.debug_print("found " + d_service["binpath"])
+                    d_found                                 =   True
+                    try:
+                        #g.conf.c1.srvinfo                  =   g.rexp.service_1c_workdir.findall(service.binpath())[0]   #берем только первое значение
+                        detect_srvinfos                     =   g.rexp.service_1c_workdir.findall(service.binpath())
+                        if not len(detect_srvinfos)>0 :
+                            t.debug_print("can't detect srvinfo")
+                            t.seppuku()
+                        srv_dir                             =   re.sub(r'\\\\\\','\\\\' ,detect_srvinfos[0])
+                        thread_name                         =   g.threads.config_updater.name \
+                                                                    if g.threads.config_updater \
+                                                                    else "initial configuration detection"
+                        t.debug_print("processing "+srv_dir,thread_name)
+                        conf.detect2(initial2=initial,d2_srvinfo=srv_dir)
+                    except Exception as e:
+                        t.debug_print("Exception srv_1c "+str(e))
+        else:
+            try:
+                # Получение списка всех включённых служб
+                services_output                             =   subprocess.check_output(
+                                                                    ['systemctl', 'list-unit-files'], #, '--all'] , #'--type=service', '--state=enabled'],
+                                                                    text=True
+                                                                )
+
+                # Разбор вывода команды
+                for line in services_output.splitlines():
+                    if d_found:
+                        break
+                    parts                                   =   line.split()
+                    #print(parts)
+                    if len(parts) < 2:
+                        continue  # Пропустить строки, которые не соответствуют формату
+
+                    unit_name, state                        =   parts[0], parts[1]
+
+                    # Проверка, относится ли служба к 1C
+                    if g.rexp.daemon_1c.search(unit_name):
+                        try:
+                            # Получение полной информации о службе
+                            d_found                         =   True
+                            service_info                    =   subprocess.check_output(
+                                                                    ['systemctl', 'show', unit_name],
+                                                                    text=True
+                                                                )
+
+                            # Извлечение ExecStart из информации о службе
+                            iter                            =   0
+                            exec_start                      =   ""
+                            for info_line in service_info.splitlines():
+                                t.debug_print(info_line)
+                                if info_line.startswith('ExecStart='):
+                                    exec_start              =   info_line[len('ExecStart='):].strip()
+                                    iter                    +=  1
+                                if info_line.startswith('Environment='):
+                                    environment             =   info_line[len('Environment='):].strip()
+                                    iter                    +=  1                                
+                                if iter == 2:
+                                    break
+                            
+                            c1_data_dir                     =   g.rexp.service_1c_workdir.findall(exec_start)[0]
+                            envs                            =   g.rexp.enviroments.findall(environment)
+                            environments                    =   {}
+                            for token in envs:
+                                key                         =   token[0]
+                                value                       =   token[1]
+                                environments[key]           =   value
+
+                            #t.debug_print(environments)
+                            if environments.get(c1_data_dir):
+                                c1_data_dir                 =   environments[c1_data_dir]
+                            
+                            if not os.path.exists(c1_data_dir):
+                                t.debug_print(f"Каталог {c1_data_dir} не существует")
+                                continue  # Пропустить, если каталог не существует
+                            if not exec_start:
+                                t.debug_print(f"ExecStart не найден для службы {unit_name}")
+                                continue  # Пропустить, если ExecStart не найден
+
+                            # Извлечение srv_dir с помощью регулярного выражения
+                            detect_srvinfos                 =   g.rexp.service_1c_workdir.findall(exec_start)
+                            if not detect_srvinfos:
+                                t.debug_print("can't detect srvinfo")
+                                t.seppuku()
+                            if len(detect_srvinfos) == 0:
+                                t.debug_print("can't detect srvinfo")
+                                t.seppuku
+                            srvinfo                         =   detect_srvinfos[0]
+                            if environments.get(srvinfo):
+                                srvinfo                     =   environments[srvinfo]
+                            
+
+                            srv_dir                         =   re.sub(r'\\\\\\', '\\\\', srvinfo)
+                            thread_name                     =   g.threads.config_updater.name if g.threads.config_updater else "initial configuration detection"
+                            t.debug_print("processing " + srv_dir, thread_name)
+                            conf.detect2(initial2=initial, d2_srvinfo=srv_dir)
+                        except Exception as e:
+                            t.debug_print(f"Не удалось проверить статус службы {unit_name}: {e}", 'detect')
+            except Exception as e:
+                t.debug_print("Exception while processing Linux services: " + str(e))
         if not d_found:
             t.debug_print("1C services not found")
             t.seppuku()
@@ -218,16 +308,16 @@ class conf:
     def detect2(fake_param=0,initial2=False,d2_srvinfo=""):
         regs                                                =   [element for element
                                                                     in os.listdir(d2_srvinfo)
-                                                                        if os.path.isdir(d2_srvinfo+"\\"+element)
+                                                                        if os.path.isdir(os.path.join(d2_srvinfo, element))
                                                                             and g.rexp.is_1c_cluster.findall(element)
                                                                 ]                                                       # получаю списков все кластеров
         local_bases_array                                   =   []
         t.debug_print("regs="+str(regs))
         for reg in regs:
-            clstr_dir                                       =   d2_srvinfo+"\\"+reg
+            clstr_dir                                       =   os.path.join(d2_srvinfo, reg)
             t.debug_print("clstr_dir=" + str(clstr_dir))
-            clstr_file                                      =   clstr_dir + "\\" + g.conf.c1.cluster_file
-            clstr_file_o                                    =   clstr_dir + "\\" + g.conf.c1.cluster_file_o
+            clstr_file                                      =   os.path.join(clstr_dir, g.conf.c1.cluster_file)
+            clstr_file_o                                    =   os.path.join(clstr_dir, g.conf.c1.cluster_file_o)
             clstr_file_o                                    =   clstr_file_o if os._exists(clstr_file_o) \
                                                                 else clstr_file                                         # сегодня (2020.05.22) столкнулся с отсутствием c cluster_file_o
             clstr_file_size                                 =   os.stat(clstr_file).st_size \
@@ -250,13 +340,13 @@ class conf:
             clstrs                                          =   g.rexp.clst_1c_base_rec.findall(clstr_text)
             t.debug_print("found clusters="+str(clstrs))
             for clst in clstrs:
-                ibase_dir                                   =   clstr_dir+"\\"+clst[0]
-                ibase_jr_dir                                =   ibase_dir+"\\"+g.conf.c1.jr_dir
+                ibase_dir                                   =   os.path.join(clstr_dir, clst[0])
+                ibase_jr_dir                                =   os.path.join(ibase_dir, g.conf.c1.jr_dir)
                 ibase_jr_dir                                =   re.sub(r'\\\\\\', '\\\\' ,ibase_jr_dir)                 # https://github.com/WonderMr/Journal2Ct/issues/38
                 if(os.path.exists(ibase_jr_dir)):                                                                       # каталог журнала регистрации есть
-                    ibase_jr_new_fname                      =   ibase_jr_dir+"\\"+g.conf.c1.jr_new_fname                # имя файла нового формата жр
+                    ibase_jr_new_fname                      =   os.path.join(ibase_jr_dir, g.conf.c1.jr_new_fname)      # имя файла нового формата жр
                     ibase_jr_new                            =   os.path.exists(ibase_jr_new_fname)
-                    ibase_jr_old_dict_fname                 =   ibase_jr_dir+"\\"+g.conf.c1.jr_old_dict_fname           # имя файла словаря старого формата жр
+                    ibase_jr_old_dict_fname                 =   os.path.join(ibase_jr_dir, g.conf.c1.jr_old_dict_fname) # имя файла словаря старого формата жр
                     ibase_jr_old                            =   os.path.exists(ibase_jr_old_dict_fname)                 # если ли файл словаря старого формата ЖР
                     if(ibase_jr_new or ibase_jr_old):
                         ib_nm                               =   t.normalize_ib_name(clst[1].upper())
@@ -277,7 +367,7 @@ class conf:
                                     base_found              =   True
                             if not base_found:
                                 t.debug_print("Обнаружена новая ИБ:"+ ibase_info[g.nms.ib.name])
-                                #if g.threads.solr.check_base_exists(cbe_name=ibase_info[g.nms.ib.name]):                # если здесь новоя ядрышко создастся
+                                #if g.threads.solr.check_base_exists(cbe_name=ibase_info[g.nms.ib.name]):               # если здесь новоя ядрышко создастся
                                 if True:
                                     g.parser.ibases.append(ibase_info)                                                  # добавляю его в массив
 
@@ -295,12 +385,12 @@ class conf:
         if initial2:
             g.conf.solr.mem_min                             =   "2g"
             g.conf.solr.mem_max                             =   "32g"
-            g.conf.solr.dir                                 =   g.execution.self_dir+"solr"
+            g.conf.solr.dir                                 =   os.path.join(g.execution.self_dir, "solr")
             g.conf.solr.listen_interface                    =   "127.0.0.1"
             g.conf.solr.listen_port                         =   "8983"
             g.conf.solr.solr_host                           =   "127.0.0.1"                                             # socket.gethostbyaddr(g.conf.solr.listen_interface)
             g.conf.solr.solr_port                           =   "8983"
-            g.conf.solr.java_home                           =   g.execution.self_dir+"java"
+            g.conf.solr.java_home                           =   os.path.join(g.execution.self_dir,"java")
             g.conf.solr.threads                             =   str(multiprocessing.cpu_count() // 2)                   # половину ядер на solr
             # ~~~~~~~ установка параметров http по умолчанию ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             g.conf.http.listen_port                         =   "8984"
@@ -320,18 +410,21 @@ def init_vars():
         g.execution.self_name                               =   str(sys.executable)
     else:  # если в отладке
         g.execution.self_name                               =   str(os.path.abspath(__file__))
-    g.conf.filename                                         =   g.rexp.any_file_ext.sub('' ,   g.execution.self_name) \
-                                                                +   "ini"                                               # имя файла конфигурации 2019.11.24 Я поймал какой-то странный глюк - двоится при замене. Поэтому сделал так
-    g.execution.self_dir                                    =   g.rexp.any_filename.sub(''    ,   g.execution.self_name)# каталог с исполняемым файлом
-    g.debug.dir                                             =   g.execution.self_dir+'debug\\'                          # каталог для хранения данных отладки
-    g.debug.filename                                        =   g.debug.dir\
-                                                            +   g.rexp.any_file_ext.sub(
-                                                                    '',
-                                                                    g.rexp.any_filename.search(g.conf.filename)[0])\
-                                                            +   str(os.getpid())\
-                                                            +   '.log'
-    g.parser.state_file                                     =   g.execution.self_dir+"\\parser.state"                   # здесь в json хранятся статусы парсинга файлов
-    g.parser.solr_id_file                                   =   g.execution.self_dir + "\\solr.id.state"                # здесь в json хранятся ID файлов для SOLR
+    # каталог с исполняемым файлом
+    g.execution.self_dir                                    =   g.rexp.any_filename.sub('' ,   g.execution.self_name)
+    self_full_name_without_ext                              =   g.rexp.any_file_ext.sub('' ,   g.execution.self_name)
+
+    g.conf.filename                                         =   self_full_name_without_ext + "ini"                     # имя файла конфигурации 2019.11.24 Я поймал какой-то странный глюк - двоится при замене. Поэтому сделал так
+    
+    self_name_without_ext                                   =   g.rexp.any_file_ext.sub('' ,   g.rexp.any_filename.search(g.conf.filename)[0])
+
+    g.debug.dir                                             =   os.path.join(g.execution.self_dir, 'debug')            # каталог для хранения данных отладки
+    
+    g_debug_filename                                        =   self_name_without_ext  + str(os.getpid())  + '.log'
+    g.debug.filename                                        =   os.path.join(g.debug.dir, g_debug_filename)
+
+    g.parser.state_file                                     =   os.path.join(g.execution.self_dir, "parser.state")     # здесь в json хранятся статусы парсинга файлов
+    g.parser.solr_id_file                                   =   os.path.join(g.execution.self_dir, "solr.id.state")    # здесь в json хранятся ID файлов для SOLR
 # ======================================================================================================================
 # дополнительная инициализация после загрузки/определения параметров
 # ======================================================================================================================
@@ -355,8 +448,8 @@ def start_all(wait=False):
             conf.save()
         post_init_vars()
         # ~~~~~~~ запускаю cherrypy в фоне ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        g.threads.cherry                                    =   c.cherry_thread("my little cherry")
-        g.threads.cherry.start()
+        #g.threads.cherry                                    =   c.cherry_thread("my little cherry")
+        #g.threads.cherry.start()
         # ~~~~~~~ запускаю solr в фоне ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         #g.threads.solr                                      =   s.solr_thread("my pretty solr thread")
         #g.threads.solr.start()
@@ -367,8 +460,8 @@ def start_all(wait=False):
         g.threads.parser                                    =   p.parser("lgp")
         g.threads.parser.start(); # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # ~~~~~~~ создаю и запускаю потоки парсеров для нового формата ЖР ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        g.threads.parser_new                                =   p.parser("lgd")
-        g.threads.parser_new.start(); # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        #g.threads.parser_new                                =   p.parser("lgd")
+        #g.threads.parser_new.start(); # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # ~~~~~~~ создаю и запускаю потоки парсеров для обновления списка баз ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         g.threads.config_updater                            =   config_updater("IB monitor")
         g.threads.config_updater.start(); # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -458,8 +551,8 @@ def main():
     init_vars()
     if ('console' in sys.argv):
         g.execution.running_in_console                  =   True
-        start_all(wait                                  =   True)
-    else:
+        start_all(wait = True)
+    elif is_windows:
         if len(sys.argv) == 1:
             # service must be starting...
             # for the sake of debugging etc, we use win32traceutil to see
@@ -478,8 +571,11 @@ def main():
             print("service done!")
         else:
             win32serviceutil.HandleCommandLine(journal2ct_service)
+    else:
+        g.execution.running_in_console                  =   True
+        start_all(wait = True)
 
-if __name__                                             ==  '__main__':
+if __name__ ==  '__main__':
     try:
         main()
     except (SystemExit, KeyboardInterrupt):

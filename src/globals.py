@@ -113,8 +113,10 @@ class debug:
 # здесь описаны все используемые регулярки
 # ======================================================================================================================
 class rexp:
-    service_is_1c                                               =   re.compile(r'\\ragent.*\-d',flags=re.IGNORECASE) # имя службы 1с
-    service_1c_workdir                                          =   re.compile(r'\-d\s*\"(.+?)"')                       # получение рабочего каталога из пути к службе 1с
+    service_is_1c                                               =   re.compile(r'\\ragent.*\-d' , flags=re.IGNORECASE)  # имя службы 1с
+    daemon_1c                                                   =   re.compile(r'srv1cv8.*'     , flags=re.IGNORECASE)  # имя службы 1с
+    enviroments                                                 =   re.compile(r'(\w+)=(".*?"|\'.*?\'|\S*)')            # получение переменных окружения
+    service_1c_workdir                                          =   re.compile(r'\-d\s*\$*[\"\{](.+?)[\"\}]')           # получение рабочего каталога из пути к службе 1с
     any_filename                                                =   re.compile(r'[^\\/]*?$')                            # любое имя файла - последние символы после \ или /
     any_file_ext                                                =   re.compile(r'[^\.]*?$')                             # любое расширение файла - последние символы после точки
     uuid_start                                                  =   re.compile(r'^[\w]{8}-[\w]{4}-[\w]{4}-[\w]{4}-[\w]{12}')# UUID c самого начала строки!

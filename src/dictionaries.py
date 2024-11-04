@@ -125,12 +125,13 @@ class dictionary():
                 if element[g.nms.ib.name].upper()               ==  rib_name.upper():                                   # сравниванием в верхнем регистре
                     ib_dict_file                                =   element[g.nms.ib.jr_dir]+\
                                                                     (
-                                                                        "\\1cv8.lgf" \
+                                                                        "/1Cv8.lgf" \
                                                                         if element[g.nms.ib.jr_format] == 'lgf'
-                                                                        else "\\1cv8.lgd"
+                                                                        else "/1Cv8.lgd"
                                                                     )
             if(not os.path.exists(ib_dict_file)):
-                t.debug_print("read_ib_dictionary fail for "+rib_name+" filename "+ib_dict_file+" not exists")
+                t.debug_print("read_ib_dictionary fail for " + rib_name + " filename " + ib_dict_file + " not exists")
+                t.seppuku(-3)
                 return
             if g.rexp.is_lgD_file_re.findall(ib_dict_file):
                 dictionary.read_new_ib_dictionary(rib_name,ib_dict_file)

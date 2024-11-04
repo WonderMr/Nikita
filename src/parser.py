@@ -86,21 +86,19 @@ class parser(threading.Thread):
                     files                                   =   [
                                                                     element for element
                                                                     in os.listdir(ibase[g.nms.ib.jr_dir])
-                                                                    if os.path.isfile(
-                                                                        ibase[g.nms.ib.jr_dir] + "\\" + element
-                                                                    )
+                                                                    if os.path.isfile(os.path.join(ibase[g.nms.ib.jr_dir], element))
                                                                     and regexp.findall(element)
                                                                 ]                                                       # получаю список всех файлов ЖР базы
                     for file in files:                                                                                  # по всем файлам
                         try:
-                            full_name                       =   ibase[g.nms.ib.jr_dir]+"\\"+file
+                            full_name                       =   os.path.join(ibase[g.nms.ib.jr_dir], file)
                             # для старого формата - размер файла ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
                             if (file.upper()).find('.LGP')  >   0:                                                      # если формат старый
                                 this_file_size              =   os.stat(full_name).st_size
                             # для нового - количество записей ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
                             if (file.upper()).find('.LGD')  >   0:                                                      # если формат новый
                                 (max_row, min_row)          =   t.get_lgd_evens_count(full_name)
-                                this_file_size              =   max_row+1-min_row
+                                this_file_size              =   max_row + 1 - min_row
                             # прибавляю к общему для базы ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
                             total_files_or_recs_size        +=  this_file_size
                             # добавляю файлы в списко для обработки только размер отличается ~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -111,7 +109,7 @@ class parser(threading.Thread):
                             if this_file_size               !=  get_saved_size:
                                 ibase_file                  =   [
                                                                         ibase[g.nms.ib.name],
-                                                                        ibase[g.nms.ib.jr_dir] + "\\",
+                                                                        ibase[g.nms.ib.jr_dir] + "/",
                                                                         file
                                                                 ]                                                       # и кладу в общий массив с информацией о базе
                                 local_list.append(ibase_file)
@@ -139,7 +137,7 @@ class parser(threading.Thread):
             if(g.debug.on_parser):
                 t.debug_print("adding to json "+str(fj_rec),self.name)
             local_json                                      =   {}                                                      # второй - порядок времени для сортировки одинаковых моментов
-            cc = 1
+            cc                                              =   1 
             local_json['id']                                =   t.get_file_id_by_name(fj_id)                            # третий - имя файла
             local_json['pos']                               =   fj_pos                                                  # четвёртый - смещение
             local_json['len']                               =   fj_size                                                 # пятый - размер записи
@@ -354,7 +352,7 @@ class parser(threading.Thread):
     # ------------------------------------------------------------------------------------------------------------------
     def parse_file(self, pf_name, pf_base):                                                                             # обработка файла
         try:
-            self.chclient.execute("CREATE TABLE IF NOT EXISTS nikita.`" + pf_base + "`(r1  DateTime CODEC(ZSTD(14)),r2  FixedString(1), r3  Int64, r3a Int64, r4name  String CODEC(ZSTD(14)), r4guid  String CODEC(ZSTD(14)), r5  String CODEC(ZSTD(14)), r6  String CODEC(ZSTD(14)), r7  String CODEC(ZSTD(14)), r8  String CODEC(ZSTD(14)), r9  FixedString(1), r10 String CODEC(ZSTD(14)), r11name String CODEC(ZSTD(14)), r11guid String CODEC(ZSTD(14)), r12 String CODEC(ZSTD(14)), r13 String CODEC(ZSTD(14)), r14 String CODEC(ZSTD(14)), r15 Int32, r16 Int32, r17 Int64, r18 Int32, r19 Int32 ) ENGINE = Log()")
+            #self.chclient.execute("CREATE TABLE IF NOT EXISTS nikita.`" + pf_base + "`(r1  DateTime CODEC(ZSTD(14)),r2  FixedString(1), r3  Int64, r3a Int64, r4name  String CODEC(ZSTD(14)), r4guid  String CODEC(ZSTD(14)), r5  String CODEC(ZSTD(14)), r6  String CODEC(ZSTD(14)), r7  String CODEC(ZSTD(14)), r8  String CODEC(ZSTD(14)), r9  FixedString(1), r10 String CODEC(ZSTD(14)), r11name String CODEC(ZSTD(14)), r11guid String CODEC(ZSTD(14)), r12 String CODEC(ZSTD(14)), r13 String CODEC(ZSTD(14)), r14 String CODEC(ZSTD(14)), r15 Int32, r16 Int32, r17 Int64, r18 Int32, r19 Int32 ) ENGINE = Log()")
             if g.rexp.is_lgD_file_re.findall(pf_name):
                 self.parse_lgd_file(pf_name,pf_base)                                                                    # обрабатываю новый формат ЖР
             if g.rexp.is_lgP_file_re.findall(pf_name):                                                                  # или старый формат ЖР
