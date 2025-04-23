@@ -130,20 +130,20 @@ class dictionary():
                                                                         else "/1Cv8.lgd"
                                                                     )
             if(not os.path.exists(ib_dict_file)):
-                t.debug_print("read_ib_dictionary fail for " + rib_name + " filename " + ib_dict_file + " not exists")
+                t.debug_print(f"read_ib_dictionary fail for {rib_name} filename {ib_dict_file} not exists")
                 t.seppuku(-3)
                 return
             if g.rexp.is_lgD_file_re.findall(ib_dict_file):
-                dictionary.read_new_ib_dictionary(rib_name,ib_dict_file)
+                dictionary.read_new_ib_dictionary(rib_name, ib_dict_file)
             else:
-                dictionary.read_old_ib_dictionary(rib_name,ib_dict_file)
+                dictionary.read_old_ib_dictionary(rib_name, ib_dict_file)
         except Exception as e:
-            t.debug_print('read_ib_dictionary'+str(e),'dictionary')
+            t.debug_print(f"read_ib_dictionary exception = {str(e)}", 'dictionary')
         # t.debug_print("end read dictionary")
     # ------------------------------------------------------------------------------------------------------------------
     # чтение словаря нового формата ЖР
     # ------------------------------------------------------------------------------------------------------------------
-    def read_new_ib_dictionary(rib_name,rib_file_name):
+    def read_new_ib_dictionary(rib_name, rib_file_name):
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         _dicts                                              =   g.execution.c1_dicts                                    # чуть подсокращу это длинное имя
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -251,7 +251,7 @@ class dictionary():
     # 2018.07.14 Функция чтения содержимого словаря старого формата ЖР в глобальную переменную, соответствующую базе
     # при повторном вызове вернётся, если словарь не изменился. Если изменился - перечитает
     # ------------------------------------------------------------------------------------------------------------------
-    def read_old_ib_dictionary(rib_name,rib_file_name):
+    def read_old_ib_dictionary(rib_name, rib_file_name):
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # проверяем, не изменился ли размер словаря
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

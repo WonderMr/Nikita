@@ -6,12 +6,14 @@ import  time
 import  operator
 import  requests
 import  json
+from    dotenv              import load_dotenv 
+load_dotenv() 
 # ======================================================================================================================
 from    src.tools           import  tools                   as  t
 from    src                 import  globals                 as  g
 from    src.dictionaries    import  dictionary              as  d
 from    src                 import  reader                  as  r
-from    clickhouse_driver   import  Client                  as ch
+from    clickhouse_driver   import  Client                  as  ch
 from    datetime            import  datetime
 import  src.messenger                                       as  m
 # ======================================================================================================================
@@ -32,7 +34,8 @@ class parser(threading.Thread):
         self.files_list_updater                             =   self.files_list_updater_thread_class("list " + name)    # создаём поток в зависиомсти от вызываемого
         self.files_list_updater.start()
         self.stopMe                                         =   False
-        self.chclient                                       =   ch(host='m1-1c-sme-bi', user='default', password='')
+        self.chclient                                       =   ch(host=os.getenv("CLICKHOUSE_HOST"), user=os.getenv("CLICKHOUSE_USER"), password=os.getenv("CLICKHOUSE_PASSWORD"))
+        self.chclient.execute('SELECT 1')
         t.debug_print("Thread initialized", self.name)
     # ------------------------------------------------------------------------------------------------------------------
     # Запуск и работа класса
@@ -168,7 +171,7 @@ class parser(threading.Thread):
             local_json['rr10']                              =   fj_rec[10].replace("'","''").replace('\\','\\\\')
             cc = 11
             local_json['rr11']                              =   g.execution.c1_dicts.metadata[fj_base][fj_rec[11]] if not fj_rec[11]=="0"\
-                                                                else {"uuid":"","name":""}
+                                                                else {"uuid":"", "name":""}
             cc = 12
             local_json['rr12']                              =   fj_rec[12].replace("'","''").replace('\\','\\\\')
             cc = 13
@@ -200,21 +203,23 @@ class parser(threading.Thread):
             if(g.debug.on_parser):
                 t.debug_print(json.dumps(local_json, indent=2), self.name)
         except Exception as e:
-            t.debug_print("Exception while add_to_json "+str(e), self.name)
+            t.debug_print(f"Exception while add_to_json {str(e)}", self.name)
+            t.seppuku(111)
             return False
         return True
     # ------------------------------------------------------------------------------------------------------------------
     # отправка post запроса
     # ------------------------------------------------------------------------------------------------------------------
     def post_query(self, url, data, base_name):
-        ret                                                 =   0
+        ret_ok                                              =   200
+        ret_err                                             =   500
         try:
             #t.debug_print("post to "+url,g.threads.parser.name)
-            t.debug_print("posting to Clickouse", g.threads.parser.name)
+            t.debug_print("posting to ClickHouse", g.threads.parser.name)
             #ret                                             =   requests.post(url=url,json=data).status_code
             #rec                                             =   [0]
             querystring                                     =   ""
-            querystring19                                   =  "insert into nikita.`"+base_name+"`(r1,r2,r3,r3a,r4name,r4guid,r5,r6,r7,r8,r9,r10,r11name,r11guid,r12,r13,r14,r15,r16,r17,r18,r19) values ("
+            querystring19                                   =  f"insert into zhr1c.`{base_name}`(r1,r1a,r2,r3,r3a,r4name,r4guid,r5,r6,r7,r8,r9,r10,r11uuid,r11name,r12,r13,r14,r15,r16,r17,r18,r19) values ("
             #querystring9                                   =  "insert into nikita.test9(r1,r2,r3,r3a,r4name,r4guid,r5,r6,r7,r8,r9,r10,r11name,r11guid,r12,r13,r14,r15,r16,r17,r18,r19) values ("
             post_count                                      =   0
             rec_no                                          =   0
@@ -222,60 +227,54 @@ class parser(threading.Thread):
                 post_count                                  +=  1
                 rec_no                                      +=  1
                 #t.debug_print("iter rec "+str(rec_no), g.threads.parser.name)
-                cc = 0
-                date                                        =   rec['r1'][0:4]+"-"+rec['r1'][4:6]+'-'+rec['r1'][6:8]+' '+rec['r1'][8:10]+':'+rec['r1'][10:12]+':'+rec['r1'][12:14]
+                date                                        =   f"{rec['r1'][0:4]}-{rec['r1'][4:6]}-{rec['r1'][6:8]} {rec['r1'][8:10]}:{rec['r1'][10:12]}:{rec['r1'][12:14]}"
                 ts                                          =   int(datetime.fromisoformat(date).timestamp())
                 tsstr                                       =   str(ts)
-                cc = 101
-                querystring                                 +=  tsstr+","           #r1 is datetime, converted to int
-                querystring                                 +=  "'"+rec['r2']+"',"  #r2 is one char
-                cc = 102
-                querystring                                 +=  rec['r3h']+","      #r3h is string of hex
-                cc = 103
-                querystring                                 +=  rec['r3ah']+","     #r3ah is string of hex
-                cc = 104
-                querystring                                 +=  "'"+rec['rr4']['name']+"',"
-                cc = 105
-                querystring                                 +=  "'"+rec['rr4']['uuid']+"',"
-                for l_i in range(5, 11):
-                    cc = 1000+l_i
-                    querystring                             +=  "'"+rec['rr'+str(l_i)]+"',"        #r4-r14 is strings
-                cc = 106
-                querystring                                 +=  "'"+rec['rr11']['name']+"',"
-                cc = 107
-                querystring                                 +=  "'"+rec['rr11']['uuid']+"',"
-                for l_i in range(12, 16):
-                    cc = 10000 + l_i
-                    querystring                             +=  "'"+str(rec['rr'+str(l_i)])+"',"
-                for l_i in range(16, 20):
-                    cc = 100000 + l_i
-                    querystring                             +=  rec['rr'+str(l_i)]+","
-                cc = "c"
+                querystring                                 +=  f"{tsstr},"                         #r1 is datetime, converted to int
+                querystring                                 +=  f"toDateTime('{datetime.utcfromtimestamp(ts)}'),"#r1a is datetime
+                querystring                                 +=  f"'{rec['r2']}',"                   #r2 is one char
+                querystring                                 +=  f"{rec['r3h']},"                    #r3h is string of hex
+                querystring                                 +=  f"{rec['r3ah']},"                   #r3ah is string of hex
+                querystring                                 +=  f"'{rec['rr4']['name']}',"
+                querystring                                 +=  f"'{rec['rr4']['uuid']}',"
+                for l_i in range(5, 7):
+                    querystring                             +=  f"'{rec['rr' +str(l_i)]}',"         #r5-r6 is strings
+                querystring                                 +=  f"{rec['rr7']},"                    #r7 номер соединения
+                for l_i in range(8, 11):
+                    querystring                             +=  f"'{rec['rr' +str(l_i)]}',"         #r8-r12 is strings
+                querystring                             +=  f"'{rec['rr11']['uuid']}',"         #r11
+                querystring                             +=  f"'{rec['rr11']['name']}',"         #r11
+                for l_i in range(12, 15):
+                    querystring                             +=  f"'{str(rec['rr'+str(l_i)])}',"
+                for l_i in range(15, 20):
+                    querystring                             +=  f"{rec['rr'+str(l_i)]},"
                 querystring                                 =   querystring[:-1]+"),("
-                cc = "a"
-                cc = "b"
-                if(g.debug.on_parser):
-                    t.debug_print("data will be posted", self.name)
-                    t.debug_print(querystring)
-                    #t.debug_print(json.dumps(data, indent=2),self.name)
-                if post_count > 999 or len(querystring) > 100000:
-                    t.debug_print("Posting "+str(post_count)+" records", g.threads.parser.name)
-                    t.debug_print("Block size " + str(len(querystring)), g.threads.parser.name)
+                if post_count >= g.parser.maxrecsize: # or len(querystring) > 100000:
+                    if (g.debug.on_parser):
+                        t.debug_print("data will be posted", self.name)
+                        t.debug_print(querystring)
+                    t.debug_print(f"Posting {str(post_count)} records"  , g.threads.parser.name)
+                    t.debug_print(f"Block size: {str(len(querystring))}", g.threads.parser.name)
                     querystring                             =   querystring[:-3] + ")"
                     self.chclient.execute(querystring19 + querystring)
                     post_count                              =   0
                     querystring                             =   ""
-            if len(querystring) > 20:
-                t.debug_print("Posting records", g.threads.parser.name)
+            if post_count > 0: # send the rest
+                if (g.debug.on_parser):
+                    t.debug_print("data will be posted", self.name)
+                    t.debug_print(querystring)
+                t.debug_print(f"Posting {str(post_count)} rest records"  , g.threads.parser.name)
+                t.debug_print(f"Block size: {str(len(querystring))}", g.threads.parser.name)
                 querystring                                 =   querystring[:-3] + ")"
-                self.chclient.execute(querystring19+querystring)
+                self.chclient.execute(querystring19 + querystring)
             #self.chclient.execute(querystring9+querystring)
             #self.json_data[self.name]                       =   []
         except Exception as e:
             #for ibase in g.parser.ibases:
             #    self.check_base_exists(ibase[g.nms.ib.name])
-            t.debug_print("Exception 9 "+str(e))
-        return 200
+            t.debug_print("Exception 9 " + str(e))
+            return ret_err
+        return ret_ok
     # ------------------------------------------------------------------------------------------------------------------
     # отправка get запроса
     # ------------------------------------------------------------------------------------------------------------------
@@ -285,7 +284,7 @@ class parser(threading.Thread):
             #t.debug_print("post to "+url,g.threads.parser.name)
             ret                                             =   requests.get(url=url).status_code
         except Exception as e:
-            t.debug_print("Exception 10 "+str(e))
+            t.debug_print(f"Exception 10 {str(e)}")
         return ret
     # ------------------------------------------------------------------------------------------------------------------
     # отправка parser.json_data в solr и commit. До победного
@@ -298,10 +297,9 @@ class parser(threading.Thread):
                 #while not g.execution.solr.started:                                                                     # ждём, пока Solr проснётся
                 #    t.debug_print("waiting for solr to start",self.name)
                 #    time.sleep(g.waits.solr_wait_start)
-                t.debug_print("Posting",self.name)
+                t.debug_print("Posting", self.name)
                 # первый запрос ----------------------------------------------------------------------------------------
-                spjd_post_url                               =   g.execution.solr.url_main + "/" \
-                                                            +   spjd_base + "/update?wt=json"
+                spjd_post_url                               =   f"{g.execution.solr.url_main}/{spjd_base}/update?wt=json"
                 spjd_ret_code                               =   self.post_query(
                                                                     spjd_post_url,
                                                                     data      = self.json_data[self.name],
@@ -309,13 +307,13 @@ class parser(threading.Thread):
                                                                 )
                 # шлём, пока не пройдёт --------------------------------------------------------------------------------
                 while spjd_ret_code                         !=  200:                                                    # http://localhost:8983/solr/PER/update?wt=json
-                    t.debug_print("Post data returned "+str(spjd_ret_code)+", retrying")
+                    t.debug_print(f"Post data returned {str(spjd_ret_code)}, retrying")
                     time.sleep(g.waits.solr_on_bad_send_to)
                     spjd_ret_code                           =   self.post_query(
                                                                     spjd_post_url,
                                                                     data    =   self.json_data[self.name]
                                                                 )
-                t.debug_print("Post data was sucesfully sended",self.name)
+                t.debug_print("Post data was sucesfully sended", self.name)
                 del self.json_data[self.name][:]                                                                        # пачку отправили, обнуляем данные
                 # попытка коммита --------------------------------------------------------------------------------------
                 # spjd_commit_url                             =   g.execution.solr.url_main +  "/" \
@@ -325,13 +323,14 @@ class parser(threading.Thread):
 
                 spjd_ret_code                               =   200
                 while spjd_ret_code                         !=  200:
-                    t.debug_print("Post commit returned " + str(spjd_ret_code)+", retrying")
+                    t.debug_print(f"Post commit returned {str(spjd_ret_code)}, retrying")
                     time.sleep(g.waits.solr_on_bad_send_to)
                     #spjd_ret_code                           =   self.get_query(spjd_commit_url)
-                t.debug_print("Commit was succefully sended",self.name)
+                t.debug_print("Commit was succefully sended", self.name)
                 spjd_sended                                 =   True
-            except Exception as e:
-                t.debug_print(  "Exception while posting to SOLR "+str(e),self.name)
+            except Exception as ee:
+                error_message                               = f"Ошибка при отправке в SOLR: {str(ee)}"
+                t.debug_print(error_message, self.name)
                 time.sleep(g.waits.solr_on_bad_send_to)
         t.debug_print("Post took "+str(time.time()-start_time),self.name)
     # ------------------------------------------------------------------------------------------------------------------
@@ -354,9 +353,9 @@ class parser(threading.Thread):
         try:
             #self.chclient.execute("CREATE TABLE IF NOT EXISTS nikita.`" + pf_base + "`(r1  DateTime CODEC(ZSTD(14)),r2  FixedString(1), r3  Int64, r3a Int64, r4name  String CODEC(ZSTD(14)), r4guid  String CODEC(ZSTD(14)), r5  String CODEC(ZSTD(14)), r6  String CODEC(ZSTD(14)), r7  String CODEC(ZSTD(14)), r8  String CODEC(ZSTD(14)), r9  FixedString(1), r10 String CODEC(ZSTD(14)), r11name String CODEC(ZSTD(14)), r11guid String CODEC(ZSTD(14)), r12 String CODEC(ZSTD(14)), r13 String CODEC(ZSTD(14)), r14 String CODEC(ZSTD(14)), r15 Int32, r16 Int32, r17 Int64, r18 Int32, r19 Int32 ) ENGINE = Log()")
             if g.rexp.is_lgD_file_re.findall(pf_name):
-                self.parse_lgd_file(pf_name,pf_base)                                                                    # обрабатываю новый формат ЖР
+                self.parse_lgd_file(pf_name, pf_base)                                                                    # обрабатываю новый формат ЖР
             if g.rexp.is_lgP_file_re.findall(pf_name):                                                                  # или старый формат ЖР
-                self.parse_lgp_file(pf_name,pf_base)
+                self.parse_lgp_file(pf_name, pf_base)
         except Exception as e:
             t.debug_print("got parsefile exception on "+pf_base+" - "+pf_name+". Error is:"+str(e))
             sys.exit(-1)
@@ -458,7 +457,7 @@ class parser(threading.Thread):
                                                             0,
                                                             pf_base
                                                     ):                                                                  # добавляю в json структуры, нумератор записей с одинаковой датой, имя файла, rowID записи и "" как размер #case 2020.05.21
-                            t.debug_print("Exception : не удалось обработать запись "+str(result))
+                            t.debug_print("Exception : не удалось обработать запись " + str(result))
                         del result[:]
                     # отправили тысячу записей или все оставшиемся, высылаем в SOLR~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
                     t.debug_print(pf_base+ ":commiting with state: \n"  +
@@ -487,12 +486,12 @@ class parser(threading.Thread):
     # ------------------------------------------------------------------------------------------------------------------
     # разбор и индексирование одного файла старого формата
     # ------------------------------------------------------------------------------------------------------------------
-    def parse_lgp_file(self,pf_name,pf_base):                                                                           # обработка файла старого формата
+    def parse_lgp_file(self, pf_name, pf_base):                                                                           # обработка файла старого формата
         t.debug_print("processing " + pf_name,self.name)                                                                # слишком много текстов буде
         file_state                                          =   {}
         # Проверка наличия файла ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         if not os.path.exists(pf_name):
-            t.debug_print("file not found "+pf_name,self.name)
+            t.debug_print(f"file not found {pf_name}", self.name)
             return
         # Готовлюсь к чтению ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         pf_size                                             =   os.stat(pf_name).st_size                                # текущий размер файла
@@ -511,11 +510,11 @@ class parser(threading.Thread):
             # чтение остатка содержимого файла в байтах ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             while file_state['filesizeread']                <   pf_size:                                                # пока смещением не дошёл до конца
                 t.debug_print(
-                    'file=' + pf_name + ' base=' + pf_base + ' read=' + str(file_state['filesizeread']),
+                    f"file={pf_name} base={pf_base} read={str(file_state['filesizeread'])}",
                     self.name
                 )
                 if g.debug.on_parser and block_time_start:
-                        t.debug_print("Block tooked "+str(time.time()-block_time_start),self.name)
+                        t.debug_print(f"Block tooked {str(time.time()-block_time_start)}",self.name)
                 block_time_start                            =   time.time()                                             # фиксация времени начала обработки блока
                 d.read_ib_dictionary(pf_base)                                                                           # словарь должен быть уже проинициализирован
                 # определяю размер для чтения ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

@@ -16,7 +16,7 @@ import  threading
 #import pkg_resources.py2_warn
 #del pkg_resources.py2_warn
 # ======================================================================================================================
-from distutils.util         import  strtobool
+#from distutils.util         import  strtobool
 # ======================================================================================================================
 from    src                 import  parser                  as  p
 from    src.reader          import  reader                  as  r
@@ -25,6 +25,17 @@ from    src                 import  cherry                  as  c
 from    src.tools           import  tools                   as  t
 from    src                 import  solr                    as  s
 from    src                 import  globals                 as  g
+# ======================================================================================================================
+# from distutils.util         import  strtobool replacement
+# ======================================================================================================================
+def strtobool(val):
+    val = val.lower()
+    if val in ('y', 'yes', 't', 'true', 'on', '1'):
+        return True
+    elif val in ('n', 'no', 'f', 'false', 'off', '0'):
+        return False
+    else:
+        raise ValueError("Invalid truth value: %r" % (val,))
 # ======================================================================================================================
 # собственно, сервис windows
 # ======================================================================================================================
@@ -82,7 +93,7 @@ class conf:
     # ------------------------------------------------------------------------------------------------------------------
     def load(fake_param=0):
         config                                              =   configparser.ConfigParser()
-        config.read(g.conf.filename,encoding="UTF8")
+        config.read(g.conf.filename, encoding="UTF8")
         try:
             # ~~~~~~~ загружаю специфику 1С ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             try:
@@ -302,8 +313,9 @@ class conf:
             except Exception as e:
                 t.debug_print("Exception while processing Linux services: " + str(e))
         if not d_found:
-            t.debug_print("1C services not found")
-            t.seppuku()
+            if not (os.path.exists(g.conf.filename)):
+                t.debug_print("1C services not found, conf detection failed")
+                t.seppuku()
     # ~~~~~~~ получение списка баз и кластеров 1C ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     def detect2(fake_param=0,initial2=False,d2_srvinfo=""):
         regs                                                =   [element for element
@@ -337,10 +349,10 @@ class conf:
             clstr_handle                                    =   open(clstr_file, 'r', encoding='UTF8')
             clstr_text                                      =   clstr_handle.read()
             clstr_handle.close()
-            clstrs                                          =   g.rexp.clst_1c_base_rec.findall(clstr_text)
-            t.debug_print("found clusters="+str(clstrs))
-            for clst in clstrs:
-                ibase_dir                                   =   os.path.join(clstr_dir, clst[0])
+            bases                                           =   g.rexp.clst_1c_base_rec.findall(clstr_text)
+            t.debug_print("found clusters="+str(bases))
+            for base in bases:
+                ibase_dir                                   =   os.path.join(clstr_dir, base[0])
                 ibase_jr_dir                                =   os.path.join(ibase_dir, g.conf.c1.jr_dir)
                 ibase_jr_dir                                =   re.sub(r'\\\\\\', '\\\\' ,ibase_jr_dir)                 # https://github.com/WonderMr/Journal2Ct/issues/38
                 if(os.path.exists(ibase_jr_dir)):                                                                       # каталог журнала регистрации есть
@@ -349,7 +361,7 @@ class conf:
                     ibase_jr_old_dict_fname                 =   os.path.join(ibase_jr_dir, g.conf.c1.jr_old_dict_fname) # имя файла словаря старого формата жр
                     ibase_jr_old                            =   os.path.exists(ibase_jr_old_dict_fname)                 # если ли файл словаря старого формата ЖР
                     if(ibase_jr_new or ibase_jr_old):
-                        ib_nm                               =   t.normalize_ib_name(clst[1].upper())
+                        ib_nm                               =   t.normalize_ib_name(base[1].upper())
                         ibase_info                          =   {
                             g.nms.ib.name                   :   ib_nm,
                             g.nms.ib.jr_dir                 :   ibase_jr_dir,
