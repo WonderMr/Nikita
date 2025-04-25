@@ -29,7 +29,7 @@ from    src                 import  globals                 as  g
 # from distutils.util         import  strtobool replacement
 # ======================================================================================================================
 def strtobool(val):
-    val = val.lower()
+    val                                                     =   val.lower()
     if val in ('y', 'yes', 't', 'true', 'on', '1'):
         return True
     elif val in ('n', 'no', 'f', 'false', 'off', '0'):
@@ -45,13 +45,16 @@ if is_windows:
         _svc_name_                                          =   g.service.name
         _svc_display_name_                                  =   g.service.display_name
         _svc_description_                                   =   g.service.description
+
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         def __init__(self, args):
             win32serviceutil.ServiceFramework.__init__(self, args)
             self.hWaitStop                                  =   win32event.CreateEvent(None, 0, 0, None)
+
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         def log(self, msg):
             servicemanager.LogInfoMsg(str(msg))
+
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         def SvcStop(self):
             stop_exp                                        =   ""
@@ -68,7 +71,7 @@ if is_windows:
                 stop_exp                                    =   "SetEvent"
                 win32event.SetEvent(self.hWaitStop)
             except Exception as e:
-                t.debug_print("Exception1 "+str(e)+" exp is "+stop_exp)
+                t.debug_print(f"Exception1 {str(e)} exp is {stop_exp}")
             t.debug_print("Service stopped")
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         def SvcDoRun(self):
@@ -83,7 +86,7 @@ if is_windows:
                     time.sleep(g.waits.in_cycle_we_trust)
                 #win32event.WaitforSingleObject(self.hWaitStop, win32event.INFINITE)
             except Exception as e:
-                t.debug_print("Exception2 "+str(e))
+                t.debug_print(f"Exception2 {str(e)}")
 # ======================================================================================================================
 # Определение, сохранение и загрузка конфигурации
 # ======================================================================================================================
@@ -102,10 +105,10 @@ class conf:
                 while c1i_exists:
                     try:
                         ibase_info                          =   {
-                            g.nms.ib.name                   :   config[g.conf.c1.section_name]["ibase_"+str(i)],
-                            g.nms.ib.jr_dir                 :   config[g.conf.c1.section_name]["ibase_"+str(i)+"_jr"],
+                            g.nms.ib.name                   :   config[g.conf.c1.section_name][f"ibase_{str(i)}"],
+                            g.nms.ib.jr_dir                 :   config[g.conf.c1.section_name][f"ibase_{str(i)}_jr"],
                             g.nms.ib.jr_format              :   config[g.conf.c1.section_name]\
-                                                                ["ibase_"+str(i)+"_format"],
+                                                                [f"ibase_{str(i)}_format"],
                             g.nms.ib.total_size             :   0,
                             g.nms.ib.parsed_size            :   0
                         }
@@ -137,24 +140,24 @@ class conf:
             # ~~~~~~~ загружаю специфику отладки~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             try:
                 g.debug.on                                  =   strtobool(config["debug"]["enabled"])
-                t.debug_print("Debug enabled = "+str(g.debug.on))
+                t.debug_print(f"Debug enabled = {str(g.debug.on)}")
             except:
                 pass
 
             try:
                 g.debug.on_parser                           =   strtobool(config["debug"]["debug_parser"])
-                t.debug_print("Debug_parser enabled = "+str(g.debug.on_parser))
+                t.debug_print(f"Debug_parser enabled = {str(g.debug.on_parser)}")
             except:
                 pass
 
             # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         except Exception as e:
-            t.debug_print("Error while parsing params "+str(e))
+            t.debug_print(f"Error while parsing params {str(e)}")
             t.seppuku()
     # ------------------------------------------------------------------------------------------------------------------
     # сохранение конфы
     # ------------------------------------------------------------------------------------------------------------------
-    def save(fake_param                                     =   0):
+    def save(fake_param = 0):
         if g.conf.solr.dir == "":
             t.debug_print("Empty configuration will not be saved")
             return
@@ -165,9 +168,9 @@ class conf:
         config.add_section(g.conf.c1.section_name)
         i                                                   =   0
         for ibase in g.parser.ibases:
-            config.set(g.conf.c1.section_name,  "ibase_" +  str(i)          , ibase[g.nms.ib.name])
-            config.set(g.conf.c1.section_name,  "ibase_" +  str(i)+"_jr"    , ibase[g.nms.ib.jr_dir])
-            config.set(g.conf.c1.section_name,  "ibase_" +  str(i)+"_format", ibase[g.nms.ib.jr_format])
+            config.set(g.conf.c1.section_name,  f"ibase_{str(i)}"       , ibase[g.nms.ib.name])
+            config.set(g.conf.c1.section_name,  f"ibase_{str(i)}_jr"    , ibase[g.nms.ib.jr_dir])
+            config.set(g.conf.c1.section_name,  f"ibase_{str(i)}_format", ibase[g.nms.ib.jr_format])
             i                                               +=  1
 
         # ~~~~~~~ Специфика SOLR ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -193,16 +196,16 @@ class conf:
 
         # ~~~~~~~ Специфика отладка~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         config.add_section("debug")
-        config.set("debug","enabled",str(g.debug.on))
+        config.set("debug", "enabled", str(g.debug.on))
 
         # ~~~~~~~ Сохраняем ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        config_file_handle                                  =   open(g.conf.filename,'w',encoding="UTF8")
+        config_file_handle                                  =   open(g.conf.filename, 'w', encoding="UTF8")
         config.write(config_file_handle)
         config_file_handle.close()
     # ------------------------------------------------------------------------------------------------------------------
     # определение настроек по умлочанию
     # ------------------------------------------------------------------------------------------------------------------
-    def detect(fake_param=0,initial=False):
+    def detect(fake_param=0, initial=False):
         t.debug_print("Conf detection")
         d_found                                             =   False
         if is_windows:
@@ -211,9 +214,9 @@ class conf:
                 try:
                     d_service                               =   (psutil.win_service_get(service.name())).as_dict()
                 except Exception as e:
-                    t.debug_print("failed to parse "+str(service),'detect')
+                    t.debug_print(f"failed to parse {str(service)}",'detect')
                 if g.rexp.service_is_1c.search(d_service["binpath"]) and d_service["start_type"] == 'automatic':
-                    t.debug_print("found " + d_service["binpath"])
+                    t.debug_print(f"found {d_service["binpath"]}")
                     d_found                                 =   True
                     try:
                         #g.conf.c1.srvinfo                  =   g.rexp.service_1c_workdir.findall(service.binpath())[0]   #берем только первое значение
@@ -225,10 +228,10 @@ class conf:
                         thread_name                         =   g.threads.config_updater.name \
                                                                     if g.threads.config_updater \
                                                                     else "initial configuration detection"
-                        t.debug_print("processing "+srv_dir,thread_name)
-                        conf.detect2(initial2=initial,d2_srvinfo=srv_dir)
+                        t.debug_print(f"processing {srv_dir}", thread_name)
+                        conf.detect2(initial2=initial, d2_srvinfo=srv_dir)
                     except Exception as e:
-                        t.debug_print("Exception srv_1c "+str(e))
+                        t.debug_print(f"Exception srv_1c {str(e)}")
         else:
             try:
                 # Получение списка всех включённых служб
@@ -306,12 +309,12 @@ class conf:
 
                             srv_dir                         =   re.sub(r'\\\\\\', '\\\\', srvinfo)
                             thread_name                     =   g.threads.config_updater.name if g.threads.config_updater else "initial configuration detection"
-                            t.debug_print("processing " + srv_dir, thread_name)
+                            t.debug_print(f"processing {srv_dir}", thread_name)
                             conf.detect2(initial2=initial, d2_srvinfo=srv_dir)
                         except Exception as e:
                             t.debug_print(f"Не удалось проверить статус службы {unit_name}: {e}", 'detect')
             except Exception as e:
-                t.debug_print("Exception while processing Linux services: " + str(e))
+                t.debug_print(f"Exception while processing Linux services: {str(e)}")
         if not d_found:
             if not (os.path.exists(g.conf.filename)):
                 t.debug_print("1C services not found, conf detection failed")
@@ -324,10 +327,10 @@ class conf:
                                                                             and g.rexp.is_1c_cluster.findall(element)
                                                                 ]                                                       # получаю списков все кластеров
         local_bases_array                                   =   []
-        t.debug_print("regs="+str(regs))
+        t.debug_print(f"regs={str(regs)}")
         for reg in regs:
             clstr_dir                                       =   os.path.join(d2_srvinfo, reg)
-            t.debug_print("clstr_dir=" + str(clstr_dir))
+            t.debug_print(f"clstr_dir={str(clstr_dir)}")
             clstr_file                                      =   os.path.join(clstr_dir, g.conf.c1.cluster_file)
             clstr_file_o                                    =   os.path.join(clstr_dir, g.conf.c1.cluster_file_o)
             clstr_file_o                                    =   clstr_file_o if os._exists(clstr_file_o) \
@@ -342,15 +345,15 @@ class conf:
                                                                 if clstr_file_size > clstr_file_o_size \
                                                                 else clstr_file                                         # предпочитаем читать файл большего размера, если он есть
             if not os.path.isfile(clstr_file):
-                t.debug_print("no cluster file found with "+str(clstr_file))
+                t.debug_print(f"no cluster file found with {str(clstr_file)}")
                 return
             else:
-                t.debug_print("processing "+str(clstr_file))
+                t.debug_print(f"processing {str(clstr_file)}")
             clstr_handle                                    =   open(clstr_file, 'r', encoding='UTF8')
             clstr_text                                      =   clstr_handle.read()
             clstr_handle.close()
             bases                                           =   g.rexp.clst_1c_base_rec.findall(clstr_text)
-            t.debug_print("found clusters="+str(bases))
+            t.debug_print(f"found clusters={str(bases)}")
             for base in bases:
                 ibase_dir                                   =   os.path.join(clstr_dir, base[0])
                 ibase_jr_dir                                =   os.path.join(ibase_dir, g.conf.c1.jr_dir)
@@ -378,7 +381,7 @@ class conf:
                                 if base[g.nms.ib.name]      ==  ibase_info[g.nms.ib.name]:
                                     base_found              =   True
                             if not base_found:
-                                t.debug_print("Обнаружена новая ИБ:"+ ibase_info[g.nms.ib.name])
+                                t.debug_print(f"Обнаружена новая ИБ:{ibase_info[g.nms.ib.name]}")
                                 #if g.threads.solr.check_base_exists(cbe_name=ibase_info[g.nms.ib.name]):               # если здесь новоя ядрышко создастся
                                 if True:
                                     g.parser.ibases.append(ibase_info)                                                  # добавляю его в массив
@@ -391,7 +394,7 @@ class conf:
                         bases_copy.remove(each_each_base)
             for each_base in bases_copy:                                                                                # а вот оставшиеся - это удалённые
                 if(str(each_base[g.nms.ib.jr_dir]).find(d2_srvinfo))>0:                                                 # удаляем только базы этого кластера
-                    t.debug_print("База "+each_base[g.nms.ib.name]+" удалена с кластера")
+                    t.debug_print(f"База {each_base[g.nms.ib.name]} удалена из кластера")
                     g.parser.ibases.remove(each_base)
         # ~~~~~~~ установка параметров solr по умолчанию для первого детекта ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         if initial2:
@@ -402,7 +405,7 @@ class conf:
             g.conf.solr.listen_port                         =   "8983"
             g.conf.solr.solr_host                           =   "127.0.0.1"                                             # socket.gethostbyaddr(g.conf.solr.listen_interface)
             g.conf.solr.solr_port                           =   "8983"
-            g.conf.solr.java_home                           =   os.path.join(g.execution.self_dir,"java")
+            g.conf.solr.java_home                           =   os.path.join(g.execution.self_dir, "java")
             g.conf.solr.threads                             =   str(multiprocessing.cpu_count() // 2)                   # половину ядер на solr
             # ~~~~~~~ установка параметров http по умолчанию ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             g.conf.http.listen_port                         =   "8984"
@@ -441,9 +444,7 @@ def init_vars():
 # дополнительная инициализация после загрузки/определения параметров
 # ======================================================================================================================
 def post_init_vars():
-    g.execution.solr.url_main                               =   "http://" + g.conf.solr.solr_host+":"\
-                                                            +   g.conf.solr.solr_port\
-                                                            +   "/solr"
+    g.execution.solr.url_main                               =   f"http://{g.conf.solr.solr_host}:{g.conf.solr.solr_port}/solr"
 # ======================================================================================================================
 # запускает все потоки парсинга, solr и веб-сервер
 # ======================================================================================================================
@@ -489,7 +490,7 @@ def start_all(wait=False):
         while wait:
             time.sleep(g.waits.in_cycle_we_trust)
     except Exception as e:
-        t.debug_print("Exception3 "+str(e))
+        t.debug_print(f"Exception3 {str(e)}")
 # ======================================================================================================================
 # поток мониторинга изменений баз
 # ======================================================================================================================
@@ -508,7 +509,7 @@ class config_updater(threading.Thread):
                 conf.detect(initial                         =   False)                                                  # проверяем список баз
                 conf.save()
             except Exception as e:
-                t.debug_print("Exception on confige update. Error is "+str(e))
+                t.debug_print(f"Exception on confige update. Error is {str(e)}")
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     def stop(self):
         self.run                                            =   False
@@ -531,11 +532,11 @@ class warming_cache(threading.Thread):
                 if isinstance(g.parser.ibases, list):
                     for i_base                              in g.parser.ibases:
                         if(i_base[g.nms.ib.parsed_size]     >   0):                                                     # только активные базы
-                            t.debug_print("warming "+i_base[g.nms.ib.name]+" cache",self.name)
-                            r.full_proceess_read("ref="+i_base[g.nms.ib.name]+"&КоличествоСобытий=1")
+                            t.debug_print(f"warming {i_base[g.nms.ib.name]} cache",self.name)
+                            r.full_proceess_read(f"ref={i_base[g.nms.ib.name]}&КоличествоСобытий=1")
                 time.sleep(g.waits.warming_cache_wait)
             except Exception as e:
-                t.debug_print("Exception while warming cache. Error is "+str(e),self.name)
+                t.debug_print(f"Exception while warming cache. Error is {str(e)}",self.name)
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     def stop(self):
         self.run                                            =   False
@@ -555,7 +556,7 @@ def stop_all():
         # ~~~~~~~ останавливаю подогреватель кэша ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         g.threads.warming_cache.stop()
     except Exception as e:
-        t.debug_print("Exception on stop all:"+str(e))
+        t.debug_print(f"Exception on stop all:{str(e)}")
 # ======================================================================================================================
 # Go
 # ======================================================================================================================

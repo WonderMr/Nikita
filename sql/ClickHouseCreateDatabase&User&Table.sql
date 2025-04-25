@@ -29,13 +29,14 @@ GRANT ALL PRIVILEGES ON zhr1c.* TO zhr1c_user;
     r17 UInt64,   -- соответствует ,(\d+)
     r18 UInt64,   -- соответствует ,(\d+)
     r19 UInt64,    -- соответствует ,(\d+)
-    version UInt8 DEFAULT 1
+    sign Int8 DEFAULT 1
 )
-ENGINE = ReplacingMergeTree
+ENGINE = CollapsingMergeTree(sign)
 ORDER BY (r1, r2, r3, r3a, r4, r4name, r4guid, r5, r6, r7, r8, r9, r10, r11uuid, r11name, r12, r13, r14, r15, r16, r17, r18,  r19)
 SETTINGS index_granularity = 8192;
 
-
+OPTIMIZE TABLE bp_kz1 FINAL;
+OPTIMIZE TABLE zp_kz1 FINAL;
 
 
 

@@ -87,7 +87,7 @@ class conf:
 class parser:
     section_name                                                =   "Parser settings"                                   # имя секции для файла конфигурации
     threads                                                     =   ""                                                  # количество потоков парсинга
-    maxrecsize                                                  =   256
+    maxrecsize                                                  =   512                                                 # сколько записей отправляем в ClickHouse
     ibases                                                      =   []                                                  # полный каталог др базы, имя базы, формат жр базы
     state_file                                                  =   ""                                                  # файл с информацией об статусе обработки отдельных файлов
     state_file_lock                                             =   False                                               # однопоточная запись или чтение в файл статусов

@@ -131,6 +131,16 @@ class parser(threading.Thread):
                     self.ibases_files                       =   local_list                                              # чтобы сразу готовый результат был
                 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Безусловное ожидание для https://github.com/WonderMr/Journal2Ct/issues/48
                 time.sleep(g.waits.parser_sleep_on_update_filelist)
+
+    def escape_clickhouse(self, s: str) -> str:
+        return (
+            s
+            .replace("\\", r"\\")     # обратный слеш
+            .replace("'", r"\'")      # одинарная кавычка
+            .replace("\n", r"\n")     # переход строки
+            .replace("\r", r"\r")     # возврат каретки
+            # при необходимости добавить .replace("\t", r"\t")
+        )
     # ------------------------------------------------------------------------------------------------------------------
     # ------------------------------------------------------------------------------------------------------------------
     # добавление в parser.json_data данных из разобранной записи
@@ -160,7 +170,11 @@ class parser(threading.Thread):
             local_json['rr5']                               =   g.execution.c1_dicts.computers[fj_base][fj_rec[5]] if int(fj_rec[5])>0\
                                                                 else "0"
             cc = 6
-            local_json['rr6']                               =   g.execution.c1_dicts.applications[fj_base][fj_rec[6]]
+            if fj_rec[6] in g.execution.c1_dicts.applications[fj_base]:
+                local_json['rr6']                           =   g.execution.c1_dicts.applications[fj_base][fj_rec[6]]
+            else:
+                vocab                                       =   str(g.execution.c1_dicts.applications[fj_base])
+                local_json['rr6']                           =   f"Not Found in Dictionary code = {fj_rec[6]}, vocab = {self.escape_clickhouse(vocab)}"
             cc = 7
             local_json['rr7']                               =   fj_rec[7]
             cc = 8
