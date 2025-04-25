@@ -172,6 +172,8 @@ class parser(threading.Thread):
             cc = 6
             if fj_rec[6] in g.execution.c1_dicts.applications[fj_base]:
                 local_json['rr6']                           =   g.execution.c1_dicts.applications[fj_base][fj_rec[6]]
+            elif g.execution.c1_dicts.actions[fj_base][fj_rec[8]] == '_$User$_.AuthenticationLock':                     # в событии блокировки почему-то нет клиента
+                local_json['rr6']                           =   ""
             else:
                 vocab                                       =   str(g.execution.c1_dicts.applications[fj_base])
                 local_json['rr6']                           =   f"Not Found in Dictionary code = {fj_rec[6]}, vocab = {self.escape_clickhouse(vocab)}"
