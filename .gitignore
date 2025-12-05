@@ -26,3 +26,5 @@ log.txt
 Nikita.ini
 
 venv/
+
+.env
