@@ -674,7 +674,7 @@ class reader():
             qp_sorted                                       =   []
             for each in str2.split(' || '):                                                                             # хочу отсортировать перед использованием, но только для цифр )))
                 if len(each)                                >   3:
-                    qp_dec                                  =   re.findall('(r\d+)\:(.*)',each)[0]
+                    qp_dec                                  =   re.findall(r'(r\d+)\:(.*)',each)[0]
                     if(qp_dec[1].isdigit()):                                                                            # всё-таки делаю это только для цифр )))
                         num                                 =   "0" + qp_dec[1] if len(qp_dec[1]) ==  1 else qp_dec[1]
                     else:

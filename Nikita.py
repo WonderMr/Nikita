@@ -275,7 +275,7 @@ class conf:
                 except Exception as e:
                     t.debug_print(f"failed to parse {str(service)}",'detect')
                 if g.rexp.service_is_1c.search(d_service["binpath"]) and d_service["start_type"] == 'automatic':
-                    t.debug_print(f"found {d_service["binpath"]}")
+                    t.debug_print(f"found {d_service['binpath']}")
                     d_found                                 =   True
                     try:
                         #g.conf.c1.srvinfo                  =   g.rexp.service_1c_workdir.findall(service.binpath())[0]   #берем только первое значение

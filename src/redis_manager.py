@@ -130,3 +130,4 @@ class RedisQueue:
 # Глобальный экземпляр очереди
 queue = RedisQueue()
 
+
