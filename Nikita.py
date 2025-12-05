@@ -42,7 +42,7 @@ def strtobool(val):
 # собственно, сервис windows
 # ======================================================================================================================
 if is_windows:
-    class journal2ct_service(win32serviceutil.ServiceFramework):
+    class nikita_service(win32serviceutil.ServiceFramework):
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         _svc_name_                                          =   g.service.name
         _svc_display_name_                                  =   g.service.display_name
@@ -718,12 +718,12 @@ def main():
                   "Для удаления службы - ключ 'remove'")
             import win32traceutil
             servicemanager.Initialize()
-            servicemanager.PrepareToHostSingle(journal2ct_service)
+            servicemanager.PrepareToHostSingle(nikita_service)
             # Now ask the service manager to fire things up for us...
             servicemanager.StartServiceCtrlDispatcher()
             print("service done!")
         else:
-            win32serviceutil.HandleCommandLine(journal2ct_service)
+            win32serviceutil.HandleCommandLine(nikita_service)
     else:
         g.execution.running_in_console                  =   True
         start_all(wait = True)

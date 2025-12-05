@@ -12,7 +12,7 @@ from    src                 import  reader                  as  r
 # ======================================================================================================================
 # собственно, имплементация веб-сервера
 # ======================================================================================================================
-class journal2ct_web(object):
+class nikita_web(object):
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     @cherrypy.expose
     def index(self):
@@ -739,7 +739,12 @@ class journal2ct_web(object):
                         
                         // Загружаем состояние с сервера
                         fetch('/set_debug')
-                            .then(response => response.json())
+                            .then(response => {
+                                if (!response.ok) {
+                                    throw new Error('Network response was not ok');
+                                }
+                                return response.json();
+                            })
                             .then(data => {
                                 if (data.success) {
                                     debugToggle.checked = data.debug_enabled;
@@ -759,7 +764,12 @@ class journal2ct_web(object):
                             
                             // Отправляем изменение на сервер
                             fetch('/set_debug?enabled=' + enabled)
-                                .then(response => response.json())
+                                .then(response => {
+                                    if (!response.ok) {
+                                        throw new Error('Network response was not ok');
+                                    }
+                                    return response.json();
+                                })
                                 .then(data => {
                                     if (data.success) {
                                         console.log(data.message);
@@ -778,9 +788,14 @@ class journal2ct_web(object):
                         // Функция загрузки логов
                         function loadDebugLogs() {
                             fetch('/debug_logs')
-                                .then(response => response.json())
+                                .then(response => {
+                                    if (!response.ok) {
+                                        throw new Error('Network response was not ok');
+                                    }
+                                    return response.json();
+                                })
                                 .then(data => {
-                                    if (data.logs && data.logs.length > 0) {
+                                    if (data.success && data.logs && data.logs.length > 0) {
                                         let html = '';
                                         data.logs.forEach(log => {
                                             const level = log.includes('✓') ? 'info' : (log.includes('✗') || log.includes('Ошибка') ? 'error' : 'info');
@@ -792,7 +807,7 @@ class journal2ct_web(object):
                                     }
                                 })
                                 .catch(err => {
-                                    debugMessages.innerHTML = '<div style="color: #ff6b6b;">Ошибка загрузки логов: ' + err + '</div>';
+                                    debugMessages.innerHTML = '<div style="color: #ff6b6b;">Ошибка загрузки логов: ' + err.message + '</div>';
                                 });
                         }
                         
@@ -848,14 +863,26 @@ class journal2ct_web(object):
                 
                 for row in rows:
                     basename, record_count, timestamp, filename = row
-                    log_msg                                 =   f"[{timestamp}] Logged block: basename={basename}, records={record_count}, file={filename}"
+                    log_msg                                 =   f"[{timestamp}] ✓ Записан блок: база={basename}, записей={record_count}, файл={filename}"
                     debug_logs_list.append(log_msg)
+                    
+                if not debug_logs_list:
+                    debug_logs_list.append("Логов пока нет")
+                    
         except Exception as e:
-            t.debug_print(f"✗ Ошибка получения логов: {str(e)}", "cherry")
-            debug_logs_list.append(f"Ошибка получения логов: {str(e)}")
+            import traceback
+            error_msg                                       =   f"✗ Ошибка получения логов: {str(e)}"
+            t.debug_print(error_msg + "\n" + traceback.format_exc(), "cherry")
+            debug_logs_list.append(error_msg)
         
-        result                                              =   {'logs': debug_logs_list}
-        return json.dumps(result, ensure_ascii=False)
+        result                                              =   {'logs': debug_logs_list, 'success': True}
+        
+        try:
+            return json.dumps(result, ensure_ascii=False)
+        except Exception as json_err:
+            # Если не удалось сериализовать в JSON, возвращаем безопасный ответ
+            t.debug_print(f"✗ Ошибка JSON сериализации: {str(json_err)}", "cherry")
+            return json.dumps({'logs': [f'Ошибка сериализации: {str(json_err)}'], 'success': False}, ensure_ascii=False)
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     @cherrypy.expose
     def stats_api(self):
@@ -965,9 +992,35 @@ class journal2ct_web(object):
                 
                 # Обновляем переменную окружения для будущих потоков
                 import os
-                os.environ['DEBUG_ENABLED']                 =   'true' if new_debug_state else 'false'
+                os.environ['DEBUG_ENABLED']                 =   'True' if new_debug_state else 'False'
                 
-                t.debug_print(f"Отладка {'включена' if new_debug_state else 'выключена'} через веб-интерфейс", "cherry")
+                # Сохраняем в .env файл
+                env_path                                    =   os.path.join(g.execution.self_dir, '.env')
+                try:
+                    # Читаем текущий .env файл
+                    env_lines                               =   []
+                    debug_found                             =   False
+                    
+                    if os.path.exists(env_path):
+                        with open(env_path, 'r', encoding='utf-8') as f:
+                            for line in f:
+                                if line.strip().startswith('DEBUG_ENABLED='):
+                                    env_lines.append(f'DEBUG_ENABLED={"True" if new_debug_state else "False"}\n')
+                                    debug_found         =   True
+                                else:
+                                    env_lines.append(line)
+                    
+                    # Если переменная не найдена, добавляем её
+                    if not debug_found:
+                        env_lines.append(f'DEBUG_ENABLED={"True" if new_debug_state else "False"}\n')
+                    
+                    # Записываем обратно в файл
+                    with open(env_path, 'w', encoding='utf-8') as f:
+                        f.writelines(env_lines)
+                    
+                    t.debug_print(f"✓ Отладка {'включена' if new_debug_state else 'выключена'} и сохранена в .env", "cherry")
+                except Exception as env_err:
+                    t.debug_print(f"⚠ Не удалось сохранить в .env: {str(env_err)}, но отладка {'включена' if new_debug_state else 'выключена'}", "cherry")
                 
                 return json.dumps({
                     'success'       :   True,
@@ -1033,7 +1086,7 @@ class cherry_thread(threading.Thread):
             t.debug_print(f"✓ Веб-панель мониторинга: http://{g.conf.http.listen_interface}:{g.conf.http.listen_port}/", self.name)
             t.debug_print(f"✓ JSON API статистики: http://{g.conf.http.listen_interface}:{g.conf.http.listen_port}/stats_api", self.name)
             
-            cherrypy.quickstart(journal2ct_web())
+            cherrypy.quickstart(nikita_web())
         except Exception as e:
             t.debug_print(f"✗ Ошибка запуска CherryPy: {str(e)}", self.name)
             import traceback
