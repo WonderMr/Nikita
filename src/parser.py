@@ -769,7 +769,8 @@ class parser(threading.Thread):
                         pf_name,
                         batch_start_offset,
                         file_state['filesizeread'],
-                        self.json_data[self.name]
+                        self.json_data[self.name],
+                        pf_base
                     )
                     state_manager.update_file_state(file_state['filename'], file_state['filesize'], file_state['filesizeread'])
                     batch_start_offset              =   file_state['filesizeread']
@@ -944,7 +945,8 @@ class parser(threading.Thread):
                                     pf_name,
                                     batch_start_offset,
                                     file_state['filesizeread'],
-                                    self.json_data[self.name]
+                                    self.json_data[self.name],
+                                    pf_base
                                 )
                                 state_manager.update_file_state(file_state['filename'], file_state['filesize'], file_state['filesizeread'])
                                 batch_start_offset          =   file_state['filesizeread']
@@ -979,7 +981,8 @@ class parser(threading.Thread):
                                 pf_name,
                                 batch_start_offset,
                                 file_state['filesizeread'],
-                                self.json_data[self.name]
+                                self.json_data[self.name],
+                                pf_base
                             )
                             state_manager.update_file_state(file_state['filename'], file_state['filesize'], file_state['filesizeread'])
                             batch_start_offset              =   file_state['filesizeread']

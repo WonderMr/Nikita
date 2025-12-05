@@ -48,15 +48,17 @@ class journal2ct_web(object):
         
         # Заголовки колонок
         stats_block                                         +=  '<div class="row header">'
-        stats_block                                         +=  '<span class="cell">Параметр</span>'
         stats_block                                         +=  '<span class="cell">ClickHouse</span>'
         stats_block                                         +=  '<span class="cell">Solr</span>'
         stats_block                                         +=  '<span class="cell">Redis</span>'
+        stats_block                                         +=  '<span class="cell">Хост</span>'
+        stats_block                                         +=  '<span class="cell">БД</span>'
+        stats_block                                         +=  '<span class="cell">Записей</span>'
+        stats_block                                         +=  '<span class="cell">Ошибок</span>'
         stats_block                                         +=  '</div>'
         
-        # Строка Статус
+        # Строка со значениями
         stats_block                                         +=  '<div class="row">'
-        stats_block                                         +=  '<span class="cell parameter">Статус</span>'
         
         # CH Status
         if g.conf.clickhouse.enabled:
@@ -81,40 +83,32 @@ class journal2ct_web(object):
             stats_block                                     +=  f'<span class="cell">{redis_icon} {redis_text}</span>'
         else:
             stats_block                                     +=  '<span class="cell disabled">Отключено</span>'
-        stats_block                                         +=  '</div>'
         
-        # Строка Хост
-        stats_block                                         +=  '<div class="row">'
-        stats_block                                         +=  '<span class="cell parameter">Хост</span>'
-        stats_block                                         +=  f'<span class="cell">{g.conf.clickhouse.host}:{g.conf.clickhouse.port}</span>' if g.conf.clickhouse.enabled else '<span class="cell">-</span>'
-        stats_block                                         +=  f'<span class="cell">{g.conf.solr.solr_host}:{g.conf.solr.solr_port}</span>' if g.conf.solr.enabled else '<span class="cell">-</span>'
-        stats_block                                         +=  f'<span class="cell">{g.conf.redis.host}:{g.conf.redis.port}</span>' if g.conf.redis.enabled else '<span class="cell">-</span>'
-        stats_block                                         +=  '</div>'
+        # Хосты
+        ch_host                                             =   f'{g.conf.clickhouse.host}:{g.conf.clickhouse.port}' if g.conf.clickhouse.enabled else '-'
+        solr_host                                           =   f'{g.conf.solr.solr_host}:{g.conf.solr.solr_port}' if g.conf.solr.enabled else '-'
+        redis_host                                          =   f'{g.conf.redis.host}:{g.conf.redis.port}' if g.conf.redis.enabled else '-'
+        stats_block                                         +=  f'<span class="cell">{ch_host}<br>{solr_host}<br>{redis_host}</span>'
         
-        # Строка База/Core
-        stats_block                                         +=  '<div class="row">'
-        stats_block                                         +=  '<span class="cell parameter">База / Core / DB</span>'
-        stats_block                                         +=  f'<span class="cell">{g.conf.clickhouse.database}</span>' if g.conf.clickhouse.enabled else '<span class="cell">-</span>'
-        stats_block                                         +=  f'<span class="cell">default</span>' if g.conf.solr.enabled else '<span class="cell">-</span>'
-        stats_block                                         +=  f'<span class="cell">{g.conf.redis.db}</span>' if g.conf.redis.enabled else '<span class="cell">-</span>'
-        stats_block                                         +=  '</div>'
+        # Базы
+        ch_db                                               =   g.conf.clickhouse.database if g.conf.clickhouse.enabled else '-'
+        solr_db                                             =   'default' if g.conf.solr.enabled else '-'
+        redis_db                                            =   str(g.conf.redis.db) if g.conf.redis.enabled else '-'
+        stats_block                                         +=  f'<span class="cell">{ch_db}<br>{solr_db}<br>{redis_db}</span>'
         
-        # Строка Отправлено/В очереди
-        stats_block                                         +=  '<div class="row">'
-        stats_block                                         +=  '<span class="cell parameter">Записей</span>'
-        stats_block                                         +=  f'<span class="cell">{locale.format("%d", g.stats.clickhouse_total_sent, grouping=True)}</span>' if g.conf.clickhouse.enabled else '<span class="cell">-</span>'
-        stats_block                                         +=  f'<span class="cell">{locale.format("%d", g.stats.solr_total_sent, grouping=True)}</span>' if g.conf.solr.enabled else '<span class="cell">-</span>'
-        stats_block                                         +=  f'<span class="cell">{locale.format("%d", g.stats.redis_total_queued, grouping=True)}</span>' if g.conf.redis.enabled else '<span class="cell">-</span>'
-        stats_block                                         +=  '</div>'
+        # Записей
+        ch_sent                                             =   locale.format("%d", g.stats.clickhouse_total_sent, grouping=True) if g.conf.clickhouse.enabled else '-'
+        solr_sent                                           =   locale.format("%d", g.stats.solr_total_sent, grouping=True) if g.conf.solr.enabled else '-'
+        redis_queued                                        =   locale.format("%d", g.stats.redis_total_queued, grouping=True) if g.conf.redis.enabled else '-'
+        stats_block                                         +=  f'<span class="cell">{ch_sent}<br>{solr_sent}<br>{redis_queued}</span>'
         
-        # Строка Ошибок
-        stats_block                                         +=  '<div class="row">'
-        stats_block                                         +=  '<span class="cell parameter">Ошибок</span>'
-        stats_block                                         +=  f'<span class="cell">{g.stats.clickhouse_total_errors}</span>' if g.conf.clickhouse.enabled else '<span class="cell">-</span>'
-        stats_block                                         +=  f'<span class="cell">{g.stats.solr_total_errors}</span>' if g.conf.solr.enabled else '<span class="cell">-</span>'
-        stats_block                                         +=  f'<span class="cell">{g.stats.redis_total_errors}</span>' if g.conf.redis.enabled else '<span class="cell">-</span>'
-        stats_block                                         +=  '</div>'
+        # Ошибок
+        ch_errors                                           =   str(g.stats.clickhouse_total_errors) if g.conf.clickhouse.enabled else '-'
+        solr_errors                                         =   str(g.stats.solr_total_errors) if g.conf.solr.enabled else '-'
+        redis_errors                                        =   str(g.stats.redis_total_errors) if g.conf.redis.enabled else '-'
+        stats_block                                         +=  f'<span class="cell">{ch_errors}<br>{solr_errors}<br>{redis_errors}</span>'
         
+        stats_block                                         +=  '</div>' # end row
         stats_block                                         +=  '</div>' # end table
         
         # Последние ошибки (глобальные)
@@ -133,16 +127,53 @@ class journal2ct_web(object):
 
         
         # ======= Блок обрабатываемых баз ==============================================================================
+        # Сначала вычисляем итоги
+        from src.state_manager import state_manager
+        total_size_all                                      =   0
+        total_parsed_all                                    =   0
+        total_sent_all                                      =   0
+        
+        for base in g.parser.ibases:
+            base_total                                      =   base[g.nms.ib.total_size]\
+                                                                if base[g.nms.ib.total_size]>=base[g.nms.ib.parsed_size]\
+                                                                else base[g.nms.ib.parsed_size]
+            total_size_all                                  +=  base_total
+            total_parsed_all                                +=  base[g.nms.ib.parsed_size]
+            
+            base_name                                       =   t.denormalize_ib_name(base[g.nms.ib.name])
+            records_sent                                    =   state_manager.get_total_records_sent(base_name)
+            total_sent_all                                  +=  records_sent
+        
         bases                                               =   ""
         bases                                               +=  '<div class="table-container">'
         bases                                               +=  '<h2>Обрабатываемые базы</h2>'
         bases                                               +=  '<div class="table">'
+        
+        # Строка ИТОГО (зеленоватая)
+        bases                                               +=  '<div class="row total">'
+        bases                                               +=  '<span class="cell"><b>ИТОГО</b></span>'
+        bases                                               +=  '<span class="cell"></span>'  # Путь - пусто
+        bases                                               +=  '<span class="cell"></span>'  # Тип - пусто
+        bases                                               +=  f'<span class="cell size-value" data-val="{total_size_all}" data-type="lgf">'  \
+                                                            +   locale.format('%d', total_size_all, grouping=True, monetary=True)   \
+                                                            +   ' байт</span>'
+        bases                                               +=  f'<span class="cell size-value" data-val="{total_parsed_all}" data-type="lgf">'  \
+                                                            +   locale.format('%d', total_parsed_all, grouping=True, monetary=True)  \
+                                                            +   ' байт</span>'
+        bases                                               +=  f'<span class="cell">'  \
+                                                            +   locale.format('%d', total_sent_all, grouping=True)  \
+                                                            +   ' шт.</span>'
+        bases                                               +=  '<span class="cell"></span>'  # % - пусто
+        bases                                               +=  '</div>'
+        
+        # Заголовки колонок
         bases                                               +=  '<div class="row header">'
         bases                                               +=  '<span class="cell">Название базы</span>'
         bases                                               +=  '<span class="cell">Путь к журналу регистрации</span>'
         bases                                               +=  '<span class="cell">Тип ЖР</span>'
         bases                                               +=  '<span class="cell">Размер ЖР</span>'
         bases                                               +=  '<span class="cell">Обработано</span>'
+        bases                                               +=  '<span class="cell">Отправлено</span>'
         bases                                               +=  '<span class="cell">% Обработано</span>'
         bases                                               +=  '</div>'
 
@@ -153,9 +184,13 @@ class journal2ct_web(object):
             jr_format                                       =   base[g.nms.ib.jr_format]
             is_lgf                                          =   jr_format == 'lgf'
             
+            # Получаем количество отправленных записей из базы состояний
+            base_name                                       =   t.denormalize_ib_name(base[g.nms.ib.name])
+            records_sent                                    =   state_manager.get_total_records_sent(base_name)
+            
             bases                                           +=  '<div class="row" onclick="colorize(this)">'
             bases                                           +=  '<span class="cell"">'                          \
-                                                            +   t.denormalize_ib_name(base[g.nms.ib.name])      \
+                                                            +   base_name                                       \
                                                             +   "</span>"
             bases                                           +=  '<span class="cell">'                           \
                                                             +   base[g.nms.ib.jr_dir]                           \
@@ -184,6 +219,16 @@ class journal2ct_web(object):
                                                                     monetary        =   True
                                                                 )                                               \
                                                             +   (' байт' if is_lgf else ' шт.')                 \
+                                                            +   "</span>"
+            
+            # Отправлено записей
+            bases                                           +=  '<span class="cell">'                           \
+                                                            +   locale.format(
+                                                                    '%d',
+                                                                    records_sent,
+                                                                    grouping        =   True
+                                                                )                                               \
+                                                            +   ' шт.'                                          \
                                                             +   "</span>"
                                                             
             bases                                           +=  '<span class="cell">'                           \
@@ -244,7 +289,7 @@ class journal2ct_web(object):
         top_bar                                             +=  '<div class="units-controls" style="display: flex; align-items: center;">'
         top_bar                                             +=  '<span style="margin-right: 10px;">Единицы:</span>'
         top_bar                                             +=  '<div class="btn-group">'
-        top_bar                                             +=  '<button class="unit-btn active" data-unit="auto">Auto</button>'
+        top_bar                                             +=  '<button class="unit-btn active" data-unit="bytes">Байты</button>'
         top_bar                                             +=  '<button class="unit-btn" data-unit="KB">KB</button>'
         top_bar                                             +=  '<button class="unit-btn" data-unit="MB">MB</button>'
         top_bar                                             +=  '<button class="unit-btn" data-unit="GB">GB</button>'
@@ -310,7 +355,7 @@ class journal2ct_web(object):
                     }
                     .stats-table .row {
                         display: grid;
-                        grid-template-columns: 150px 1fr 1fr 1fr;
+                        grid-template-columns: 1fr 1fr 1fr 2fr 1.5fr 1.5fr 1fr;
                         border-bottom: 1px solid #eee;
                     }
                     .stats-table .row.header {
@@ -323,11 +368,10 @@ class journal2ct_web(object):
                         padding: 8px 10px;
                         display: flex;
                         align-items: center;
-                    }
-                    .stats-table .cell.parameter {
-                        font-weight: 600;
-                        background-color: #f9f9f9;
                         border-right: 1px solid #eee;
+                    }
+                    .stats-table .cell:last-child {
+                        border-right: none;
                     }
                     .stats-table .cell.disabled {
                         color: #999;
@@ -377,7 +421,15 @@ class journal2ct_web(object):
                         letter-spacing: 0.5px;
                         background-color: #00b36b;
                     }
-                    .row:not(.header):hover .cell {
+                    .row.total {
+                        background-color: #d4f4e6;
+                        font-weight: bold;
+                    }
+                    .row.total .cell {
+                        background-color: #d4f4e6;
+                        border-bottom: 2px solid #00b36b;
+                    }
+                    .row:not(.header):not(.total):hover .cell {
                         background-color: #f0f9f4;
                     }
                     
@@ -477,15 +529,14 @@ class journal2ct_web(object):
                         const val = parseFloat(value);
                         if (isNaN(val)) return value;
                         
+                        if (unit === 'bytes') {
+                            return val.toLocaleString('ru-RU') + ' байт';
+                        }
                         if (unit === 'KB') return (val / 1024).toFixed(2) + ' KB';
                         if (unit === 'MB') return (val / (1024 * 1024)).toFixed(2) + ' MB';
                         if (unit === 'GB') return (val / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
                         
-                        // Auto
-                        if (val < 1024) return val + ' Б';
-                        if (val < 1024 * 1024) return (val / 1024).toFixed(2) + ' KB';
-                        if (val < 1024 * 1024 * 1024) return (val / (1024 * 1024)).toFixed(2) + ' MB';
-                        return (val / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+                        return val + ' байт';
                     }
 
                     // Обновление всех ячеек с размерами
@@ -567,7 +618,7 @@ class journal2ct_web(object):
                         
                         // --- Единицы измерения ---
                         const unitBtns = document.querySelectorAll('.unit-btn');
-                        let currentUnit = localStorage.getItem('nikita_unit') || 'auto';
+                        let currentUnit = localStorage.getItem('nikita_unit') || 'bytes';
                         
                         unitBtns.forEach(btn => {
                             if (btn.getAttribute('data-unit') === currentUnit) {

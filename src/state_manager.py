@@ -67,6 +67,7 @@ class StateManager:
                     CREATE TABLE IF NOT EXISTS committed_blocks (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         filename TEXT,
+                        basename TEXT,
                         offset_start INTEGER,
                         offset_end INTEGER,
                         data_hash TEXT,
@@ -75,8 +76,16 @@ class StateManager:
                     )
                 ''')
                 
-                # Индекс для быстрого поиска по имени файла
+                # Проверяем существование колонки basename, если нет - добавляем
+                try:
+                    cursor.execute("SELECT basename FROM committed_blocks LIMIT 1")
+                except sqlite3.OperationalError:
+                    # Колонка не существует, добавляем её
+                    cursor.execute('ALTER TABLE committed_blocks ADD COLUMN basename TEXT')
+                
+                # Индексы для быстрого поиска
                 cursor.execute('CREATE INDEX IF NOT EXISTS idx_blocks_filename ON committed_blocks(filename)')
+                cursor.execute('CREATE INDEX IF NOT EXISTS idx_blocks_basename ON committed_blocks(basename)')
                 
                 conn.commit()
                 conn.close()
@@ -120,9 +129,16 @@ class StateManager:
         except Exception as e:
             t.debug_print(f"Ошибка update_file_state: {e}")
 
-    def log_committed_block(self, filename: str, offset_start: int, offset_end: int, data_records: List[Any]) -> None:
+    def log_committed_block(self, filename: str, offset_start: int, offset_end: int, data_records: List[Any], basename: str = None) -> None:
         """
         Логирует закоммиченный блок с его хешем.
+        
+        Args:
+            filename: Полный путь к файлу
+            offset_start: Начальное смещение
+            offset_end: Конечное смещение
+            data_records: Массив отправленных записей
+            basename: Имя базы (опционально, извлекается из первой записи если не указано)
         """
         try:
             # Вычисляем хеш отправляемых данных
@@ -131,6 +147,12 @@ class StateManager:
                 data_str                                        =   json.dumps(data_records, sort_keys=True, default=str)
                 data_hash                                       =   hashlib.sha256(data_str.encode('utf-8')).hexdigest()
                 record_count                                    =   len(data_records)
+                
+                # Извлекаем имя базы из первой записи, если не указано
+                if not basename and len(data_records) > 0:
+                    first_record                                =   data_records[0]
+                    if isinstance(first_record, dict) and 'ibase' in first_record:
+                        basename                                =   first_record['ibase']
             else:
                 data_hash                                       =   "empty"
                 record_count                                    =   0
@@ -139,12 +161,42 @@ class StateManager:
                 conn                                            =   sqlite3.connect(self.db_path, check_same_thread=False)
                 cursor                                          =   conn.cursor()
                 cursor.execute('''
-                    INSERT INTO committed_blocks (filename, offset_start, offset_end, data_hash, record_count)
-                    VALUES (?, ?, ?, ?, ?)
-                ''', (filename, offset_start, offset_end, data_hash, record_count))
+                    INSERT INTO committed_blocks (filename, basename, offset_start, offset_end, data_hash, record_count)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                ''', (filename, basename, offset_start, offset_end, data_hash, record_count))
                 conn.commit()
                 conn.close()
         except Exception as e:
             t.debug_print(f"Ошибка log_committed_block: {e}")
+
+    def get_total_records_sent(self, basename: str) -> int:
+        """
+        Получение общего количества отправленных записей для базы
+        
+        Args:
+            basename: Имя базы (нормализованное или денормализованное)
+        
+        Returns:
+            Общее количество отправленных записей
+        """
+        try:
+            with self.conn_lock:
+                conn                                            =   sqlite3.connect(self.db_path, check_same_thread=False)
+                cursor                                          =   conn.cursor()
+                
+                # Ищем по basename (если есть) или по filename (для обратной совместимости)
+                cursor.execute('''
+                    SELECT SUM(record_count) FROM committed_blocks 
+                    WHERE basename = ? OR filename LIKE ?
+                ''', (basename, f'%{basename}%'))
+                row                                             =   cursor.fetchone()
+                conn.close()
+                
+                if row and row[0]:
+                    return int(row[0])
+                return 0
+        except Exception as e:
+            t.debug_print(f"Ошибка get_total_records_sent: {e}")
+            return 0
 
 state_manager                                                   =   StateManager()
