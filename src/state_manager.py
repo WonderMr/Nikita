@@ -26,14 +26,18 @@ class StateManager:
         self._initialized                                       =   True
         
         # Определяем корневой каталог проекта
-        # Если self_dir установлен - используем его, иначе идём на уровень вверх от src/
+        # Если self_dir установлен - используем его
         if g.execution.self_dir and g.execution.self_dir != "":
             base_dir                                            =   g.execution.self_dir
         else:
             # Мы находимся в src/state_manager.py, нужно подняться на уровень вверх
             src_dir                                             =   os.path.dirname(os.path.abspath(__file__))
             base_dir                                            =   os.path.dirname(src_dir)  # корень проекта
-        
+            
+            # Дополнительная проверка: если мы всё ещё в src (странная структура), поднимемся ещё выше
+            if os.path.basename(base_dir) == "src":
+                 base_dir                                       =   os.path.dirname(base_dir)
+
         self.db_path                                            =   os.path.join(base_dir, "Nikita.parser.state.db")
         self.conn_lock                                          =   threading.Lock()
         

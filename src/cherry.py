@@ -189,6 +189,19 @@ class journal2ct_web(object):
         bases                                               +=  '</div>'
         bases                                               +=  '</div>'
         
+        # ======= Блок управления обновлением ==========================================================================
+        refresh_block                                       =   ""
+        refresh_block                                       +=  '<div class="refresh-controls">'
+        refresh_block                                       +=  '<span>🔄 Автообновление:</span>'
+        refresh_block                                       +=  '<label class="switch">'
+        refresh_block                                       +=  '<input type="checkbox" id="autoRefresh">'
+        refresh_block                                       +=  '<span class="slider round"></span>'
+        refresh_block                                       +=  '</label>'
+        refresh_block                                       +=  '<span style="margin-left: 10px;">Интервал:</span>'
+        refresh_block                                       +=  '<input type="number" id="refreshInterval" value="30" min="5" style="margin-left: 5px;">'
+        refresh_block                                       +=  '<span> сек.</span>'
+        refresh_block                                       +=  '</div>'
+
         return \
             """
             <html>
@@ -197,27 +210,39 @@ class journal2ct_web(object):
                 <title>Панель управления службой индексации журналов регистрации</title>
                 <style type="text/css">
                     body {
-                        font-family: Arial, sans-serif;
+                        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
                         margin: 20px;
                         background-color: #f5f5f5;
+                        color: #333;
+                    }
+                    h1 {
+                        color: #00b36b;
+                        font-size: 24px;
+                        margin-bottom: 20px;
                     }
                     h2 {
                         color: #333;
                         margin-bottom: 15px;
                         border-bottom: 2px solid #00b36b;
                         padding-bottom: 5px;
+                        font-size: 20px;
                     }
                     h3 {
                         color: #555;
                         margin: 10px 0;
                         font-size: 16px;
                     }
-                    .stats-container {
+                    .stats-container, .table-container, .refresh-controls {
                         background: white;
                         padding: 20px;
                         margin-bottom: 20px;
                         border-radius: 8px;
-                        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+                    }
+                    .refresh-controls {
+                        display: flex;
+                        align-items: center;
+                        padding: 15px 20px;
                     }
                     .service-block {
                         margin: 15px 0;
@@ -232,15 +257,18 @@ class journal2ct_web(object):
                         padding: 8px 0;
                         border-bottom: 1px solid #eee;
                     }
+                    .stats-row:last-child {
+                        border-bottom: none;
+                    }
                     .stats-row.error {
                         background-color: #fff3cd;
-                        padding: 8px;
+                        padding: 10px;
                         margin: 5px 0;
                         border-radius: 4px;
                         border-left: 4px solid #ff6b6b;
                     }
                     .stats-label {
-                        font-weight: bold;
+                        font-weight: 600;
                         color: #555;
                         flex: 1;
                     }
@@ -248,62 +276,150 @@ class journal2ct_web(object):
                         color: #333;
                         flex: 2;
                         text-align: right;
-                    }
-                    .table-container {
-                        background: white;
-                        padding: 20px;
-                        border-radius: 8px;
-                        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                        font-family: 'Consolas', monospace;
                     }
                     .table {
                         display: table;
                         border-collapse: separate;
-                        border-spacing: 5px;
+                        border-spacing: 0;
                         width: 100%;
+                        border: 1px solid #eee;
+                        border-radius: 4px;
+                        overflow: hidden;
                     }
                     .row {
                         display: table-row;
                         cursor: pointer;
+                        transition: background-color 0.2s;
                     }
                     .row.header {
                         font-weight: bold;
                         background-color: #00b36b;
                         color: white;
                     }
-                    .row.header .cell {
-                        border-color: #00b36b;
-                    }
                     .cell {
                         display: table-cell;
-                        padding: 10px;
-                        border: 1px solid #ddd;
+                        padding: 12px 15px;
+                        border-bottom: 1px solid #eee;
+                        text-align: left;
                         background-color: white;
                     }
-                    .row:not(.header):hover {
-                        background-color: #e8f5e9 !important;
+                    .row.header .cell {
+                        border-bottom: 2px solid #00995c;
+                        text-transform: uppercase;
+                        font-size: 12px;
+                        letter-spacing: 0.5px;
+                        background-color: #00b36b;
+                    }
+                    .row:not(.header):hover .cell {
+                        background-color: #f0f9f4;
+                    }
+                    
+                    /* Switch toggle styles */
+                    .switch {
+                        position: relative;
+                        display: inline-block;
+                        width: 40px;
+                        height: 22px;
+                        margin: 0 10px;
+                    }
+                    .switch input { 
+                        opacity: 0;
+                        width: 0;
+                        height: 0;
+                    }
+                    .slider {
+                        position: absolute;
+                        cursor: pointer;
+                        top: 0;
+                        left: 0;
+                        right: 0;
+                        bottom: 0;
+                        background-color: #ccc;
+                        transition: .4s;
+                        border-radius: 34px;
+                    }
+                    .slider:before {
+                        position: absolute;
+                        content: "";
+                        height: 16px;
+                        width: 16px;
+                        left: 3px;
+                        bottom: 3px;
+                        background-color: white;
+                        transition: .4s;
+                        border-radius: 50%;
+                    }
+                    input:checked + .slider {
+                        background-color: #00b36b;
+                    }
+                    input:checked + .slider:before {
+                        transform: translateX(18px);
                     }
                 </style>   
                 <script type="text/javascript">
                     function colorize(Element) {
-                        elements = document.querySelectorAll(".row:not(.header)");  
+                        elements = document.querySelectorAll(".row:not(.header) .cell");  
                         if(elements.length > 0){
                             for(var i = 0; i < elements.length; i++){
                                 elements[i].style.backgroundColor = 'white';
+                                elements[i].style.color = 'inherit';
                             }
                         }
-                        Element.style.backgroundColor = '#00b36b';
-                        Element.style.color = 'white';
+                        
+                        var children = Element.children;
+                        for (var i = 0; i < children.length; i++) {
+                            children[i].style.backgroundColor = '#00b36b';
+                            children[i].style.color = 'white';
+                        }
                         return false;
                     }
                     
-                    // Автообновление страницы каждые 30 секунд
-                    setTimeout(function(){
-                        location.reload();
-                    }, 30000);
+                    document.addEventListener("DOMContentLoaded", function() {
+                        const checkbox = document.getElementById('autoRefresh');
+                        const intervalInput = document.getElementById('refreshInterval');
+                        let timer = null;
+
+                        // Загрузка состояния
+                        const savedState = localStorage.getItem('nikita_autoRefresh');
+                        if (savedState) {
+                            const state = JSON.parse(savedState);
+                            checkbox.checked = state.enabled;
+                            intervalInput.value = state.interval;
+                        } else {
+                            checkbox.checked = true;
+                            intervalInput.value = 30;
+                        }
+
+                        function saveState() {
+                            localStorage.setItem('nikita_autoRefresh', JSON.stringify({
+                                enabled: checkbox.checked,
+                                interval: intervalInput.value
+                            }));
+                        }
+
+                        function updateTimer() {
+                            if (timer) clearTimeout(timer);
+                            saveState();
+                            if (checkbox.checked) {
+                                const interval = parseInt(intervalInput.value) || 30;
+                                const ms = interval * 1000;
+                                if (ms >= 1000) {
+                                    timer = setTimeout(() => location.reload(), ms);
+                                }
+                            }
+                        }
+
+                        checkbox.addEventListener('change', updateTimer);
+                        intervalInput.addEventListener('change', updateTimer);
+                        
+                        updateTimer();
+                    });
                 </script>
             </head>
             <body>
-                <h1 style="color: #00b36b;">📊 Nikita - Панель мониторинга</h1>
+                <h1>📊 Nikita - Панель мониторинга</h1>
+                """+refresh_block+"""
                 """+stats_block+"""
                 """+bases+"""
             </body>
