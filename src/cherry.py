@@ -856,71 +856,64 @@ class nikita_web(object):
     @cherrypy.expose
     def debug_logs(self):
         """API endpoint для получения отладочных логов"""
-        cherrypy.response.headers['Content-Type']           =   'application/json; charset=utf-8'
-        
-        debug_logs_list                                     =   []
-        
-        # Если отладка выключена, возвращаем пустой список
-        if not g.debug.on:
-            return json.dumps({'logs': ['Отладка выключена'], 'success': True}, ensure_ascii=False)
-        
-        # Читаем последние записи из логов StateManager
         try:
-            from src.state_manager import state_manager
+            cherrypy.response.headers['Content-Type']           =   'application/json; charset=utf-8'
             
-            # Проверяем, что state_manager инициализирован
-            if not hasattr(state_manager, 'db_path') or not state_manager.db_path:
-                debug_logs_list.append("StateManager не инициализирован")
-            else:
-                # Получаем последние записи из БД для отладки
-                import sqlite3
+            debug_logs_list                                     =   []
+            
+            # Если отладка выключена, возвращаем пустой список
+            if not g.debug.on:
+                return json.dumps({'logs': ['Отладка выключена'], 'success': True}, ensure_ascii=False)
+            
+            # Пробуем прочитать последние строки из файла отладочного лога
+            try:
                 import os
                 
-                if not os.path.exists(state_manager.db_path):
-                    debug_logs_list.append(f"База данных не найдена: {state_manager.db_path}")
+                if not g.debug.filename:
+                    debug_logs_list.append("Файл логов не настроен")
+                elif not os.path.exists(g.debug.filename):
+                    debug_logs_list.append(f"Файл логов не найден: {g.debug.filename}")
                 else:
-                    with state_manager.conn_lock:
-                        conn                                        =   sqlite3.connect(state_manager.db_path, check_same_thread=False)
-                        cursor                                      =   conn.cursor()
+                    # Читаем последние 100 строк из файла
+                    with open(g.debug.filename, 'r', encoding='utf-8', errors='ignore') as f:
+                        all_lines                               =   f.readlines()
+                        last_lines                              =   all_lines[-100:] if len(all_lines) > 100 else all_lines
                         
-                        # Проверяем существование таблицы
-                        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='committed_blocks'")
-                        if not cursor.fetchone():
-                            debug_logs_list.append("Таблица committed_blocks не существует")
-                        else:
-                            # Получаем последние 50 записей
-                            cursor.execute('''
-                                SELECT basename, record_count, timestamp, filename 
-                                FROM committed_blocks 
-                                ORDER BY timestamp DESC 
-                                LIMIT 50
-                            ''')
-                            rows                                        =   cursor.fetchall()
-                            
-                            for row in rows:
-                                basename, record_count, timestamp, filename = row
-                                log_msg                                 =   f"[{timestamp}] ✓ Записан блок: база={basename}, записей={record_count}, файл={filename}"
-                                debug_logs_list.append(log_msg)
-                        
-                        conn.close()
+                        for line in last_lines:
+                            line                                =   line.strip()
+                            if line:
+                                debug_logs_list.append(line)
                     
-        except Exception as e:
+                    if not debug_logs_list:
+                        debug_logs_list.append("Логов пока нет")
+                        
+            except Exception as e:
+                import traceback
+                error_msg                                       =   f"✗ Ошибка чтения файла логов: {str(e)}"
+                t.debug_print(error_msg + "\n" + traceback.format_exc(), "cherry")
+                debug_logs_list.append(error_msg)
+            
+            if not debug_logs_list:
+                debug_logs_list.append("Логов пока нет")
+            
+            result                                              =   {'logs': debug_logs_list, 'success': True}
+            
+            try:
+                return json.dumps(result, ensure_ascii=False)
+            except Exception as json_err:
+                # Если не удалось сериализовать в JSON, возвращаем безопасный ответ
+                t.debug_print(f"✗ Ошибка JSON сериализации: {str(json_err)}", "cherry")
+                return json.dumps({'logs': [f'Ошибка сериализации: {str(json_err)}'], 'success': False}, ensure_ascii=False)
+        
+        except Exception as top_err:
+            # Гарантируем возврат корректного JSON в любом случае
             import traceback
-            error_msg                                       =   f"✗ Ошибка получения логов: {str(e)}"
-            t.debug_print(error_msg + "\n" + traceback.format_exc(), "cherry")
-            debug_logs_list.append(error_msg)
-        
-        if not debug_logs_list:
-            debug_logs_list.append("Логов пока нет")
-        
-        result                                              =   {'logs': debug_logs_list, 'success': True}
-        
-        try:
-            return json.dumps(result, ensure_ascii=False)
-        except Exception as json_err:
-            # Если не удалось сериализовать в JSON, возвращаем безопасный ответ
-            t.debug_print(f"✗ Ошибка JSON сериализации: {str(json_err)}", "cherry")
-            return json.dumps({'logs': [f'Ошибка сериализации: {str(json_err)}'], 'success': False}, ensure_ascii=False)
+            t.debug_print(f"✗ Критическая ошибка в debug_logs: {str(top_err)}\n{traceback.format_exc()}", "cherry")
+            cherrypy.response.headers['Content-Type']           =   'application/json; charset=utf-8'
+            return json.dumps({
+                'logs'      :   [f'Критическая ошибка: {str(top_err)}'],
+                'success'   :   False
+            }, ensure_ascii=False)
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     @cherrypy.expose
     def stats_api(self):
