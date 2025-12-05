@@ -31,3 +31,10 @@ venv/
 assets/
 
 .cursorrules
+
+# Файлы состояния парсера
+*.db
+*.db-journal
+Nikita.parser.state.db*
+parser.state
+redis_data/

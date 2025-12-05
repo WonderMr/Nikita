@@ -440,11 +440,27 @@ class cherry_thread(threading.Thread):
         t.debug_print("Thread initialized", self.name)
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     def run(self):
-        cherrypy.config.update({'server.socket_host'        :   g.conf.http.listen_interface})
-        cherrypy.config.update({'server.socket_port'        :   int(g.conf.http.listen_port)})
-        cherrypy.quickstart(journal2ct_web())
-        t.debug_print("Thread started", self.name)
+        try:
+            t.debug_print(f"Настройка CherryPy веб-сервера...", self.name)
+            t.debug_print(f"Интерфейс: {g.conf.http.listen_interface}", self.name)
+            t.debug_print(f"Порт: {g.conf.http.listen_port}", self.name)
+            
+            cherrypy.config.update({'server.socket_host'        :   g.conf.http.listen_interface})
+            cherrypy.config.update({'server.socket_port'        :   int(g.conf.http.listen_port)})
+            cherrypy.config.update({'log.screen'                :   False})
+            
+            t.debug_print(f"✓ CherryPy запущен на http://{g.conf.http.listen_interface}:{g.conf.http.listen_port}/", self.name)
+            t.debug_print(f"✓ Веб-панель мониторинга: http://{g.conf.http.listen_interface}:{g.conf.http.listen_port}/", self.name)
+            t.debug_print(f"✓ JSON API статистики: http://{g.conf.http.listen_interface}:{g.conf.http.listen_port}/stats_api", self.name)
+            
+            cherrypy.quickstart(journal2ct_web())
+        except Exception as e:
+            t.debug_print(f"✗ Ошибка запуска CherryPy: {str(e)}", self.name)
+            import traceback
+            t.debug_print(f"✗ Traceback:\n{traceback.format_exc()}", self.name)
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     def stop(self):
-        cherrypy.engine.stop()
+        t.debug_print("Останавливаем CherryPy веб-сервер...", self.name)
+        cherrypy.engine.exit()
+        t.debug_print("✓ CherryPy остановлен", self.name)
 # ======================================================================================================================

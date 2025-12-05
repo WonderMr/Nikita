@@ -552,8 +552,8 @@ def start_all(wait=False):
         #     conf.save()
         post_init_vars()
         # ~~~~~~~ запускаю cherrypy в фоне ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        #g.threads.cherry                                    =   c.cherry_thread("my little cherry")
-        #g.threads.cherry.start()
+        g.threads.cherry                                    =   c.cherry_thread("my little cherry")
+        g.threads.cherry.start()
         # ~~~~~~~ запускаю solr в фоне ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         if g.conf.solr.enabled:
             g.threads.solr                                      =   s.solr_thread("my pretty solr thread")
