@@ -52,8 +52,8 @@ class journal2ct_web(object):
         stats_block                                         +=  '<span class="cell">Статус</span>'
         stats_block                                         +=  '<span class="cell">Хост</span>'
         stats_block                                         +=  '<span class="cell">БД</span>'
-        stats_block                                         +=  '<span class="cell">Записей</span>'
-        stats_block                                         +=  '<span class="cell">Ошибок</span>'
+        stats_block                                         +=  '<span class="cell">Записей<br>(с запуска)</span>'
+        stats_block                                         +=  '<span class="cell">Ошибок<br>(с запуска)</span>'
         stats_block                                         +=  '</div>'
         
         # ClickHouse
@@ -137,6 +137,9 @@ class journal2ct_web(object):
             
             base_name                                       =   t.denormalize_ib_name(base[g.nms.ib.name])
             records_sent                                    =   state_manager.get_total_records_sent(base_name)
+            # Если не нашли по денормализованному имени, пробуем нормализованное
+            if records_sent == 0:
+                records_sent                                =   state_manager.get_total_records_sent(base[g.nms.ib.name])
             total_sent_all                                  +=  records_sent
         
         bases                                               =   ""
@@ -168,7 +171,7 @@ class journal2ct_web(object):
         bases                                               +=  '<span class="cell">Тип ЖР</span>'
         bases                                               +=  '<span class="cell">Размер ЖР</span>'
         bases                                               +=  '<span class="cell">Обработано</span>'
-        bases                                               +=  '<span class="cell">Отправлено (записей)</span>'
+        bases                                               +=  '<span class="cell">Отправлено<br>(записей)</span>'
         bases                                               +=  '<span class="cell">% Обработано</span>'
         bases                                               +=  '</div>'
 
@@ -182,6 +185,9 @@ class journal2ct_web(object):
             # Получаем количество отправленных записей из базы состояний
             base_name                                       =   t.denormalize_ib_name(base[g.nms.ib.name])
             records_sent                                    =   state_manager.get_total_records_sent(base_name)
+            # Если не нашли по денормализованному имени, пробуем нормализованное
+            if records_sent == 0:
+                records_sent                                =   state_manager.get_total_records_sent(base[g.nms.ib.name])
             
             bases                                           +=  '<div class="row" onclick="colorize(this)">'
             bases                                           +=  '<span class="cell"">'                          \
