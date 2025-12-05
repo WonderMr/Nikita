@@ -482,6 +482,10 @@ def post_init_vars():
 def start_all(wait=False):
     try:
         t.debug_print("Starting all threads")
+        
+        # Вывод конфигурации
+        g.print_config()
+        
         # ~~~~~~~ загружаю или создаю конфигурацию ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         t.debug_print("Load configuration (ENV)")
         conf.load()

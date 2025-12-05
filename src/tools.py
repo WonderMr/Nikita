@@ -20,42 +20,51 @@ from    src                 import  globals                 as  g
 # ----------------------------------------------------------------------------------------------------------------------
 class tools():
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    # жёсткое завершение процесса через taskkill
+    # Корректное завершение программы с остановкой всех потоков
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    def seppuku(s_code = 0):
-        tools.debug_print("Exit program with code = " + str(s_code))
-        if not g.execution.running_in_console:
-            tools.debug_print("Stopping service")
-            if is_windows:
-                win32event.SetEvent(win32event.CreateEvent(None, 0, 0, None))
-        else:
-            if is_windows:
-                from subprocess import call
-                # Я пока не научился хорошо и корректно завершать свой процесс, поэтому просто занимаюсь самоубийством
-                sys32                                       =   os.path.expandvars("%SystemRoot%")+'\\system32\\'
-                cmd                                         =   sys32+"cmd.exe"
-                taskkill                                    =   sys32+"taskkill.exe"
-                temp                                        =   os.path.expandvars("%temp%")+'\\suicide.cmd'
-                suicide                                     =   open(temp,'w')
-                print(taskkill+" /f /pid "+str(os.getpid()))
-                suicide.write(taskkill+" /f /pid "+str(os.getpid()))
-                suicide.close()
-                murder                                      =  cmd+" /c "+temp
-                print(str([cmd,'/c',temp]))
-                call([cmd,'/c',temp])
-            else: #linux
-                try:
-                    tools.debug_print("Sending SIGTERM to process")
-                    os.kill(os.getpid(), signal.SIGTERM)
-                except Exception as e:
-                    tools.debug_print("Failed to send SIGTERM: " + str(e))
-                    try:
-                        tools.debug_print("Sending SIGKILL to process")
-                        os.kill(os.getpid(), signal.SIGKILL)
-                    except Exception as e:
-                        tools.debug_print("Failed to send SIGKILL: " + str(e))
-                    finally:
-                        sys.exit(s_code)
+    def graceful_shutdown(exit_code=0):
+        """
+        Корректное завершение программы:
+        1. Останавливает все потоки парсеров
+        2. Закрывает соединения с БД
+        3. Останавливает сервисы (Solr, Redis, CherryPy)
+        4. Закрывает файлы логов
+        5. Завершает процесс с указанным кодом
+        """
+        tools.debug_print(f"═══ НАЧАЛО КОРРЕКТНОГО ЗАВЕРШЕНИЯ (код: {exit_code}) ═══")
+        
+        try:
+            # Останавливаем все потоки через stop_all
+            tools.debug_print("Останавливаем все потоки...")
+            from Nikita import stop_all
+            stop_all()
+            tools.debug_print("✓ Все потоки остановлены")
+        except Exception as e:
+            tools.debug_print(f"⚠ Ошибка при остановке потоков: {str(e)}")
+        
+        try:
+            # Закрываем файл лога
+            if g.debug.filehandle:
+                tools.debug_print("Закрываем файл лога...")
+                g.debug.filehandle.close()
+                g.debug.filehandle = None
+                tools.debug_print("✓ Файл лога закрыт")
+        except Exception as e:
+            tools.debug_print(f"⚠ Ошибка при закрытии лога: {str(e)}")
+        
+        tools.debug_print(f"═══ ЗАВЕРШЕНИЕ ПРОГРАММЫ ═══")
+        
+        # Корректный выход
+        import sys
+        sys.exit(exit_code)
+    
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    # Обратная совместимость - старое название метода
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    def seppuku(s_code=0):
+        """Устаревший метод. Используйте graceful_shutdown()"""
+        tools.debug_print("⚠ ВНИМАНИЕ: seppuku() устарел, используется graceful_shutdown()")
+        tools.graceful_shutdown(s_code)
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     # печать отладочного сообщения, работает только на взведённом глобально флаге отладки
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
