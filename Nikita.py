@@ -25,6 +25,8 @@ from    src                 import  cherry                  as  c
 from    src.tools           import  tools                   as  t
 from    src                 import  solr                    as  s
 from    src                 import  globals                 as  g
+from    src                 import  redis_manager           as  rm
+from    src                 import  sender                  as  snd
 # ======================================================================================================================
 # from distutils.util         import  strtobool replacement
 # ======================================================================================================================
@@ -119,7 +121,34 @@ class conf:
                         pass
             except Exception as e:
                 t.debug_print("В файле конфигурации нет информационных баз")
+            # ~~~~~~~ загружаю специфику ClickHouse ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+            try:
+                g.conf.clickhouse.enabled                   =   strtobool(config[g.conf.clickhouse.section_name]["enabled"])
+                g.conf.clickhouse.host                      =   config[g.conf.clickhouse.section_name]["host"]
+                g.conf.clickhouse.port                      =   config[g.conf.clickhouse.section_name]["port"]
+                g.conf.clickhouse.user                      =   config[g.conf.clickhouse.section_name]["user"]
+                g.conf.clickhouse.password                  =   config[g.conf.clickhouse.section_name]["password"]
+                g.conf.clickhouse.database                  =   config[g.conf.clickhouse.section_name]["database"]
+            except:
+                g.conf.clickhouse.enabled                   =   False
+
+            # ~~~~~~~ загружаю специфику Redis ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+            try:
+                g.conf.redis.enabled                        =   strtobool(config[g.conf.redis.section_name]["enabled"])
+                g.conf.redis.server_path                    =   config[g.conf.redis.section_name]["server_path"]
+                g.conf.redis.host                           =   config[g.conf.redis.section_name]["host"]
+                g.conf.redis.port                           =   config[g.conf.redis.section_name]["port"]
+                g.conf.redis.db                             =   config[g.conf.redis.section_name]["db"]
+                g.conf.redis.dir                            =   config[g.conf.redis.section_name]["dir"]
+            except:
+                g.conf.redis.enabled                        =   False
+
             # ~~~~~~~ загружаю специфику SOLR ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+            try:
+                g.conf.solr.enabled                         =   strtobool(config[g.conf.solr.section_name]["enabled"])
+            except:
+                g.conf.solr.enabled                         =   False # По умолчанию выключен
+
             g.conf.solr.mem_min                             =   config[g.conf.solr.section_name]["mem_min"]
             g.conf.solr.mem_max                             =   config[g.conf.solr.section_name]["mem_max"]
             g.conf.solr.dir                                 =   config[g.conf.solr.section_name]["dir"]
@@ -173,8 +202,27 @@ class conf:
             config.set(g.conf.c1.section_name,  f"ibase_{str(i)}_format", ibase[g.nms.ib.jr_format])
             i                                               +=  1
 
+        # ~~~~~~~ Специфика ClickHouse ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        config.add_section(g.conf.clickhouse.section_name)
+        config.set(g.conf.clickhouse.section_name, "enabled",      str(g.conf.clickhouse.enabled))
+        config.set(g.conf.clickhouse.section_name, "host",         g.conf.clickhouse.host)
+        config.set(g.conf.clickhouse.section_name, "port",         str(g.conf.clickhouse.port))
+        config.set(g.conf.clickhouse.section_name, "user",         g.conf.clickhouse.user)
+        config.set(g.conf.clickhouse.section_name, "password",     g.conf.clickhouse.password)
+        config.set(g.conf.clickhouse.section_name, "database",     g.conf.clickhouse.database)
+
+        # ~~~~~~~ Специфика Redis ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        config.add_section(g.conf.redis.section_name)
+        config.set(g.conf.redis.section_name, "enabled",        str(g.conf.redis.enabled))
+        config.set(g.conf.redis.section_name, "server_path",    g.conf.redis.server_path)
+        config.set(g.conf.redis.section_name, "host",           g.conf.redis.host)
+        config.set(g.conf.redis.section_name, "port",           str(g.conf.redis.port))
+        config.set(g.conf.redis.section_name, "db",             str(g.conf.redis.db))
+        config.set(g.conf.redis.section_name, "dir",            g.conf.redis.dir)
+
         # ~~~~~~~ Специфика SOLR ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         config.add_section(g.conf.solr.section_name)
+        config.set(g.conf.solr.section_name,    "enabled",          str(g.conf.solr.enabled))
         config.set(g.conf.solr.section_name,    "mem_min",          g.conf.solr.mem_min)
         config.set(g.conf.solr.section_name,    "mem_max",          g.conf.solr.mem_max)
         config.set(g.conf.solr.section_name,    "dir",              g.conf.solr.dir)
@@ -206,6 +254,17 @@ class conf:
     # определение настроек по умлочанию
     # ------------------------------------------------------------------------------------------------------------------
     def detect(fake_param=0, initial=False):
+        # Redis default settings
+        g.conf.redis.enabled                            =   strtobool(os.getenv("REDIS_ENABLED", "False"))
+        g.conf.redis.server_path                        =   os.getenv("REDIS_SERVER_PATH", "")
+        g.conf.redis.host                               =   os.getenv("REDIS_HOST", "127.0.0.1")
+        g.conf.redis.port                               =   os.getenv("REDIS_PORT", "6379")
+        g.conf.redis.db                                 =   os.getenv("REDIS_DB", "0")
+        g.conf.redis.dir                                =   os.getenv("REDIS_DIR", os.path.join(g.execution.self_dir, "redis_data"))
+
+        # Solr default settings
+        g.conf.solr.enabled                             =   strtobool(os.getenv("SOLR_ENABLED", "False"))
+
         t.debug_print("Conf detection")
         d_found                                             =   False
         if is_windows:
@@ -464,8 +523,16 @@ def start_all(wait=False):
         #g.threads.cherry                                    =   c.cherry_thread("my little cherry")
         #g.threads.cherry.start()
         # ~~~~~~~ запускаю solr в фоне ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        #g.threads.solr                                      =   s.solr_thread("my pretty solr thread")
-        #g.threads.solr.start()
+        if g.conf.solr.enabled:
+            g.threads.solr                                      =   s.solr_thread("my pretty solr thread")
+            g.threads.solr.start()
+        # ~~~~~~~ запускаю redis в фоне ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        g.threads.redis                                     =   rm.redis_thread("Redis Manager")
+        g.threads.redis.start()
+        # ~~~~~~~ запускаю sender в фоне ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        g.threads.sender                                    =   snd.sender_thread("Data Sender")
+        g.threads.sender.start()
+
         # ~~~~~~~ до парсера надо дёрнуть словари ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         for ib in g.parser.ibases:
             d.read_ib_dictionary(ib['ibase_name'])
@@ -546,7 +613,11 @@ class warming_cache(threading.Thread):
 def stop_all():
     try:
         # ~~~~~~~ останавливаю solr ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        g.threads.solr.stop()
+        if g.threads.solr: g.threads.solr.stop()
+        # ~~~~~~~ останавливаю redis ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        if g.threads.redis: g.threads.redis.stop()
+        # ~~~~~~~ останавливаю sender ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        if g.threads.sender: g.threads.sender.stop()
         # ~~~~~~~ останавливаю cherrypy ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         g.threads.cherry.stop()#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         # ~~~~~~~ останавливаю потоки парсера ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
