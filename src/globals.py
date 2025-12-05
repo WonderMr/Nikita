@@ -270,3 +270,35 @@ class notify:
     filename                                                    =   ""                                                  # имя файла лога для
     select_user_re                                              =   re.compile(r',"(.*)?"')                             # выбор имени пользователя из события логина
     failed_logons                                               =   {}                                                  # список айдишников для _$Session$_.AuthenticationError по базам
+# ======================================================================================================================
+# статистика отправок данных
+# ======================================================================================================================
+class stats:
+    # Статистика по ClickHouse
+    clickhouse_total_sent                                       =   0                                                   # всего отправлено записей
+    clickhouse_total_errors                                     =   0                                                   # всего ошибок отправки
+    clickhouse_last_success_time                                =   None                                                # время последней успешной отправки
+    clickhouse_last_error_time                                  =   None                                                # время последней ошибки
+    clickhouse_last_error_msg                                   =   ""                                                  # текст последней ошибки
+    clickhouse_connection_ok                                    =   False                                               # статус подключения
+    
+    # Статистика по Solr
+    solr_total_sent                                             =   0                                                   # всего отправлено записей
+    solr_total_errors                                           =   0                                                   # всего ошибок отправки
+    solr_last_success_time                                      =   None                                                # время последней успешной отправки
+    solr_last_error_time                                        =   None                                                # время последней ошибки
+    solr_last_error_msg                                         =   ""                                                  # текст последней ошибки
+    solr_connection_ok                                          =   False                                               # статус подключения
+    
+    # Статистика по Redis
+    redis_total_queued                                          =   0                                                   # всего добавлено в очередь
+    redis_total_errors                                          =   0                                                   # всего ошибок
+    redis_last_success_time                                     =   None                                                # время последнего успешного добавления в очередь
+    redis_last_error_time                                       =   None                                                # время последней ошибки
+    redis_last_error_msg                                        =   ""                                                  # текст последней ошибки
+    redis_connection_ok                                         =   False                                               # статус подключения
+    
+    # Общая статистика
+    start_time                                                  =   None                                                # время запуска службы
+    total_records_parsed                                        =   0                                                   # всего распарсено записей
+    last_errors                                                 =   []                                                  # последние 10 ошибок (список кортежей: (время, тип, сообщение))

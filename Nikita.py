@@ -488,6 +488,11 @@ def start_all(wait=False):
     try:
         t.debug_print("Starting all threads")
         
+        # Инициализируем время старта
+        from datetime import datetime
+        g.stats.start_time                                  =   datetime.now()
+        t.debug_print(f"Время запуска службы: {g.stats.start_time.strftime('%Y-%m-%d %H:%M:%S')}")
+        
         # Вывод конфигурации
         g.print_config()
         
