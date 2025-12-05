@@ -591,22 +591,46 @@ class warming_cache(threading.Thread):
 # ======================================================================================================================
 def stop_all():
     try:
+        t.debug_print("Останавливаем все потоки...")
+        
         # ~~~~~~~ останавливаю solr ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        if g.threads.solr: g.threads.solr.stop()
+        if hasattr(g.threads, 'solr') and g.threads.solr: 
+            t.debug_print("Останавливаем Solr...")
+            g.threads.solr.stop()
+            
         # ~~~~~~~ останавливаю redis ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        if g.threads.redis: g.threads.redis.stop()
+        if hasattr(g.threads, 'redis') and g.threads.redis: 
+            t.debug_print("Останавливаем Redis...")
+            g.threads.redis.stop()
+            
         # ~~~~~~~ останавливаю sender ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        if g.threads.sender: g.threads.sender.stop()
+        if hasattr(g.threads, 'sender') and g.threads.sender: 
+            t.debug_print("Останавливаем Sender...")
+            g.threads.sender.stop()
+            
         # ~~~~~~~ останавливаю cherrypy ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        g.threads.cherry.stop()#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        if hasattr(g.threads, 'cherry') and g.threads.cherry:
+            t.debug_print("Останавливаем CherryPy...")
+            g.threads.cherry.stop()
+            
         # ~~~~~~~ останавливаю потоки парсера ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        g.threads.parser.stop()#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        if hasattr(g.threads, 'parser') and g.threads.parser:
+            t.debug_print("Останавливаем Parser...")
+            g.threads.parser.stop()
+            
         # ~~~~~~~ останавливаю обновлятель списка баз ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        g.threads.config_updater.stop()
+        if hasattr(g.threads, 'config_updater') and g.threads.config_updater:
+            t.debug_print("Останавливаем Config Updater...")
+            g.threads.config_updater.stop()
+            
         # ~~~~~~~ останавливаю подогреватель кэша ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        g.threads.warming_cache.stop()
+        if hasattr(g.threads, 'warming_cache') and g.threads.warming_cache:
+            t.debug_print("Останавливаем Warming Cache...")
+            g.threads.warming_cache.stop()
+            
+        t.debug_print("✓ Все потоки остановлены")
     except Exception as e:
-        t.debug_print(f"Exception on stop all:{str(e)}")
+        t.debug_print(f"⚠ Исключение при остановке потоков: {str(e)}")
 # ======================================================================================================================
 # Go
 # ======================================================================================================================

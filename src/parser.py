@@ -44,6 +44,38 @@ class parser(threading.Thread):
         if g.conf.clickhouse.enabled:
             try:
                 t.debug_print(f"Подключение к ClickHouse: {g.conf.clickhouse.host}:{g.conf.clickhouse.port}, БД: {g.conf.clickhouse.database}", self.name)
+                
+                # Подключаемся без указания базы данных для её создания
+                self.chclient                               =   ch(
+                                                                    host=g.conf.clickhouse.host, 
+                                                                    port=g.conf.clickhouse.port, 
+                                                                    user=g.conf.clickhouse.user, 
+                                                                    password=g.conf.clickhouse.password
+                                                                )
+                self.chclient.execute('SELECT 1')
+                t.debug_print(f"✓ ClickHouse: Подключение успешно установлено", self.name)
+                
+                # Проверяем и создаём базу данных с максимальным сжатием
+                try:
+                    databases = self.chclient.execute("SHOW DATABASES")
+                    db_list = [db[0] for db in databases]
+                    
+                    if g.conf.clickhouse.database not in db_list:
+                        t.debug_print(f"⚠ База данных '{g.conf.clickhouse.database}' не существует, создаём...", self.name)
+                        # Создаём базу с движком Atomic и кодеком ZSTD для максимального сжатия
+                        create_db_query = f"""
+                            CREATE DATABASE IF NOT EXISTS {g.conf.clickhouse.database}
+                            ENGINE = Atomic
+                            COMMENT 'База данных для журналов регистрации 1С с максимальным сжатием'
+                        """
+                        self.chclient.execute(create_db_query)
+                        t.debug_print(f"✓ База данных '{g.conf.clickhouse.database}' успешно создана", self.name)
+                    else:
+                        t.debug_print(f"✓ База данных '{g.conf.clickhouse.database}' существует", self.name)
+                except Exception as db_check_err:
+                    t.debug_print(f"⚠ Ошибка при работе с базой данных: {str(db_check_err)}", self.name)
+                
+                # Переподключаемся к созданной базе данных
                 self.chclient                               =   ch(
                                                                     host=g.conf.clickhouse.host, 
                                                                     port=g.conf.clickhouse.port, 
@@ -51,21 +83,6 @@ class parser(threading.Thread):
                                                                     password=g.conf.clickhouse.password,
                                                                     database=g.conf.clickhouse.database
                                                                 )
-                self.chclient.execute('SELECT 1')
-                t.debug_print(f"✓ ClickHouse: Подключение успешно установлено", self.name)
-                
-                # Проверяем существование базы данных
-                try:
-                    databases = self.chclient.execute("SHOW DATABASES")
-                    db_list = [db[0] for db in databases]
-                    if g.conf.clickhouse.database in db_list:
-                        t.debug_print(f"✓ ClickHouse: База данных '{g.conf.clickhouse.database}' существует", self.name)
-                    else:
-                        t.debug_print(f"⚠ ClickHouse: База данных '{g.conf.clickhouse.database}' НЕ СУЩЕСТВУЕТ!", self.name)
-                        t.debug_print(f"   Доступные базы: {', '.join(db_list)}", self.name)
-                        t.debug_print(f"   Создайте базу командой: CREATE DATABASE {g.conf.clickhouse.database}", self.name)
-                except Exception as db_check_err:
-                    t.debug_print(f"⚠ Не удалось проверить существование базы данных: {str(db_check_err)}", self.name)
                     
             except Exception as e:
                 t.debug_print(f"✗ ClickHouse: Ошибка подключения: {str(e)}", self.name)
@@ -458,13 +475,46 @@ class parser(threading.Thread):
     def parse_file(self, pf_name, pf_base):                                                                             # обработка файла
         try:
             if g.conf.clickhouse.enabled and self.chclient:
-                 # Создаем таблицу для базы, если её нет. 
-                 # ВАЖНО: Это нужно делать тут, так как pf_base может меняться.
-                 # Но постоянно делать CREATE TABLE накладно? IF NOT EXISTS спасает.
+                 # Создаем таблицу для базы с оптимальным сжатием и индексацией
                  try:
                      t.debug_print(f"Проверка существования таблицы {g.conf.clickhouse.database}.{pf_base}", self.name)
-                     self.chclient.execute(f"CREATE TABLE IF NOT EXISTS {g.conf.clickhouse.database}.`{pf_base}` (r1 DateTime, r1a DateTime, r2 String, r3 Int64, r3a Int64, r4name String, r4guid String, r5 String, r6 String, r7 Int64, r8 String, r9 String, r10 String, r11name String, r11guid String, r12 String, r13 String, r14 String, r15 Int32, r16 Int32, r17 Int64, r18 Int32, r19 Int32) ENGINE = Log()")
-                     t.debug_print(f"✓ Таблица {g.conf.clickhouse.database}.{pf_base} готова к использованию", self.name)
+                     
+                     # Используем MergeTree с кодеком ZSTD для максимального сжатия
+                     # ORDER BY оптимизирован для поиска по дате и пользователю
+                     create_table_query = f"""
+                         CREATE TABLE IF NOT EXISTS {g.conf.clickhouse.database}.`{pf_base}` (
+                             r1 DateTime CODEC(DoubleDelta, ZSTD(3)),
+                             r1a DateTime CODEC(DoubleDelta, ZSTD(3)),
+                             r2 String CODEC(ZSTD(3)),
+                             r3 Int64 CODEC(ZSTD(3)),
+                             r3a Int64 CODEC(ZSTD(3)),
+                             r4name String CODEC(ZSTD(3)),
+                             r4guid String CODEC(ZSTD(3)),
+                             r5 String CODEC(ZSTD(3)),
+                             r6 String CODEC(ZSTD(3)),
+                             r7 Int64 CODEC(ZSTD(3)),
+                             r8 String CODEC(ZSTD(3)),
+                             r9 String CODEC(ZSTD(3)),
+                             r10 String CODEC(ZSTD(3)),
+                             r11name String CODEC(ZSTD(3)),
+                             r11guid String CODEC(ZSTD(3)),
+                             r12 String CODEC(ZSTD(3)),
+                             r13 String CODEC(ZSTD(3)),
+                             r14 String CODEC(ZSTD(3)),
+                             r15 Int32 CODEC(ZSTD(3)),
+                             r16 Int32 CODEC(ZSTD(3)),
+                             r17 Int64 CODEC(ZSTD(3)),
+                             r18 Int32 CODEC(ZSTD(3)),
+                             r19 Int32 CODEC(ZSTD(3))
+                         ) 
+                         ENGINE = MergeTree()
+                         ORDER BY (r1, r4name, r8)
+                         PARTITION BY toYYYYMM(r1)
+                         SETTINGS index_granularity = 8192
+                         COMMENT 'Журнал регистрации 1С с максимальным сжатием ZSTD'
+                     """
+                     self.chclient.execute(create_table_query)
+                     t.debug_print(f"✓ Таблица {g.conf.clickhouse.database}.{pf_base} готова (MergeTree + ZSTD)", self.name)
                  except Exception as e:
                      t.debug_print(f"✗ Ошибка создания таблицы {pf_base}: {str(e)}", self.name)
 
