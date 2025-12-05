@@ -168,7 +168,7 @@ class journal2ct_web(object):
         bases                                               +=  '<span class="cell">Тип ЖР</span>'
         bases                                               +=  '<span class="cell">Размер ЖР</span>'
         bases                                               +=  '<span class="cell">Обработано</span>'
-        bases                                               +=  '<span class="cell">Опр. (записи)</span>'
+        bases                                               +=  '<span class="cell">Отправлено (записей)</span>'
         bases                                               +=  '<span class="cell">% Обработано</span>'
         bases                                               +=  '</div>'
 
