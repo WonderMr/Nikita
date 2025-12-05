@@ -18,116 +18,119 @@ class journal2ct_web(object):
     def index(self):
         locale.setlocale(locale.LC_ALL,"")
         
-        # ======= Блок статистики отправок =============================================================================
-        stats_block                                         =   ""
-        stats_block                                         +=  '<div class="stats-container">'
-        stats_block                                         +=  '<h2>Статистика отправок данных</h2>'
-        
-        # Время работы службы
+        # Подготовка данных для статистики
+        uptime_str                                          =   "Н/Д"
         if g.stats.start_time:
             uptime                                          =   (datetime.now() - g.stats.start_time).total_seconds()
             uptime_str                                      =   f"{int(uptime // 3600)}ч {int((uptime % 3600) // 60)}м {int(uptime % 60)}с"
-        else:
-            uptime_str                                      =   "Н/Д"
-        
-        stats_block                                         +=  '<div class="stats-row">'
-        stats_block                                         +=  f'<span class="stats-label">⏱ Время работы:</span><span class="stats-value">{uptime_str}</span>'
-        stats_block                                         +=  '</div>'
-        
-        stats_block                                         +=  '<div class="services-grid">'
-        
-        # ClickHouse
-        if g.conf.clickhouse.enabled:
-            ch_status                                       =   "🟢 Подключено" if g.stats.clickhouse_connection_ok else "🔴 Ошибка"
-            ch_last_ok                                      =   g.stats.clickhouse_last_success_time.strftime("%Y-%m-%d %H:%M:%S") if g.stats.clickhouse_last_success_time else "Нет данных"
             
-            stats_block                                     +=  '<div class="service-block">'
-            stats_block                                     +=  f'<h3>ClickHouse {ch_status}</h3>'
-            stats_block                                     +=  '<div class="stats-row">'
-            stats_block                                     +=  f'<span class="stats-label">Хост:</span><span class="stats-value">{g.conf.clickhouse.host}:{g.conf.clickhouse.port}</span>'
-            stats_block                                     +=  '</div>'
-            stats_block                                     +=  '<div class="stats-row">'
-            stats_block                                     +=  f'<span class="stats-label">База данных:</span><span class="stats-value">{g.conf.clickhouse.database}</span>'
-            stats_block                                     +=  '</div>'
-            stats_block                                     +=  '<div class="stats-row">'
-            stats_block                                     +=  f'<span class="stats-label">✓ Отправлено записей:</span><span class="stats-value">{locale.format("%d", g.stats.clickhouse_total_sent, grouping=True)}</span>'
-            stats_block                                     +=  '</div>'
-            stats_block                                     +=  '<div class="stats-row">'
-            stats_block                                     +=  f'<span class="stats-label">✗ Ошибок:</span><span class="stats-value">{g.stats.clickhouse_total_errors}</span>'
-            stats_block                                     +=  '</div>'
-            stats_block                                     +=  '<div class="stats-row">'
-            stats_block                                     +=  f'<span class="stats-label">Последняя отправка:</span><span class="stats-value">{ch_last_ok}</span>'
-            stats_block                                     +=  '</div>'
-            if g.stats.clickhouse_last_error_msg:
-                stats_block                                 +=  '<div class="stats-row error">'
-                stats_block                                 +=  f'<span class="stats-label">Последняя ошибка:</span><span class="stats-value">{g.stats.clickhouse_last_error_msg[:100]}</span>'
-                stats_block                                 +=  '</div>'
-            stats_block                                     +=  '</div>'
-        
-        # Solr
-        if g.conf.solr.enabled:
-            solr_status                                     =   "🟢 Подключено" if g.stats.solr_connection_ok else "🔴 Ошибка"
-            solr_last_ok                                    =   g.stats.solr_last_success_time.strftime("%Y-%m-%d %H:%M:%S") if g.stats.solr_last_success_time else "Нет данных"
+        # Определяем время последней активности (максимум из всех сервисов)
+        last_times                                          =   []
+        if g.conf.clickhouse.enabled and g.stats.clickhouse_last_success_time:
+            last_times.append(g.stats.clickhouse_last_success_time)
+        if g.conf.solr.enabled and g.stats.solr_last_success_time:
+            last_times.append(g.stats.solr_last_success_time)
+        if g.conf.redis.enabled and g.stats.redis_last_success_time:
+            last_times.append(g.stats.redis_last_success_time)
             
-            stats_block                                     +=  '<div class="service-block">'
-            stats_block                                     +=  f'<h3>Solr {solr_status}</h3>'
-            stats_block                                     +=  '<div class="stats-row">'
-            stats_block                                     +=  f'<span class="stats-label">Хост:</span><span class="stats-value">{g.conf.solr.solr_host}:{g.conf.solr.solr_port}</span>'
-            stats_block                                     +=  '</div>'
-            stats_block                                     +=  '<div class="stats-row">'
-            stats_block                                     +=  f'<span class="stats-label">✓ Отправлено записей:</span><span class="stats-value">{locale.format("%d", g.stats.solr_total_sent, grouping=True)}</span>'
-            stats_block                                     +=  '</div>'
-            stats_block                                     +=  '<div class="stats-row">'
-            stats_block                                     +=  f'<span class="stats-label">✗ Ошибок:</span><span class="stats-value">{g.stats.solr_total_errors}</span>'
-            stats_block                                     +=  '</div>'
-            stats_block                                     +=  '<div class="stats-row">'
-            stats_block                                     +=  f'<span class="stats-label">Последняя отправка:</span><span class="stats-value">{solr_last_ok}</span>'
-            stats_block                                     +=  '</div>'
-            if g.stats.solr_last_error_msg:
-                stats_block                                 +=  '<div class="stats-row error">'
-                stats_block                                 +=  f'<span class="stats-label">Последняя ошибка:</span><span class="stats-value">{g.stats.solr_last_error_msg[:100]}</span>'
-                stats_block                                 +=  '</div>'
-            stats_block                                     +=  '</div>'
-        
-        # Redis
-        if g.conf.redis.enabled:
-            redis_status                                    =   "🟢 Подключено" if g.stats.redis_connection_ok else "🔴 Ошибка"
-            redis_last_ok                                   =   g.stats.redis_last_success_time.strftime("%Y-%m-%d %H:%M:%S") if g.stats.redis_last_success_time else "Нет данных"
-            
-            stats_block                                     +=  '<div class="service-block">'
-            stats_block                                     +=  f'<h3>Redis {redis_status}</h3>'
-            stats_block                                     +=  '<div class="stats-row">'
-            stats_block                                     +=  f'<span class="stats-label">Хост:</span><span class="stats-value">{g.conf.redis.host}:{g.conf.redis.port}</span>'
-            stats_block                                     +=  '</div>'
-            stats_block                                     +=  '<div class="stats-row">'
-            stats_block                                     +=  f'<span class="stats-label">✓ Добавлено в очередь:</span><span class="stats-value">{locale.format("%d", g.stats.redis_total_queued, grouping=True)}</span>'
-            stats_block                                     +=  '</div>'
-            stats_block                                     +=  '<div class="stats-row">'
-            stats_block                                     +=  f'<span class="stats-label">✗ Ошибок:</span><span class="stats-value">{g.stats.redis_total_errors}</span>'
-            stats_block                                     +=  '</div>'
-            stats_block                                     +=  '<div class="stats-row">'
-            stats_block                                     +=  f'<span class="stats-label">Последнее добавление:</span><span class="stats-value">{redis_last_ok}</span>'
-            stats_block                                     +=  '</div>'
-            if g.stats.redis_last_error_msg:
-                stats_block                                 +=  '<div class="stats-row error">'
-                stats_block                                 +=  f'<span class="stats-label">Последняя ошибка:</span><span class="stats-value">{g.stats.redis_last_error_msg[:100]}</span>'
-                stats_block                                 +=  '</div>'
-            stats_block                                     +=  '</div>'
-        
-        stats_block                                         +=  '</div>'
+        last_activity_str                                   =   "Нет данных"
+        last_activity_iso                                   =   ""
+        if last_times:
+            last_max                                        =   max(last_times)
+            last_activity_str                               =   last_max.strftime("%H:%M:%S")
+            last_activity_iso                               =   last_max.isoformat()
 
-        # Последние ошибки
+        # ======= Блок статистики (Таблица) ============================================================================
+        stats_block                                         =   ""
+        stats_block                                         +=  '<div class="stats-container">'
+        stats_block                                         +=  '<h2>Статистика сервисов</h2>'
+        stats_block                                         +=  '<div class="table stats-table">'
+        
+        # Заголовки колонок
+        stats_block                                         +=  '<div class="row header">'
+        stats_block                                         +=  '<span class="cell">Параметр</span>'
+        stats_block                                         +=  '<span class="cell">ClickHouse</span>'
+        stats_block                                         +=  '<span class="cell">Solr</span>'
+        stats_block                                         +=  '<span class="cell">Redis</span>'
+        stats_block                                         +=  '</div>'
+        
+        # Строка Статус
+        stats_block                                         +=  '<div class="row">'
+        stats_block                                         +=  '<span class="cell parameter">Статус</span>'
+        
+        # CH Status
+        if g.conf.clickhouse.enabled:
+            ch_icon                                         =   "🟢" if g.stats.clickhouse_connection_ok else "🔴"
+            ch_text                                         =   "Подключено" if g.stats.clickhouse_connection_ok else "Ошибка"
+            stats_block                                     +=  f'<span class="cell">{ch_icon} {ch_text}</span>'
+        else:
+            stats_block                                     +=  '<span class="cell disabled">Отключено</span>'
+            
+        # Solr Status
+        if g.conf.solr.enabled:
+            solr_icon                                       =   "🟢" if g.stats.solr_connection_ok else "🔴"
+            solr_text                                       =   "Подключено" if g.stats.solr_connection_ok else "Ошибка"
+            stats_block                                     +=  f'<span class="cell">{solr_icon} {solr_text}</span>'
+        else:
+            stats_block                                     +=  '<span class="cell disabled">Отключено</span>'
+            
+        # Redis Status
+        if g.conf.redis.enabled:
+            redis_icon                                      =   "🟢" if g.stats.redis_connection_ok else "🔴"
+            redis_text                                      =   "Подключено" if g.stats.redis_connection_ok else "Ошибка"
+            stats_block                                     +=  f'<span class="cell">{redis_icon} {redis_text}</span>'
+        else:
+            stats_block                                     +=  '<span class="cell disabled">Отключено</span>'
+        stats_block                                         +=  '</div>'
+        
+        # Строка Хост
+        stats_block                                         +=  '<div class="row">'
+        stats_block                                         +=  '<span class="cell parameter">Хост</span>'
+        stats_block                                         +=  f'<span class="cell">{g.conf.clickhouse.host}:{g.conf.clickhouse.port}</span>' if g.conf.clickhouse.enabled else '<span class="cell">-</span>'
+        stats_block                                         +=  f'<span class="cell">{g.conf.solr.solr_host}:{g.conf.solr.solr_port}</span>' if g.conf.solr.enabled else '<span class="cell">-</span>'
+        stats_block                                         +=  f'<span class="cell">{g.conf.redis.host}:{g.conf.redis.port}</span>' if g.conf.redis.enabled else '<span class="cell">-</span>'
+        stats_block                                         +=  '</div>'
+        
+        # Строка База/Core
+        stats_block                                         +=  '<div class="row">'
+        stats_block                                         +=  '<span class="cell parameter">База / Core / DB</span>'
+        stats_block                                         +=  f'<span class="cell">{g.conf.clickhouse.database}</span>' if g.conf.clickhouse.enabled else '<span class="cell">-</span>'
+        stats_block                                         +=  f'<span class="cell">default</span>' if g.conf.solr.enabled else '<span class="cell">-</span>'
+        stats_block                                         +=  f'<span class="cell">{g.conf.redis.db}</span>' if g.conf.redis.enabled else '<span class="cell">-</span>'
+        stats_block                                         +=  '</div>'
+        
+        # Строка Отправлено/В очереди
+        stats_block                                         +=  '<div class="row">'
+        stats_block                                         +=  '<span class="cell parameter">Записей</span>'
+        stats_block                                         +=  f'<span class="cell">{locale.format("%d", g.stats.clickhouse_total_sent, grouping=True)}</span>' if g.conf.clickhouse.enabled else '<span class="cell">-</span>'
+        stats_block                                         +=  f'<span class="cell">{locale.format("%d", g.stats.solr_total_sent, grouping=True)}</span>' if g.conf.solr.enabled else '<span class="cell">-</span>'
+        stats_block                                         +=  f'<span class="cell">{locale.format("%d", g.stats.redis_total_queued, grouping=True)}</span>' if g.conf.redis.enabled else '<span class="cell">-</span>'
+        stats_block                                         +=  '</div>'
+        
+        # Строка Ошибок
+        stats_block                                         +=  '<div class="row">'
+        stats_block                                         +=  '<span class="cell parameter">Ошибок</span>'
+        stats_block                                         +=  f'<span class="cell">{g.stats.clickhouse_total_errors}</span>' if g.conf.clickhouse.enabled else '<span class="cell">-</span>'
+        stats_block                                         +=  f'<span class="cell">{g.stats.solr_total_errors}</span>' if g.conf.solr.enabled else '<span class="cell">-</span>'
+        stats_block                                         +=  f'<span class="cell">{g.stats.redis_total_errors}</span>' if g.conf.redis.enabled else '<span class="cell">-</span>'
+        stats_block                                         +=  '</div>'
+        
+        stats_block                                         +=  '</div>' # end table
+        
+        # Последние ошибки (глобальные)
         if g.stats.last_errors:
-            stats_block                                     +=  '<div class="service-block" style="margin-top: 15px;">'
+            stats_block                                     +=  '<div class="errors-list" style="margin-top: 15px; border-top: 1px solid #eee; padding-top: 10px;">'
             stats_block                                     +=  '<h3>🚨 Последние ошибки</h3>'
-            for error_time, error_type, error_msg in reversed(g.stats.last_errors[-5:]):  # Показываем последние 5
-                stats_block                                 +=  '<div class="stats-row error">'
-                stats_block                                 +=  f'<span class="stats-label">[{error_time.strftime("%H:%M:%S")}] {error_type}:</span>'
-                stats_block                                 +=  f'<span class="stats-value">{error_msg[:80]}</span>'
+            for error_time, error_type, error_msg in reversed(g.stats.last_errors[-3:]):
+                error_iso                                   =   error_time.isoformat()
+                stats_block                                 +=  '<div class="stats-row error" style="font-size: 0.9em;">'
+                stats_block                                 +=  f'<span class="stats-label">[<span class="time-val" data-ts="{error_iso}">{error_time.strftime("%H:%M:%S")}</span>] {error_type}:</span>'
+                stats_block                                 +=  f'<span class="stats-value">{error_msg[:120]}</span>'
                 stats_block                                 +=  '</div>'
             stats_block                                     +=  '</div>'
-        
-        stats_block                                         +=  '</div>'
+            
+        stats_block                                         +=  '</div>' # end stats-container
+
         
         # ======= Блок обрабатываемых баз ==============================================================================
         bases                                               =   ""
@@ -203,34 +206,63 @@ class journal2ct_web(object):
         bases                                               +=  '</div>'
         bases                                               +=  '</div>'
         
-        # ======= Блок управления обновлением ==========================================================================
-        refresh_block                                       =   ""
-        refresh_block                                       +=  '<div class="refresh-controls">'
+        # ======= Верхняя панель (Controls + Info) =====================================================================
+        top_bar                                             =   ""
+        top_bar                                             +=  '<div class="refresh-controls">'
         
-        # Блок автообновления
-        refresh_block                                       +=  '<div style="display: flex; align-items: center;">'
-        refresh_block                                       +=  '<span>🔄 Автообновление:</span>'
-        refresh_block                                       +=  '<label class="switch">'
-        refresh_block                                       +=  '<input type="checkbox" id="autoRefresh">'
-        refresh_block                                       +=  '<span class="slider round"></span>'
-        refresh_block                                       +=  '</label>'
-        refresh_block                                       +=  '<span style="margin-left: 10px;">Интервал:</span>'
-        refresh_block                                       +=  '<input type="number" id="refreshInterval" value="30" min="5" style="margin-left: 5px;">'
-        refresh_block                                       +=  '<span> сек.</span>'
-        refresh_block                                       +=  '</div>'
+        # Left: Refresh & Units & Timezone
+        top_bar                                             +=  '<div style="display: flex; align-items: center; flex-wrap: wrap;">'
+        
+        # Refresh
+        top_bar                                             +=  '<div style="display: flex; align-items: center; margin-right: 20px;">'
+        top_bar                                             +=  '<span>🔄 Автообновление:</span>'
+        top_bar                                             +=  '<label class="switch">'
+        top_bar                                             +=  '<input type="checkbox" id="autoRefresh">'
+        top_bar                                             +=  '<span class="slider round"></span>'
+        top_bar                                             +=  '</label>'
+        top_bar                                             +=  '<input type="number" id="refreshInterval" value="30" min="5" style="width: 50px; margin-left: 5px;">'
+        top_bar                                             +=  '<span style="margin-left: 5px;">сек.</span>'
+        top_bar                                             +=  '</div>'
 
-        # Блок единиц измерения
-        refresh_block                                       +=  '<div class="units-controls" style="margin-left: 40px; display: flex; align-items: center;">'
-        refresh_block                                       +=  '<span style="margin-right: 10px;">Единицы:</span>'
-        refresh_block                                       +=  '<div class="btn-group">'
-        refresh_block                                       +=  '<button class="unit-btn active" data-unit="auto">Auto</button>'
-        refresh_block                                       +=  '<button class="unit-btn" data-unit="KB">KB</button>'
-        refresh_block                                       +=  '<button class="unit-btn" data-unit="MB">MB</button>'
-        refresh_block                                       +=  '<button class="unit-btn" data-unit="GB">GB</button>'
-        refresh_block                                       +=  '</div>'
-        refresh_block                                       +=  '</div>'
+        # Timezone
+        top_bar                                             +=  '<div style="display: flex; align-items: center; margin-right: 20px;">'
+        top_bar                                             +=  '<span>🕒 Пояс: GMT</span>'
+        top_bar                                             +=  '<select id="timezoneSelect" style="margin-left: 5px; padding: 2px 5px; border: 1px solid #ccc; border-radius: 4px;">'
+        top_bar                                             +=  '<option value="0">+0</option>'
+        top_bar                                             +=  '<option value="1">+1</option>'
+        top_bar                                             +=  '<option value="2">+2</option>'
+        top_bar                                             +=  '<option value="3" selected>+3</option>'
+        top_bar                                             +=  '<option value="4">+4</option>'
+        top_bar                                             +=  '<option value="5">+5</option>'
+        top_bar                                             +=  '<option value="6">+6</option>'
+        top_bar                                             +=  '<option value="7">+7</option>'
+        top_bar                                             +=  '<option value="8">+8</option>'
+        top_bar                                             +=  '</select>'
+        top_bar                                             +=  '</div>'
+
+        # Units
+        top_bar                                             +=  '<div class="units-controls" style="display: flex; align-items: center;">'
+        top_bar                                             +=  '<span style="margin-right: 10px;">Единицы:</span>'
+        top_bar                                             +=  '<div class="btn-group">'
+        top_bar                                             +=  '<button class="unit-btn active" data-unit="auto">Auto</button>'
+        top_bar                                             +=  '<button class="unit-btn" data-unit="KB">KB</button>'
+        top_bar                                             +=  '<button class="unit-btn" data-unit="MB">MB</button>'
+        top_bar                                             +=  '<button class="unit-btn" data-unit="GB">GB</button>'
+        top_bar                                             +=  '</div>'
+        top_bar                                             +=  '</div>'
         
-        refresh_block                                       +=  '</div>'
+        top_bar                                             +=  '</div>' # End Left
+        
+        # Right: Uptime & Last Activity
+        top_bar                                             +=  '<div style="display: flex; align-items: center; margin-left: auto; font-size: 0.9em; color: #555;">'
+        top_bar                                             +=  f'<span style="margin-right: 20px;">⏱ Время работы: <b>{uptime_str}</b></span>'
+        if last_activity_iso:
+            top_bar                                         +=  f'<span>🚀 Последняя отправка: <b><span class="time-val" data-ts="{last_activity_iso}">{last_activity_str}</span></b></span>'
+        else:
+            top_bar                                         +=  f'<span>🚀 Последняя отправка: <b>{last_activity_str}</b></span>'
+        top_bar                                             +=  '</div>'
+        
+        top_bar                                             +=  '</div>'
 
         return \
             """
@@ -259,63 +291,59 @@ class journal2ct_web(object):
                     }
                     h3 {
                         color: #555;
-                        margin: 10px 0;
+                        margin: 5px 0;
                         font-size: 16px;
                     }
                     .stats-container, .table-container, .refresh-controls {
                         background: white;
-                        padding: 15px;
+                        padding: 10px 15px;
                         margin-bottom: 15px;
                         border-radius: 8px;
                         box-shadow: 0 2px 4px rgba(0,0,0,0.05);
                     }
-                    .services-grid {
-                        display: grid;
-                        grid-template-columns: repeat(2, 1fr);
-                        gap: 15px;
-                        margin-top: 15px;
-                    }
                     .refresh-controls {
                         display: flex;
                         align-items: center;
-                        padding: 15px 20px;
-                    }
-                    .service-block {
-                        margin: 0;
-                        padding: 15px;
-                        background: #f9f9f9;
-                        border-left: 4px solid #00b36b;
-                        border-radius: 4px;
-                        height: 100%;
-                        box-sizing: border-box;
-                    }
-                    .stats-row {
-                        display: flex;
                         justify-content: space-between;
-                        padding: 8px 0;
+                        padding: 10px 20px;
+                        flex-wrap: wrap;
+                    }
+                    .stats-table .row {
+                        display: grid;
+                        grid-template-columns: 150px 1fr 1fr 1fr;
                         border-bottom: 1px solid #eee;
                     }
-                    .stats-row:last-child {
-                        border-bottom: none;
+                    .stats-table .row.header {
+                        font-weight: bold;
+                        background-color: #00b36b;
+                        color: white;
+                        border-bottom: 2px solid #00995c;
                     }
+                    .stats-table .cell {
+                        padding: 8px 10px;
+                        display: flex;
+                        align-items: center;
+                    }
+                    .stats-table .cell.parameter {
+                        font-weight: 600;
+                        background-color: #f9f9f9;
+                        border-right: 1px solid #eee;
+                    }
+                    .stats-table .cell.disabled {
+                        color: #999;
+                        font-style: italic;
+                    }
+                    
                     .stats-row.error {
                         background-color: #fff3cd;
-                        padding: 10px;
-                        margin: 5px 0;
+                        padding: 5px 10px;
+                        margin: 2px 0;
                         border-radius: 4px;
-                        border-left: 4px solid #ff6b6b;
+                        border-left: 3px solid #ff6b6b;
+                        display: flex;
+                        justify-content: space-between;
                     }
-                    .stats-label {
-                        font-weight: 600;
-                        color: #555;
-                        flex: 1;
-                    }
-                    .stats-value {
-                        color: #333;
-                        flex: 2;
-                        text-align: right;
-                        font-family: 'Consolas', monospace;
-                    }
+                    
                     .table {
                         display: table;
                         border-collapse: separate;
@@ -357,9 +385,9 @@ class journal2ct_web(object):
                     .switch {
                         position: relative;
                         display: inline-block;
-                        width: 40px;
-                        height: 22px;
-                        margin: 0 10px;
+                        width: 34px;
+                        height: 20px;
+                        margin: 0 8px;
                     }
                     .switch input { 
                         opacity: 0;
@@ -380,8 +408,8 @@ class journal2ct_web(object):
                     .slider:before {
                         position: absolute;
                         content: "";
-                        height: 16px;
-                        width: 16px;
+                        height: 14px;
+                        width: 14px;
                         left: 3px;
                         bottom: 3px;
                         background-color: white;
@@ -392,7 +420,7 @@ class journal2ct_web(object):
                         background-color: #00b36b;
                     }
                     input:checked + .slider:before {
-                        transform: translateX(18px);
+                        transform: translateX(14px);
                     }
                     
                     /* Unit buttons styles */
@@ -406,9 +434,9 @@ class journal2ct_web(object):
                         background-color: #f8f9fa;
                         border: none;
                         border-right: 1px solid #ccc;
-                        padding: 5px 10px;
+                        padding: 4px 8px;
                         cursor: pointer;
-                        font-size: 14px;
+                        font-size: 13px;
                         transition: background-color 0.2s;
                     }
                     .unit-btn:last-child {
@@ -424,18 +452,22 @@ class journal2ct_web(object):
                 </style>   
                 <script type="text/javascript">
                     function colorize(Element) {
-                        elements = document.querySelectorAll(".row:not(.header) .cell");  
+                        elements = document.querySelectorAll(".table .row:not(.header) .cell");  
                         if(elements.length > 0){
                             for(var i = 0; i < elements.length; i++){
-                                elements[i].style.backgroundColor = 'white';
-                                elements[i].style.color = 'inherit';
+                                if(!elements[i].classList.contains('parameter')) {
+                                    elements[i].style.backgroundColor = 'white';
+                                    elements[i].style.color = 'inherit';
+                                }
                             }
                         }
                         
                         var children = Element.children;
                         for (var i = 0; i < children.length; i++) {
-                            children[i].style.backgroundColor = '#00b36b';
-                            children[i].style.color = 'white';
+                             if(!children[i].classList.contains('parameter')) {
+                                children[i].style.backgroundColor = '#00b36b';
+                                children[i].style.color = 'white';
+                             }
                         }
                         return false;
                     }
@@ -466,7 +498,31 @@ class journal2ct_web(object):
                             if (type === 'lgf') {
                                 cell.textContent = formatSize(val, unit);
                             }
-                            // Для lgd (записей) ничего не меняем, оставляем как есть
+                        });
+                    }
+                    
+                    // Форматирование времени с учетом пояса
+                    function updateTimes(offset) {
+                        document.querySelectorAll('.time-val').forEach(el => {
+                            const ts = el.getAttribute('data-ts');
+                            if (!ts) return;
+                            
+                            // Считаем, что серверное время - это UTC, если в строке нет зоны
+                            // Если ISO строка без Z, добавляем Z для корректного парсинга как UTC
+                            const timeStr = ts.endsWith('Z') ? ts : ts + 'Z';
+                            const date = new Date(timeStr);
+                            
+                            if (isNaN(date.getTime())) return;
+                            
+                            // Прибавляем смещение (в часах)
+                            // getTime() дает миллисекунды
+                            const targetTime = new Date(date.getTime() + (offset * 3600000));
+                            
+                            const hours = targetTime.getUTCHours().toString().padStart(2, '0');
+                            const minutes = targetTime.getUTCMinutes().toString().padStart(2, '0');
+                            const seconds = targetTime.getUTCSeconds().toString().padStart(2, '0');
+                            
+                            el.textContent = hours + ':' + minutes + ':' + seconds;
                         });
                     }
 
@@ -513,7 +569,6 @@ class journal2ct_web(object):
                         const unitBtns = document.querySelectorAll('.unit-btn');
                         let currentUnit = localStorage.getItem('nikita_unit') || 'auto';
                         
-                        // Установка активной кнопки
                         unitBtns.forEach(btn => {
                             if (btn.getAttribute('data-unit') === currentUnit) {
                                 btn.classList.add('active');
@@ -531,15 +586,32 @@ class journal2ct_web(object):
                                 updateSizes(currentUnit);
                             });
                         });
-                        
-                        // Применяем сохраненную настройку при загрузке
                         updateSizes(currentUnit);
+                        
+                        // --- Часовой пояс ---
+                        const tzSelect = document.getElementById('timezoneSelect');
+                        // По умолчанию GMT+3
+                        let currentOffset = localStorage.getItem('nikita_timezone');
+                        if (currentOffset === null) {
+                            currentOffset = "3";
+                        }
+                        
+                        tzSelect.value = currentOffset;
+                        
+                        tzSelect.addEventListener('change', function() {
+                            const offset = parseInt(this.value);
+                            localStorage.setItem('nikita_timezone', offset);
+                            updateTimes(offset);
+                        });
+                        
+                        // Инициализация времени
+                        updateTimes(parseInt(currentOffset));
                     });
                 </script>
             </head>
             <body>
                 <h1>📊 Nikita - Панель мониторинга</h1>
-                """+refresh_block+"""
+                """+top_bar+"""
                 """+stats_block+"""
                 """+bases+"""
             </body>
