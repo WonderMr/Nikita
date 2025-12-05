@@ -1,3 +1,7 @@
+cd /d "%~dp0\.."
+.\dist\Nikita\Nikita.exe stop
+.\dist\Nikita\Nikita.exe remove
+
 call b.2pyd.cmd
 
 ren .\src\cherry.py cherry.p
@@ -8,8 +12,7 @@ rmdir /S /Q .\dist\
 rmdir /S /Q .\build\
 
 set PYTHONOPTIMIZE=1 && ^
-pyinstaller %CD%\Nikita.py ^
--D -F ^
+pyinstaller ..\Nikita\Nikita.py ^
 --onedir ^
 --console ^
 --clean ^
@@ -17,9 +20,6 @@ pyinstaller %CD%\Nikita.py ^
 --exclude-module cryptography ^
 --exclude-module lib2to3 ^
 --exclude-module win32com ^
---exclude-module gevent ^
---exclude-module matplotlib ^
---exclude-module matplotlib.backend ^
 --hidden-import subprocess ^
 --hidden-import cherrypy ^
 --hidden-import urllib ^
@@ -44,5 +44,23 @@ pyinstaller %CD%\Nikita.py ^
 
 ren .\src\*.yp *.py
 del .\src\*.pyd
-mkdir .\dist\Nikita-StarForce-ready
-xcopy .\dist\Nikita .\dist\Nikita-StarForce-ready /s/h/e/k/f/c
+rem goto start
+rem --hidden-import dictionaries ^
+rem --key=tc2lanruoJ ^
+rem del .\dist\Nikita\mkl*.dll
+
+mkdir .\dist\Nikita\java
+mkdir .\dist\Nikita\solr
+xcopy .\java .\dist\Nikita\java /s/h/e/k/f/c
+xcopy .\solr-8.2.0 .\dist\Nikita\solr /s/h/e/k/f/c
+
+rem move .\dist\Nikita\vcruntime140.dll .\dist\Nikita\vcruntime140.dl
+rem upx-x .\dist\Nikita\*.exe
+rem upx-x .\dist\Nikita\*.dll
+rem upx-x .\dist\Nikita\*.pyd
+rem move .\dist\Nikita\vcruntime140.dl .\dist\Nikita\vcruntime140.dll
+
+:start
+.\dist\Nikita\Nikita.exe remove
+rem .\dist\Nikita\Nikita.exe install
+rem .\dist\Nikita\Nikita.exe start

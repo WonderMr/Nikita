@@ -1,3 +1,4 @@
+cd "$(dirname "$0")/.."
 ./b.2pyd.sh
 
 ren .\src\cherry.py cherry.p

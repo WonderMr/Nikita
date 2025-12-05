@@ -26,7 +26,7 @@ class StateManager:
         self._initialized                                       =   True
         # Используем каталог исполнения или текущий каталог
         base_dir                                                =   g.execution.self_dir if g.execution.self_dir else os.path.dirname(os.path.abspath(__file__))
-        self.db_path                                            =   os.path.join(base_dir, "parser_state.db")
+        self.db_path                                            =   os.path.join(base_dir, "Nikita.parser.state.db")
         self.conn_lock                                          =   threading.Lock()
         self._init_db()
 

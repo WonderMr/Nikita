@@ -1,3 +1,4 @@
+cd "$(dirname "$0")/.."
 sudo groupadd 1c_data_group
 sudo usermod -aG 1c_data_group wondermr
 sudo chgrp -R 1c_data_group /home/usr1cv8/.1cv8/1C/1cv8/regs_1541

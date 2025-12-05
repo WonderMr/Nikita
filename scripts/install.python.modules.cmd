@@ -1,3 +1,4 @@
+cd /d "%~dp0\.."
 pip install cython
 pip install pyinstaller
 pip install pywin32

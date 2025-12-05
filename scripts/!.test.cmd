@@ -1,3 +1,4 @@
+cd /d "%~dp0\.."
 rmdir /S /Q .\dist\
 rmdir /S /Q .\build\
 

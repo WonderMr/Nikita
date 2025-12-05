@@ -1,3 +1,4 @@
+cd /d "%~dp0\.."
 rmdir /s /q solr
 rmdir /s /q debug
 mkdir solr
