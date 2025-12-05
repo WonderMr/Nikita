@@ -5,6 +5,20 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# Вывод конфигурации ClickHouse при загрузке (для отладки)
+print("=" * 80)
+print("ЗАГРУЗКА КОНФИГУРАЦИИ NIKITA")
+print("=" * 80)
+print(f"CLICKHOUSE_ENABLED: {os.getenv('CLICKHOUSE_ENABLED', 'False')}")
+print(f"CLICKHOUSE_HOST: {os.getenv('CLICKHOUSE_HOST', 'localhost')}")
+print(f"CLICKHOUSE_PORT: {os.getenv('CLICKHOUSE_PORT', '9000')}")
+print(f"CLICKHOUSE_DATABASE: {os.getenv('CLICKHOUSE_DATABASE', 'zhr1c')}")
+print(f"CLICKHOUSE_USER: {os.getenv('CLICKHOUSE_USER', 'default')}")
+print(f"REDIS_ENABLED: {os.getenv('REDIS_ENABLED', 'False')}")
+print(f"SOLR_ENABLED: {os.getenv('SOLR_ENABLED', 'False')}")
+print(f"DEBUG_ENABLED: {os.getenv('DEBUG_ENABLED', 'True')}")
+print("=" * 80)
+
 # ======================================================================================================================
 # в блоке переменных выход за длину разрешён
 # ======================================================================================================================

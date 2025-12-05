@@ -101,6 +101,7 @@ class conf:
         
         # Теперь читаем базы из ENV
         try:
+            t.debug_print("Загрузка баз данных 1С из переменных окружения...")
             i = 0
             while True:
                 ibase_name = os.getenv(f"IBASE_{i}_NAME") or os.getenv(f"IBASE_{i}")
@@ -119,9 +120,16 @@ class conf:
                             g.nms.ib.parsed_size            :   0
                         }
                      g.parser.ibases.append(ibase_info)
+                     t.debug_print(f"✓ База #{i} загружена: {ibase_name}, формат: {ibase_format}, журнал: {ibase_jr}")
                 i += 1
+            
+            if len(g.parser.ibases) == 0:
+                t.debug_print("⚠ ВНИМАНИЕ: Не найдено ни одной базы данных 1С в переменных окружения!")
+                t.debug_print("   Проверьте наличие переменных IBASE_0, IBASE_0_JR и т.д. в файле .env")
+            else:
+                t.debug_print(f"Всего загружено баз: {len(g.parser.ibases)}")
         except Exception as e:
-             t.debug_print(f"Error loading ibases from env: {e}")
+             t.debug_print(f"✗ Ошибка загрузки баз из переменных окружения: {e}")
 
         # config.read(g.conf.filename, encoding="UTF8") - no longer needed
         try:
