@@ -737,22 +737,42 @@ class journal2ct_web(object):
                         const debugBlock = document.getElementById('debugBlock');
                         const debugMessages = document.getElementById('debugMessages');
                         
-                        // Загружаем состояние из localStorage
-                        const debugEnabled = localStorage.getItem('nikita_debug') === 'true';
-                        debugToggle.checked = debugEnabled;
-                        if (debugEnabled) {
-                            debugBlock.style.display = 'block';
-                            loadDebugLogs();
-                        }
+                        // Загружаем состояние с сервера
+                        fetch('/set_debug')
+                            .then(response => response.json())
+                            .then(data => {
+                                if (data.success) {
+                                    debugToggle.checked = data.debug_enabled;
+                                    if (data.debug_enabled) {
+                                        debugBlock.style.display = 'block';
+                                        loadDebugLogs();
+                                    }
+                                }
+                            })
+                            .catch(err => {
+                                console.error('Ошибка загрузки состояния отладки:', err);
+                            });
                         
                         debugToggle.addEventListener('change', function() {
                             const enabled = this.checked;
-                            localStorage.setItem('nikita_debug', enabled);
                             debugBlock.style.display = enabled ? 'block' : 'none';
                             
-                            if (enabled) {
-                                loadDebugLogs();
-                            }
+                            // Отправляем изменение на сервер
+                            fetch('/set_debug?enabled=' + enabled)
+                                .then(response => response.json())
+                                .then(data => {
+                                    if (data.success) {
+                                        console.log(data.message);
+                                        if (enabled) {
+                                            loadDebugLogs();
+                                        }
+                                    } else {
+                                        console.error('Ошибка изменения режима отладки:', data.error);
+                                    }
+                                })
+                                .catch(err => {
+                                    console.error('Ошибка запроса к серверу:', err);
+                                });
                         });
                         
                         // Функция загрузки логов
@@ -828,13 +848,14 @@ class journal2ct_web(object):
                 
                 for row in rows:
                     basename, record_count, timestamp, filename = row
-                    log_msg                                 =   f"[{timestamp}] ✓ Logged block: basename={basename}, records={record_count}, file={filename}"
+                    log_msg                                 =   f"[{timestamp}] Logged block: basename={basename}, records={record_count}, file={filename}"
                     debug_logs_list.append(log_msg)
         except Exception as e:
-            debug_logs_list.append(f"✗ Ошибка получения логов: {str(e)}")
+            t.debug_print(f"✗ Ошибка получения логов: {str(e)}", "cherry")
+            debug_logs_list.append(f"Ошибка получения логов: {str(e)}")
         
         result                                              =   {'logs': debug_logs_list}
-        return json.dumps(result, ensure_ascii=False, indent=2)
+        return json.dumps(result, ensure_ascii=False)
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     @cherrypy.expose
     def stats_api(self):
@@ -928,6 +949,43 @@ class journal2ct_web(object):
                                                                 })
         
         return json.dumps(stats_data, ensure_ascii=False, indent=2)
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    @cherrypy.expose
+    def set_debug(self, enabled=None):
+        """API endpoint для управления флагом отладки"""
+        cherrypy.response.headers['Content-Type']           =   'application/json; charset=utf-8'
+        
+        try:
+            if enabled is not None:
+                # Преобразуем строковое значение в boolean
+                new_debug_state                             =   str(enabled).lower() in ('true', '1', 't', 'y', 'yes')
+                
+                # Обновляем глобальную переменную отладки
+                g.debug.on                                  =   new_debug_state
+                
+                # Обновляем переменную окружения для будущих потоков
+                import os
+                os.environ['DEBUG_ENABLED']                 =   'true' if new_debug_state else 'false'
+                
+                t.debug_print(f"Отладка {'включена' if new_debug_state else 'выключена'} через веб-интерфейс", "cherry")
+                
+                return json.dumps({
+                    'success'       :   True,
+                    'debug_enabled' :   g.debug.on,
+                    'message'       :   f"Отладка {'включена' if g.debug.on else 'выключена'}"
+                }, ensure_ascii=False)
+            else:
+                # Возвращаем текущее состояние
+                return json.dumps({
+                    'success'       :   True,
+                    'debug_enabled' :   g.debug.on
+                }, ensure_ascii=False)
+        except Exception as e:
+            t.debug_print(f"✗ Ошибка изменения режима отладки: {str(e)}", "cherry")
+            return json.dumps({
+                'success'   :   False,
+                'error'     :   str(e)
+            }, ensure_ascii=False)
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     @cherrypy.expose
     def show(self, length=9):
