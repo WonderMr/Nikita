@@ -84,29 +84,45 @@ class journal2ct_web(object):
         else:
             stats_block                                     +=  '<span class="cell disabled">Отключено</span>'
         
-        # Хосты (каждый в своей строке внутри ячейки)
-        ch_host                                             =   f'{g.conf.clickhouse.host}:{g.conf.clickhouse.port}' if g.conf.clickhouse.enabled else '-'
-        solr_host                                           =   f'{g.conf.solr.solr_host}:{g.conf.solr.solr_port}' if g.conf.solr.enabled else '-'
-        redis_host                                          =   f'{g.conf.redis.host}:{g.conf.redis.port}' if g.conf.redis.enabled else '-'
-        stats_block                                         +=  f'<span class="cell">{ch_host}<br>{solr_host}<br>{redis_host}</span>'
+        # Хосты (только для включенных сервисов)
+        hosts_list                                          =   []
+        if g.conf.clickhouse.enabled:
+            hosts_list.append(f'{g.conf.clickhouse.host}:{g.conf.clickhouse.port}')
+        if g.conf.solr.enabled:
+            hosts_list.append(f'{g.conf.solr.solr_host}:{g.conf.solr.solr_port}')
+        if g.conf.redis.enabled:
+            hosts_list.append(f'{g.conf.redis.host}:{g.conf.redis.port}')
+        stats_block                                         +=  f'<span class="cell">{("<br>".join(hosts_list)) if hosts_list else "-"}</span>'
         
-        # Базы данных
-        ch_db                                               =   g.conf.clickhouse.database if g.conf.clickhouse.enabled else '-'
-        solr_db                                             =   'default' if g.conf.solr.enabled else '-'
-        redis_db                                            =   str(g.conf.redis.db) if g.conf.redis.enabled else '-'
-        stats_block                                         +=  f'<span class="cell">{ch_db}<br>{solr_db}<br>{redis_db}</span>'
+        # Базы данных (только для включенных сервисов)
+        db_list                                             =   []
+        if g.conf.clickhouse.enabled:
+            db_list.append(g.conf.clickhouse.database)
+        if g.conf.solr.enabled:
+            db_list.append('default')
+        if g.conf.redis.enabled:
+            db_list.append(str(g.conf.redis.db))
+        stats_block                                         +=  f'<span class="cell">{("<br>".join(db_list)) if db_list else "-"}</span>'
         
-        # Записей (с запуска)
-        ch_sent                                             =   locale.format("%d", g.stats.clickhouse_total_sent, grouping=True) if g.conf.clickhouse.enabled else '-'
-        solr_sent                                           =   locale.format("%d", g.stats.solr_total_sent, grouping=True) if g.conf.solr.enabled else '-'
-        redis_queued                                        =   locale.format("%d", g.stats.redis_total_queued, grouping=True) if g.conf.redis.enabled else '-'
-        stats_block                                         +=  f'<span class="cell">{ch_sent}<br>{solr_sent}<br>{redis_queued}</span>'
+        # Записей (с запуска) - только для включенных сервисов
+        sent_list                                           =   []
+        if g.conf.clickhouse.enabled:
+            sent_list.append(locale.format("%d", g.stats.clickhouse_total_sent, grouping=True))
+        if g.conf.solr.enabled:
+            sent_list.append(locale.format("%d", g.stats.solr_total_sent, grouping=True))
+        if g.conf.redis.enabled:
+            sent_list.append(locale.format("%d", g.stats.redis_total_queued, grouping=True))
+        stats_block                                         +=  f'<span class="cell">{("<br>".join(sent_list)) if sent_list else "-"}</span>'
         
-        # Ошибок (с запуска)
-        ch_errors                                           =   str(g.stats.clickhouse_total_errors) if g.conf.clickhouse.enabled else '-'
-        solr_errors                                         =   str(g.stats.solr_total_errors) if g.conf.solr.enabled else '-'
-        redis_errors                                        =   str(g.stats.redis_total_errors) if g.conf.redis.enabled else '-'
-        stats_block                                         +=  f'<span class="cell">{ch_errors}<br>{solr_errors}<br>{redis_errors}</span>'
+        # Ошибок (с запуска) - только для включенных сервисов
+        errors_list                                         =   []
+        if g.conf.clickhouse.enabled:
+            errors_list.append(str(g.stats.clickhouse_total_errors))
+        if g.conf.solr.enabled:
+            errors_list.append(str(g.stats.solr_total_errors))
+        if g.conf.redis.enabled:
+            errors_list.append(str(g.stats.redis_total_errors))
+        stats_block                                         +=  f'<span class="cell">{("<br>".join(errors_list)) if errors_list else "-"}</span>'
         
         stats_block                                         +=  '</div>' # end row
         stats_block                                         +=  '</div>' # end table
