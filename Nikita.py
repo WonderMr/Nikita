@@ -184,72 +184,18 @@ class conf:
             t.debug_print(f"Error while parsing params {str(e)}")
             t.seppuku()
     # ------------------------------------------------------------------------------------------------------------------
-    # сохранение конфы
+    # сохранение конфы (отключено)
     # ------------------------------------------------------------------------------------------------------------------
     def save(fake_param = 0):
-        if g.conf.solr.dir == "":
-            t.debug_print("Empty configuration will not be saved")
-            return
-        else:
-            t.debug_print("Saving configiration")
-        config                                              =   configparser.ConfigParser()
-        # ~~~~~~~ Специфика 1С ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        config.add_section(g.conf.c1.section_name)
-        i                                                   =   0
-        for ibase in g.parser.ibases:
-            config.set(g.conf.c1.section_name,  f"ibase_{str(i)}"       , ibase[g.nms.ib.name])
-            config.set(g.conf.c1.section_name,  f"ibase_{str(i)}_jr"    , ibase[g.nms.ib.jr_dir])
-            config.set(g.conf.c1.section_name,  f"ibase_{str(i)}_format", ibase[g.nms.ib.jr_format])
-            i                                               +=  1
+        pass
+        # if g.conf.solr.dir == "":
+        #     t.debug_print("Empty configuration will not be saved")
+        #     return
+        # else:
+        #     t.debug_print("Saving configiration")
+        # config                                              =   configparser.ConfigParser()
+        # ... (код сохранения удален/закомментирован) ...
 
-        # ~~~~~~~ Специфика ClickHouse ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        config.add_section(g.conf.clickhouse.section_name)
-        config.set(g.conf.clickhouse.section_name, "enabled",      str(g.conf.clickhouse.enabled))
-        config.set(g.conf.clickhouse.section_name, "host",         g.conf.clickhouse.host)
-        config.set(g.conf.clickhouse.section_name, "port",         str(g.conf.clickhouse.port))
-        config.set(g.conf.clickhouse.section_name, "user",         g.conf.clickhouse.user)
-        config.set(g.conf.clickhouse.section_name, "password",     g.conf.clickhouse.password)
-        config.set(g.conf.clickhouse.section_name, "database",     g.conf.clickhouse.database)
-
-        # ~~~~~~~ Специфика Redis ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        config.add_section(g.conf.redis.section_name)
-        config.set(g.conf.redis.section_name, "enabled",        str(g.conf.redis.enabled))
-        config.set(g.conf.redis.section_name, "server_path",    g.conf.redis.server_path)
-        config.set(g.conf.redis.section_name, "host",           g.conf.redis.host)
-        config.set(g.conf.redis.section_name, "port",           str(g.conf.redis.port))
-        config.set(g.conf.redis.section_name, "db",             str(g.conf.redis.db))
-        config.set(g.conf.redis.section_name, "dir",            g.conf.redis.dir)
-
-        # ~~~~~~~ Специфика SOLR ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        config.add_section(g.conf.solr.section_name)
-        config.set(g.conf.solr.section_name,    "enabled",          str(g.conf.solr.enabled))
-        config.set(g.conf.solr.section_name,    "mem_min",          g.conf.solr.mem_min)
-        config.set(g.conf.solr.section_name,    "mem_max",          g.conf.solr.mem_max)
-        config.set(g.conf.solr.section_name,    "dir",              g.conf.solr.dir)
-        config.set(g.conf.solr.section_name,    "listen_interface", g.conf.solr.listen_interface)
-        config.set(g.conf.solr.section_name,    "listen_port",      g.conf.solr.listen_port)
-        config.set(g.conf.solr.section_name,    "solr_host",        g.conf.solr.solr_host)
-        config.set(g.conf.solr.section_name,    "solr_port",        g.conf.solr.solr_port)
-        config.set(g.conf.solr.section_name,    "java",             g.conf.solr.java_home)
-        config.set(g.conf.solr.section_name,    "threads",          g.conf.solr.threads)
-
-        # ~~~~~~~ Специфика HTTP ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        config.add_section(g.conf.http.section_name)
-        config.set(g.conf.http.section_name,    "listen_interface", g.conf.http.listen_interface)
-        config.set(g.conf.http.section_name,    "listen_port",      g.conf.http.listen_port)
-
-        # ~~~~~~~ Специфика парсера ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        config.add_section(g.parser.section_name)
-        config.set(g.parser.section_name,       "threads",          g.parser.threads)
-
-        # ~~~~~~~ Специфика отладка~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        config.add_section("debug")
-        config.set("debug", "enabled", str(g.debug.on))
-
-        # ~~~~~~~ Сохраняем ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        config_file_handle                                  =   open(g.conf.filename, 'w', encoding="UTF8")
-        config.write(config_file_handle)
-        config_file_handle.close()
     # ------------------------------------------------------------------------------------------------------------------
     # определение настроек по умлочанию
     # ------------------------------------------------------------------------------------------------------------------
@@ -511,13 +457,16 @@ def start_all(wait=False):
     try:
         t.debug_print("Starting all threads")
         # ~~~~~~~ загружаю или создаю конфигурацию ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        if(os.path.exists(g.conf.filename)):
-            t.debug_print("Load configuration")
-            conf.load()
-        else:
-            t.debug_print("Configuration detection")
-            conf.detect(initial=True)
-            conf.save()
+        t.debug_print("Load configuration (ENV)")
+        conf.load()
+        conf.detect(initial=True)
+        # if(os.path.exists(g.conf.filename)):
+        #     t.debug_print("Load configuration")
+        #     conf.load()
+        # else:
+        #     t.debug_print("Configuration detection")
+        #     conf.detect(initial=True)
+        #     conf.save()
         post_init_vars()
         # ~~~~~~~ запускаю cherrypy в фоне ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         #g.threads.cherry                                    =   c.cherry_thread("my little cherry")
@@ -574,7 +523,7 @@ class config_updater(threading.Thread):
             try:
                 time.sleep(g.waits.sleep_on_conf_detection)
                 conf.detect(initial                         =   False)                                                  # проверяем список баз
-                conf.save()
+                # conf.save()
             except Exception as e:
                 t.debug_print(f"Exception on confige update. Error is {str(e)}")
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
