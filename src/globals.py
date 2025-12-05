@@ -89,7 +89,7 @@ class conf:
     # ======= настройки ClickHouse =====================================================================================
     class clickhouse:
         section_name                                            =   "ClickHouse settings"                               # имя секции для файла конфигурации
-        enabled                                                 =   os.getenv('CLICKHOUSE_ENABLED', 'False').lower() in ('true', '1', 't', 'y', 'yes')
+        enabled                                                 =   os.getenv('CLICKHOUSE_ENABLED', 'True').lower() in ('true', '1', 't', 'y', 'yes')
         host                                                    =   os.getenv('CLICKHOUSE_HOST', 'localhost')
         port                                                    =   int(os.getenv('CLICKHOUSE_PORT', 9000))
         user                                                    =   os.getenv('CLICKHOUSE_USER', 'default')

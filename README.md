@@ -68,8 +68,8 @@
     IBASE_1_JR=/path/to/another/log
     IBASE_1_FORMAT=lgd
     
-    # Настройки ClickHouse
-    CLICKHOUSE_ENABLED=True
+    # Настройки ClickHouse (включено по умолчанию)
+    CLICKHOUSE_ENABLED=true
     CLICKHOUSE_HOST=localhost
     CLICKHOUSE_PORT=9000
     CLICKHOUSE_USER=default
