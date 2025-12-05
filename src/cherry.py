@@ -134,8 +134,8 @@ class journal2ct_web(object):
         bases                                               +=  '<span class="cell">Название базы</span>'
         bases                                               +=  '<span class="cell">Путь к журналу регистрации</span>'
         bases                                               +=  '<span class="cell">Тип ЖР</span>'
-        bases                                               +=  '<span class="cell">Размер ЖР (байт или записей)</span>'
-        bases                                               +=  '<span class="cell">Обработано(байт или записей)</span>'
+        bases                                               +=  '<span class="cell">Размер ЖР</span>'
+        bases                                               +=  '<span class="cell">Обработано</span>'
         bases                                               +=  '<span class="cell">% Обработано</span>'
         bases                                               +=  '</div>'
 
@@ -143,6 +143,9 @@ class journal2ct_web(object):
             base_total                                      =   base[g.nms.ib.total_size]\
                                                                 if base[g.nms.ib.total_size]>=base[g.nms.ib.parsed_size]\
                                                                 else base[g.nms.ib.parsed_size]
+            jr_format                                       =   base[g.nms.ib.jr_format]
+            is_lgf                                          =   jr_format == 'lgf'
+            
             bases                                           +=  '<div class="row" onclick="colorize(this)">'
             bases                                           +=  '<span class="cell"">'                          \
                                                             +   t.denormalize_ib_name(base[g.nms.ib.name])      \
@@ -151,24 +154,31 @@ class journal2ct_web(object):
                                                             +   base[g.nms.ib.jr_dir]                           \
                                                             +   "</span>"
             bases                                           +=  '<span class="cell">'                           \
-                                                            +   base[g.nms.ib.jr_format]                        \
+                                                            +   jr_format                                       \
                                                             +   "</span>"
-            bases                                           +=  '<span class="cell">'                           \
+            
+            # Размер ЖР с data-атрибутами для JS конвертации
+            bases                                           +=  '<span class="cell size-value" data-val="' + str(base_total) + '" data-type="' + jr_format + '">' \
                                                             +   locale.format(
                                                                     '%d',
                                                                     base_total,
                                                                     grouping        =   True,
                                                                     monetary        =   True
                                                                 )                                               \
+                                                            +   (' байт' if is_lgf else ' шт.')                 \
                                                             +   "</span>"
-            bases                                           +=  '<span class="cell">'                           \
+            
+            # Обработано с data-атрибутами
+            bases                                           +=  '<span class="cell size-value" data-val="' + str(base[g.nms.ib.parsed_size]) + '" data-type="' + jr_format + '">' \
                                                             +   locale.format(
                                                                     '%d',
                                                                     base[g.nms.ib.parsed_size],
                                                                     grouping        =   True,
                                                                     monetary        =   True
                                                                 )                                               \
+                                                            +   (' байт' if is_lgf else ' шт.')                 \
                                                             +   "</span>"
+                                                            
             bases                                           +=  '<span class="cell">'                           \
                                                             +   str(
                                                                     round(
@@ -192,6 +202,9 @@ class journal2ct_web(object):
         # ======= Блок управления обновлением ==========================================================================
         refresh_block                                       =   ""
         refresh_block                                       +=  '<div class="refresh-controls">'
+        
+        # Блок автообновления
+        refresh_block                                       +=  '<div style="display: flex; align-items: center;">'
         refresh_block                                       +=  '<span>🔄 Автообновление:</span>'
         refresh_block                                       +=  '<label class="switch">'
         refresh_block                                       +=  '<input type="checkbox" id="autoRefresh">'
@@ -200,6 +213,19 @@ class journal2ct_web(object):
         refresh_block                                       +=  '<span style="margin-left: 10px;">Интервал:</span>'
         refresh_block                                       +=  '<input type="number" id="refreshInterval" value="30" min="5" style="margin-left: 5px;">'
         refresh_block                                       +=  '<span> сек.</span>'
+        refresh_block                                       +=  '</div>'
+
+        # Блок единиц измерения
+        refresh_block                                       +=  '<div class="units-controls" style="margin-left: 40px; display: flex; align-items: center;">'
+        refresh_block                                       +=  '<span style="margin-right: 10px;">Единицы:</span>'
+        refresh_block                                       +=  '<div class="btn-group">'
+        refresh_block                                       +=  '<button class="unit-btn active" data-unit="auto">Auto</button>'
+        refresh_block                                       +=  '<button class="unit-btn" data-unit="KB">KB</button>'
+        refresh_block                                       +=  '<button class="unit-btn" data-unit="MB">MB</button>'
+        refresh_block                                       +=  '<button class="unit-btn" data-unit="GB">GB</button>'
+        refresh_block                                       +=  '</div>'
+        refresh_block                                       +=  '</div>'
+        
         refresh_block                                       +=  '</div>'
 
         return \
@@ -211,21 +237,21 @@ class journal2ct_web(object):
                 <style type="text/css">
                     body {
                         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-                        margin: 20px;
+                        margin: 10px;
                         background-color: #f5f5f5;
                         color: #333;
                     }
                     h1 {
                         color: #00b36b;
-                        font-size: 24px;
-                        margin-bottom: 20px;
+                        font-size: 20px;
+                        margin-bottom: 15px;
                     }
                     h2 {
                         color: #333;
-                        margin-bottom: 15px;
+                        margin-bottom: 10px;
                         border-bottom: 2px solid #00b36b;
                         padding-bottom: 5px;
-                        font-size: 20px;
+                        font-size: 18px;
                     }
                     h3 {
                         color: #555;
@@ -234,8 +260,8 @@ class journal2ct_web(object):
                     }
                     .stats-container, .table-container, .refresh-controls {
                         background: white;
-                        padding: 20px;
-                        margin-bottom: 20px;
+                        padding: 15px;
+                        margin-bottom: 15px;
                         border-radius: 8px;
                         box-shadow: 0 2px 4px rgba(0,0,0,0.05);
                     }
@@ -299,7 +325,7 @@ class journal2ct_web(object):
                     }
                     .cell {
                         display: table-cell;
-                        padding: 12px 15px;
+                        padding: 8px 10px;
                         border-bottom: 1px solid #eee;
                         text-align: left;
                         background-color: white;
@@ -356,6 +382,33 @@ class journal2ct_web(object):
                     input:checked + .slider:before {
                         transform: translateX(18px);
                     }
+                    
+                    /* Unit buttons styles */
+                    .btn-group {
+                        display: flex;
+                        border: 1px solid #ccc;
+                        border-radius: 4px;
+                        overflow: hidden;
+                    }
+                    .unit-btn {
+                        background-color: #f8f9fa;
+                        border: none;
+                        border-right: 1px solid #ccc;
+                        padding: 5px 10px;
+                        cursor: pointer;
+                        font-size: 14px;
+                        transition: background-color 0.2s;
+                    }
+                    .unit-btn:last-child {
+                        border-right: none;
+                    }
+                    .unit-btn:hover {
+                        background-color: #e2e6ea;
+                    }
+                    .unit-btn.active {
+                        background-color: #00b36b;
+                        color: white;
+                    }
                 </style>   
                 <script type="text/javascript">
                     function colorize(Element) {
@@ -375,12 +428,42 @@ class journal2ct_web(object):
                         return false;
                     }
                     
+                    // Форматирование размера
+                    function formatSize(value, unit) {
+                        const val = parseFloat(value);
+                        if (isNaN(val)) return value;
+                        
+                        if (unit === 'KB') return (val / 1024).toFixed(2) + ' KB';
+                        if (unit === 'MB') return (val / (1024 * 1024)).toFixed(2) + ' MB';
+                        if (unit === 'GB') return (val / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+                        
+                        // Auto
+                        if (val < 1024) return val + ' Б';
+                        if (val < 1024 * 1024) return (val / 1024).toFixed(2) + ' KB';
+                        if (val < 1024 * 1024 * 1024) return (val / (1024 * 1024)).toFixed(2) + ' MB';
+                        return (val / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+                    }
+
+                    // Обновление всех ячеек с размерами
+                    function updateSizes(unit) {
+                        const cells = document.querySelectorAll('.size-value');
+                        cells.forEach(cell => {
+                            const type = cell.getAttribute('data-type');
+                            const val = cell.getAttribute('data-val');
+                            
+                            if (type === 'lgf') {
+                                cell.textContent = formatSize(val, unit);
+                            }
+                            // Для lgd (записей) ничего не меняем, оставляем как есть
+                        });
+                    }
+
                     document.addEventListener("DOMContentLoaded", function() {
+                        // --- Автообновление ---
                         const checkbox = document.getElementById('autoRefresh');
                         const intervalInput = document.getElementById('refreshInterval');
                         let timer = null;
 
-                        // Загрузка состояния
                         const savedState = localStorage.getItem('nikita_autoRefresh');
                         if (savedState) {
                             const state = JSON.parse(savedState);
@@ -391,7 +474,7 @@ class journal2ct_web(object):
                             intervalInput.value = 30;
                         }
 
-                        function saveState() {
+                        function saveRefreshState() {
                             localStorage.setItem('nikita_autoRefresh', JSON.stringify({
                                 enabled: checkbox.checked,
                                 interval: intervalInput.value
@@ -400,7 +483,7 @@ class journal2ct_web(object):
 
                         function updateTimer() {
                             if (timer) clearTimeout(timer);
-                            saveState();
+                            saveRefreshState();
                             if (checkbox.checked) {
                                 const interval = parseInt(intervalInput.value) || 30;
                                 const ms = interval * 1000;
@@ -412,8 +495,33 @@ class journal2ct_web(object):
 
                         checkbox.addEventListener('change', updateTimer);
                         intervalInput.addEventListener('change', updateTimer);
-                        
                         updateTimer();
+                        
+                        // --- Единицы измерения ---
+                        const unitBtns = document.querySelectorAll('.unit-btn');
+                        let currentUnit = localStorage.getItem('nikita_unit') || 'auto';
+                        
+                        // Установка активной кнопки
+                        unitBtns.forEach(btn => {
+                            if (btn.getAttribute('data-unit') === currentUnit) {
+                                btn.classList.add('active');
+                            } else {
+                                btn.classList.remove('active');
+                            }
+                            
+                            btn.addEventListener('click', function() {
+                                currentUnit = this.getAttribute('data-unit');
+                                localStorage.setItem('nikita_unit', currentUnit);
+                                
+                                unitBtns.forEach(b => b.classList.remove('active'));
+                                this.classList.add('active');
+                                
+                                updateSizes(currentUnit);
+                            });
+                        });
+                        
+                        // Применяем сохраненную настройку при загрузке
+                        updateSizes(currentUnit);
                     });
                 </script>
             </head>
