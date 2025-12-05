@@ -14,6 +14,7 @@ from    src                 import  globals                 as  g
 from    src.dictionaries    import  dictionary              as  d
 from    src                 import  reader                  as  r
 from    src.redis_manager   import  queue
+from    src.state_manager   import  state_manager
 from    clickhouse_driver   import  Client                  as  ch
 from    datetime            import  datetime
 import  src.messenger                                       as  m
@@ -161,10 +162,8 @@ class parser(threading.Thread):
                             # прибавляю к общему для базы ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
                             total_files_or_recs_size        +=  this_file_size
                             # добавляю файлы в списко для обработки только размер отличается ~~~~~~~~~~~~~~~~~~~~~~~~~~~
-                            get_saved_size                  =   parser.read_file_state(
-                                                                        full_name,
-                                                                        this_file_size
-                                                                    )
+                            _state                          =   state_manager.get_file_state(full_name)
+                            get_saved_size                  =   _state['filesizeread'] if _state else 0
                             if this_file_size               !=  get_saved_size:
                                 ibase_file                  =   [
                                                                         ibase[g.nms.ib.name],
@@ -319,12 +318,14 @@ class parser(threading.Thread):
                     int(rec['rr16']),                           # r16
                     int(rec['rr17']),                           # r17
                     int(rec['rr18']),                           # r18
-                    int(rec['rr19'])                            # r19
+                    int(rec['rr19']),                           # r19
+                    int(rec['id']),                             # file_id (добавлено для дедупликации)
+                    int(rec['pos'])                             # file_pos (добавлено для дедупликации)
                 )
                 rows.append(row)
             
             if rows:
-                query = f"INSERT INTO {g.conf.clickhouse.database}.`{base_name}` (r1, r1a, r2, r3, r3a, r4name, r4guid, r5, r6, r7, r8, r9, r10, r11name, r11guid, r12, r13, r14, r15, r16, r17, r18, r19) VALUES"
+                query = f"INSERT INTO {g.conf.clickhouse.database}.`{base_name}` (r1, r1a, r2, r3, r3a, r4name, r4guid, r5, r6, r7, r8, r9, r10, r11name, r11guid, r12, r13, r14, r15, r16, r17, r18, r19, file_id, file_pos) VALUES"
                 self.chclient.execute(query, rows)
                 t.debug_print(f"✓ CLICKHOUSE: Успешно отправлено {len(rows)} записей в таблицу {g.conf.clickhouse.database}.{base_name}", self.name)
             return True
@@ -479,8 +480,8 @@ class parser(threading.Thread):
                  try:
                      t.debug_print(f"Проверка существования таблицы {g.conf.clickhouse.database}.{pf_base}", self.name)
                      
-                     # Используем MergeTree с кодеком ZSTD для максимального сжатия
-                     # ORDER BY оптимизирован для поиска по дате и пользователю
+                     # Используем ReplacingMergeTree с кодеком ZSTD для максимального сжатия и дедупликации
+                     # ORDER BY (r1, file_id, file_pos) обеспечивает уникальность записи
                      create_table_query = f"""
                          CREATE TABLE IF NOT EXISTS {g.conf.clickhouse.database}.`{pf_base}` (
                              r1 DateTime CODEC(DoubleDelta, ZSTD(3)),
@@ -505,16 +506,18 @@ class parser(threading.Thread):
                              r16 Int32 CODEC(ZSTD(3)),
                              r17 Int64 CODEC(ZSTD(3)),
                              r18 Int32 CODEC(ZSTD(3)),
-                             r19 Int32 CODEC(ZSTD(3))
+                             r19 Int32 CODEC(ZSTD(3)),
+                             file_id UInt32 CODEC(ZSTD(3)),
+                             file_pos UInt64 CODEC(ZSTD(3))
                          ) 
-                         ENGINE = MergeTree()
-                         ORDER BY (r1, r4name, r8)
+                         ENGINE = ReplacingMergeTree()
+                         ORDER BY (r1, file_id, file_pos)
                          PARTITION BY toYYYYMM(r1)
                          SETTINGS index_granularity = 8192
-                         COMMENT 'Журнал регистрации 1С с максимальным сжатием ZSTD'
+                         COMMENT 'Журнал регистрации 1С с максимальным сжатием ZSTD (ReplacingMergeTree)'
                      """
                      self.chclient.execute(create_table_query)
-                     t.debug_print(f"✓ Таблица {g.conf.clickhouse.database}.{pf_base} готова (MergeTree + ZSTD)", self.name)
+                     t.debug_print(f"✓ Таблица {g.conf.clickhouse.database}.{pf_base} готова (ReplacingMergeTree + ZSTD)", self.name)
                  except Exception as e:
                      t.debug_print(f"✗ Ошибка создания таблицы {pf_base}: {str(e)}", self.name)
 
@@ -546,7 +549,9 @@ class parser(threading.Thread):
                 t.debug_print(pf_base+":pf_size = " + str(pf_size), self.name)
             file_state['filename']                          =   pf_name                                                 # локальная структура json с именем файла
             file_state['filesize']                          =   pf_size                                                 # локальная структура json с размером файла
-            file_state['filesizeread']                      =   parser.read_file_state(pf_name,file_state['filesize'])  # пытаюсь получить размер прочитанных байт из сохранённого состояния
+            _state                          =   state_manager.get_file_state(pf_name)
+            file_state['filesizeread']      =   _state['filesizeread'] if _state else 0
+            batch_start_offset              =   file_state['filesizeread']
             # сообщим о начале обработки, при необходимости~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             if int(file_state['filesizeread'])              <   int(file_state['filesize']):
                 t.debug_print(pf_base+":processing " + pf_base + "@" + pf_name, self.name)
@@ -640,7 +645,14 @@ class parser(threading.Thread):
                     file_state['filesizeread']              =   int(file_state['filesizeread']) + \
                                                                 len(self.json_data[self.name])
                     self.solr_post_json_data(pf_base)
-                    parser.write_file_state(file_state)
+                    state_manager.log_committed_block(
+                        pf_name,
+                        batch_start_offset,
+                        file_state['filesizeread'],
+                        self.json_data[self.name]
+                    )
+                    state_manager.update_file_state(file_state['filename'], file_state['filesize'], file_state['filesizeread'])
+                    batch_start_offset              =   file_state['filesizeread']
                     parser.set_parsed_size(pf_base,file_state['filesizeread'])                                          # устанавливаю размер на количетво распарсенных данных
                 else:                                                                                                   # в ret ничего не вернулось
                     t.debug_print("no rows was returned",self.name)
@@ -663,7 +675,9 @@ class parser(threading.Thread):
         pf_size                                             =   os.stat(pf_name).st_size                                # текущий размер файла
         file_state['filename']                              =   pf_name                                                 # локальная структура json с именем файла
         file_state['filesize']                              =   pf_size                                                 # локальная структура json с размером файла
-        file_state['filesizeread']                          =   parser.read_file_state(pf_name,file_state['filesize'])  # пытаюсь получить размер прочитанных байт из сохранённого состояния
+        _state                          =   state_manager.get_file_state(pf_name)
+        file_state['filesizeread']      =   _state['filesizeread'] if _state else 0
+        batch_start_offset              =   file_state['filesizeread']
         # Немного переменных ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         pf_block_mul                                        =   1                                                       # мультипликатор для блоков.
         #pf_match_no                                         =   0                                                       # номер записи
@@ -736,7 +750,7 @@ class parser(threading.Thread):
                                                                     pf_name,
                                                                     file_state['filesizeread'],
                                                                     pf_size_read
-                                                            )
+                                                                )
                             else:
                                 t.debug_print(pf_base+":Exception: всё очень плохо, я не придумал что с этим делать"
                                               ,self.name)
@@ -806,7 +820,14 @@ class parser(threading.Thread):
                                     )
                                     block_commit_start      =   time.time()
                                 self.solr_post_json_data(pf_base)                                                       # отправляем данные
-                                parser.write_file_state(file_state)
+                                state_manager.log_committed_block(
+                                    pf_name,
+                                    batch_start_offset,
+                                    file_state['filesizeread'],
+                                    self.json_data[self.name]
+                                )
+                                state_manager.update_file_state(file_state['filename'], file_state['filesize'], file_state['filesizeread'])
+                                batch_start_offset          =   file_state['filesizeread']
                                 # увеличиваю размер на количетво распарсенных данных ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
                                 parser.inc_parsed_size(pf_base, pf_bytes_2_commit)                                      # увеличиваю размер на количетво распарсенных данных
                                 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -834,7 +855,14 @@ class parser(threading.Thread):
                                 parser.inc_parsed_size(pf_base,pf_size_read)                                            # увеличиваю размер на количетво распарсенных данных
                                 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
                                 pf_bytes_2_commit           =   0
-                            parser.write_file_state(file_state)                                                         # и заносим сведения об этом в файл
+                            state_manager.log_committed_block(
+                                pf_name,
+                                batch_start_offset,
+                                file_state['filesizeread'],
+                                self.json_data[self.name]
+                            )
+                            state_manager.update_file_state(file_state['filename'], file_state['filesize'], file_state['filesizeread'])
+                            batch_start_offset              =   file_state['filesizeread']
                         else:
                             pf_block_mul                    *=  2                                                       # разобрать блок на записи ЖР не получилось, увеличиваю мультипликатор
                             t.debug_print("Block too large. Current size is " + str(g.parser.blocksize * pf_block_mul))
@@ -856,114 +884,9 @@ class parser(threading.Thread):
             rb_fh.close()
         return rb_chunk
     # ------------------------------------------------------------------------------------------------------------------
-    # читаю информацию о статус обработки файла данных в файле статусов
+    # Механизм сохранения состояния перенесён в src/state_manager.py
+    # Функции read_file_state и write_file_state удалены
     # ------------------------------------------------------------------------------------------------------------------
-    def read_file_state(rfs_name, rfs_size):                                                                            # читаю информацию о закомиченных данных в файле статусов
-        if os.path.exists(g.parser.state_file):                                                                         # если файл статуса есть
-            while g.parser.state_file_lock:                                                                             # если файл заперт, то ждём
-                time.sleep(g.waits.in_cycle_we_trust)
-            g.parser.state_file_lock                        =   True                                                    # запираем state
-            rfs_done                                        =   False
-            while not rfs_done:                                                                                         # делаем, пока не получится
-                # поищем в кэше ----------------------------------------------------------------------------------------
-                for rfs_elem in g.cache.filesizes:
-                    if rfs_name == rfs_elem['filename'] and rfs_size == rfs_elem['filesize']:
-                        g.parser.state_file_lock            =   False
-                        return rfs_elem['filesizeread']                                                                 # возвращаем из кэша
-                try:
-                    # в кэше нету --------------------------------------------------------------------------------------
-                    del g.cache.filesizes[:]                                                                            # чистим его
-                    rfs_found                               =   False                                                   # запись найдена в файле
-                    rfs_handle                              =   open(g.parser.state_file, 'r', encoding='UTF8')         # открываю файл статуса
-                    rfs_context                             =   rfs_handle.read()                                       # читаем файл статуса
-                    rfs_handle.close()                                                                                  # закрываю хэндл
-                    try:
-                        rfs_json                            =   json.loads(rfs_context)                                 # читаю содержимое
-                        # заполняем кэш --------------------------------------------------------------------------------
-                        for rfc_rec in rfs_json:                                                                        # по всем записям
-                            rfc_local                       =   {}
-                            rfc_local['filename']           =   rfc_rec['filename']
-                            rfc_local['filesizeread']       =   rfc_rec['filesizeread']
-                            rfc_local['filesize']           =   rfc_rec['filesize']
-                            g.cache.filesizes.append(rfc_local)
-                        # ищем уже в кэше ------------------------------------------------------------------------------
-                        for rfs_elem in g.cache.filesizes:
-                            if rfs_elem['filename']         ==  rfs_name:                                               # если такой файл есть
-                                rfs_found                   =   True
-                                g.parser.state_file_lock    =   False
-                                return rfs_elem['filesizeread']                                                         # сколько уже прочитанно
-                    except Exception as e:
-                        t.debug_print("read_file_state got Exception while parsing state file " + str(e))
-                        sys.exit(-1)
-                    if not rfs_found:                                                                                   # в файле такой записи нет
-                        g.parser.state_file_lock            =   False  # отпираем state
-                        return 0                                                                                        # возвращаем 0
-                except Exception as e:
-                    t.debug_print("read_file_state got Exception"+str(e))
-                finally:
-                    g.parser.state_file_lock                =   False                                                   # отпираем state
-                    rfs_handle.close()
-                    rfs_done                                =   True
-            if not rfs_done:
-                time.sleep(g.waits.read_state_exception)                                                                # ждём таймаут
-        else:                                                                                                           # если файла нет,
-            return 0                                                                                                    # возвращаем ноль
-    # ------------------------------------------------------------------------------------------------------------------
-    # сохраняю информацию о статус обработки файла в файле статусов
-    # ------------------------------------------------------------------------------------------------------------------
-    def write_file_state(ws_json):                                                                                      # сохраняет статус обработки файлов
-        ws_done                                             =   False
-        if os.path.exists(g.parser.state_file):                                                                         # если state-файл уже есть
-            while g.parser.state_file_lock:                                                                             # если файл заперт, то ждём
-                time.sleep(g.waits.in_cycle_we_trust)
-            g.parser.state_file_lock                        =   True                                                    # запираем state
-            while not ws_done:
-                try:
-                    ws_handle                               =   open(g.parser.state_file, 'r+', encoding='UTF8')
-                    ws_state                                =   ws_handle.read()
-                    ws_found                                =   False
-                    try:
-                        ws_state_json_arr                   =   json.loads(ws_state)
-                        for ws_json_rec in ws_state_json_arr:
-                            if(ws_json_rec['filename']      ==  ws_json['filename']):
-                                ws_json_rec['filesize']     =   ws_json['filesize']
-                                ws_json_rec['filesizeread'] =   ws_json['filesizeread']
-                                ws_found                    =   True
-                    except Exception as e:
-                        t.debug_print("write_file_state got error while parsing state json "+str(e))
-                    if not ws_found:
-                        if 'ws_state_json_arr' in locals():                                                             # если массив вообще есть
-                            ws_state_json_arr.append(ws_json)                                                           # дополняем его
-                        else:                                                                                           # иначе пилим новый массив
-                            ws_state_json_arr               =   []
-                            ws_state_json_arr.append(ws_json)
-                    ws_handle.close()
-                    ws_handle                               =   open(g.parser.state_file, 'w', encoding='UTF8')
-                    json.dump(ws_state_json_arr, ws_handle, indent=2)
-                    ws_done                                 =   True
-                except Exception as e:
-                    t.debug_print("write_file_state got Exception "+str(e))
-                finally:
-                    ws_handle.close()
-                    g.parser.state_file_lock                =   False                                                   # отпираем state
-                if not ws_done:
-                    time.sleep(g.waits.read_state_exception)                                                            # ждём таймаут
-        else:                                                                                                           # если же создаём state-файл
-            while not ws_done:
-                g.parser.state_file_lock                    =   True                                                    # запираем state
-                try:
-                    ws_state_json_arr                       =   []
-                    ws_state_json_arr.append(ws_json)
-                    ws_handle                               =   open(g.parser.state_file, 'w', encoding='UTF8')
-                    json.dump(ws_state_json_arr, ws_handle, indent=2)
-                except Exception as e:
-                    t.debug_print("write_file_state got Exception"+str(e))
-                finally:
-                    ws_handle.close()
-                    g.parser.state_file_lock                =   False                                                   # отпираем state
-                    ws_done                                 =   True
-                if not ws_done:
-                    time.sleep(g.waits.read_state_exception)                                                            # ждём таймаут
     #-------------------------------------------------------------------------------------------------------------------
     # увеличиваю размер распарсенных данных для базы
     # ------------------------------------------------------------------------------------------------------------------

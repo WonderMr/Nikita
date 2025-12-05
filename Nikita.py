@@ -474,7 +474,7 @@ def init_vars():
     g_debug_filename                                        =   self_name_without_ext  + str(os.getpid())  + '.log'
     g.debug.filename                                        =   os.path.join(g.debug.dir, g_debug_filename)
 
-    g.parser.state_file                                     =   os.path.join(g.execution.self_dir, "parser.state")     # здесь в json хранятся статусы парсинга файлов
+    #g.parser.state_file                                     =   os.path.join(g.execution.self_dir, "parser.state")     # здесь в json хранятся статусы парсинга файлов
     g.parser.solr_id_file                                   =   os.path.join(g.execution.self_dir, "solr.id.state")    # здесь в json хранятся ID файлов для SOLR
 # ======================================================================================================================
 # дополнительная инициализация после загрузки/определения параметров
