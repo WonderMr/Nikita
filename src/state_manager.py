@@ -41,13 +41,13 @@ class StateManager:
         self.db_path                                            =   os.path.join(base_dir, "Nikita.parser.state.db")
         self.conn_lock                                          =   threading.Lock()
         
-        t.debug_print(f"StateManager: База данных будет создана в {self.db_path}", "StateManager")
+        # t.debug_print(f"StateManager: База данных будет создана в {self.db_path}", "StateManager")
         self._init_db()
 
     def _init_db(self) -> None:
         """Инициализация базы данных SQLite"""
         try:
-            t.debug_print(f"StateManager: Инициализация базы данных: {self.db_path}", "StateManager")
+            # t.debug_print(f"StateManager: Инициализация базы данных: {self.db_path}", "StateManager")
             with self.conn_lock:
                 conn                                            =   sqlite3.connect(self.db_path, check_same_thread=False)
                 cursor                                          =   conn.cursor()
@@ -80,11 +80,12 @@ class StateManager:
                 
                 conn.commit()
                 conn.close()
-                t.debug_print(f"✓ StateManager: База данных успешно инициализирована", "StateManager")
+                # t.debug_print(f"✓ StateManager: База данных успешно инициализирована", "StateManager")
         except Exception as e:
-            t.debug_print(f"✗ StateManager: Ошибка инициализации: {e}", "StateManager")
+            # t.debug_print(f"✗ StateManager: Ошибка инициализации: {e}", "StateManager")
+            print(f"✗ StateManager: Ошибка инициализации: {e}")
             import traceback
-            t.debug_print(f"✗ StateManager: Traceback:\n{traceback.format_exc()}", "StateManager")
+            print(f"✗ StateManager: Traceback:\n{traceback.format_exc()}")
 
     def get_file_state(self, filename: str) -> Optional[Dict[str, Any]]:
         """Получение состояния файла по имени"""
