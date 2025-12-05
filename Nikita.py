@@ -98,91 +98,116 @@ class conf:
     # ------------------------------------------------------------------------------------------------------------------
     def load(fake_param=0):
         config                                              =   configparser.ConfigParser()
-        config.read(g.conf.filename, encoding="UTF8")
+        
+        # Теперь читаем базы из ENV
         try:
-            # ~~~~~~~ загружаю специфику 1С ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-            try:
-                c1i_exists                                  =   config[g.conf.c1.section_name]["ibase_0"]               # пытаюсь вынть первое значение
-                i                                           =   0
-                while c1i_exists:
-                    try:
-                        ibase_info                          =   {
-                            g.nms.ib.name                   :   config[g.conf.c1.section_name][f"ibase_{str(i)}"],
-                            g.nms.ib.jr_dir                 :   config[g.conf.c1.section_name][f"ibase_{str(i)}_jr"],
-                            g.nms.ib.jr_format              :   config[g.conf.c1.section_name]\
-                                                                [f"ibase_{str(i)}_format"],
+            i = 0
+            while True:
+                ibase_name = os.getenv(f"IBASE_{i}_NAME") or os.getenv(f"IBASE_{i}")
+                if not ibase_name:
+                    break
+                
+                ibase_jr = os.getenv(f"IBASE_{i}_JR")
+                ibase_format = os.getenv(f"IBASE_{i}_FORMAT", "lgf")
+
+                if ibase_name and ibase_jr:
+                     ibase_info                          =   {
+                            g.nms.ib.name                   :   ibase_name,
+                            g.nms.ib.jr_dir                 :   ibase_jr,
+                            g.nms.ib.jr_format              :   ibase_format,
                             g.nms.ib.total_size             :   0,
                             g.nms.ib.parsed_size            :   0
                         }
-                        g.parser.ibases.append(ibase_info)
-                        i                                   +=  1
-                    except Exception as e:
-                        c1i_exists                          =   False
-                        pass
-            except Exception as e:
-                t.debug_print("В файле конфигурации нет информационных баз")
+                     g.parser.ibases.append(ibase_info)
+                i += 1
+        except Exception as e:
+             t.debug_print(f"Error loading ibases from env: {e}")
+
+        # config.read(g.conf.filename, encoding="UTF8") - no longer needed
+        try:
+            # ~~~~~~~ загружаю специфику 1С ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+            # try:
+            #     c1i_exists                                  =   config[g.conf.c1.section_name]["ibase_0"]               # пытаюсь вынть первое значение
+            #     i                                           =   0
+            #     while c1i_exists:
+            #         try:
+            #             ibase_info                          =   {
+            #                 g.nms.ib.name                   :   config[g.conf.c1.section_name][f"ibase_{str(i)}"],
+            #                 g.nms.ib.jr_dir                 :   config[g.conf.c1.section_name][f"ibase_{str(i)}_jr"],
+            #                 g.nms.ib.jr_format              :   config[g.conf.c1.section_name]\
+            #                                                     [f"ibase_{str(i)}_format"],
+            #                 g.nms.ib.total_size             :   0,
+            #                 g.nms.ib.parsed_size            :   0
+            #             }
+            #             g.parser.ibases.append(ibase_info)
+            #             i                                   +=  1
+            #         except Exception as e:
+            #             c1i_exists                          =   False
+            #             pass
+            # except Exception as e:
+            #     t.debug_print("В файле конфигурации нет информационных баз")
             # ~~~~~~~ загружаю специфику ClickHouse ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-            try:
-                g.conf.clickhouse.enabled                   =   strtobool(config[g.conf.clickhouse.section_name]["enabled"])
-                g.conf.clickhouse.host                      =   config[g.conf.clickhouse.section_name]["host"]
-                g.conf.clickhouse.port                      =   config[g.conf.clickhouse.section_name]["port"]
-                g.conf.clickhouse.user                      =   config[g.conf.clickhouse.section_name]["user"]
-                g.conf.clickhouse.password                  =   config[g.conf.clickhouse.section_name]["password"]
-                g.conf.clickhouse.database                  =   config[g.conf.clickhouse.section_name]["database"]
-            except:
-                g.conf.clickhouse.enabled                   =   False
+            # try:
+            #     g.conf.clickhouse.enabled                   =   strtobool(config[g.conf.clickhouse.section_name]["enabled"])
+            #     g.conf.clickhouse.host                      =   config[g.conf.clickhouse.section_name]["host"]
+            #     g.conf.clickhouse.port                      =   config[g.conf.clickhouse.section_name]["port"]
+            #     g.conf.clickhouse.user                      =   config[g.conf.clickhouse.section_name]["user"]
+            #     g.conf.clickhouse.password                  =   config[g.conf.clickhouse.section_name]["password"]
+            #     g.conf.clickhouse.database                  =   config[g.conf.clickhouse.section_name]["database"]
+            # except:
+            #     g.conf.clickhouse.enabled                   =   False
 
             # ~~~~~~~ загружаю специфику Redis ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-            try:
-                g.conf.redis.enabled                        =   strtobool(config[g.conf.redis.section_name]["enabled"])
-                g.conf.redis.server_path                    =   config[g.conf.redis.section_name]["server_path"]
-                g.conf.redis.host                           =   config[g.conf.redis.section_name]["host"]
-                g.conf.redis.port                           =   config[g.conf.redis.section_name]["port"]
-                g.conf.redis.db                             =   config[g.conf.redis.section_name]["db"]
-                g.conf.redis.dir                            =   config[g.conf.redis.section_name]["dir"]
-            except:
-                g.conf.redis.enabled                        =   False
+            # try:
+            #     g.conf.redis.enabled                        =   strtobool(config[g.conf.redis.section_name]["enabled"])
+            #     g.conf.redis.server_path                    =   config[g.conf.redis.section_name]["server_path"]
+            #     g.conf.redis.host                           =   config[g.conf.redis.section_name]["host"]
+            #     g.conf.redis.port                           =   config[g.conf.redis.section_name]["port"]
+            #     g.conf.redis.db                             =   config[g.conf.redis.section_name]["db"]
+            #     g.conf.redis.dir                            =   config[g.conf.redis.section_name]["dir"]
+            # except:
+            #     g.conf.redis.enabled                        =   False
 
             # ~~~~~~~ загружаю специфику SOLR ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-            try:
-                g.conf.solr.enabled                         =   strtobool(config[g.conf.solr.section_name]["enabled"])
-            except:
-                g.conf.solr.enabled                         =   False # По умолчанию выключен
+            # try:
+            #     g.conf.solr.enabled                         =   strtobool(config[g.conf.solr.section_name]["enabled"])
+            # except:
+            #     g.conf.solr.enabled                         =   False # По умолчанию выключен
 
-            g.conf.solr.mem_min                             =   config[g.conf.solr.section_name]["mem_min"]
-            g.conf.solr.mem_max                             =   config[g.conf.solr.section_name]["mem_max"]
-            g.conf.solr.dir                                 =   config[g.conf.solr.section_name]["dir"]
-            g.conf.solr.listen_interface                    =   config[g.conf.solr.section_name]["listen_interface"]
-            g.conf.solr.listen_port                         =   config[g.conf.solr.section_name]["listen_port"]
-            g.conf.solr.solr_host                           =   config[g.conf.solr.section_name]["solr_host"]
-            g.conf.solr.solr_port                           =   config[g.conf.solr.section_name]["solr_port"]
-            g.conf.solr.java_home                           =   config[g.conf.solr.section_name]["java"]
-            g.conf.solr.threads                             =   config[g.conf.solr.section_name]["threads"]
+            # g.conf.solr.mem_min                             =   config[g.conf.solr.section_name]["mem_min"]
+            # g.conf.solr.mem_max                             =   config[g.conf.solr.section_name]["mem_max"]
+            # g.conf.solr.dir                                 =   config[g.conf.solr.section_name]["dir"]
+            # g.conf.solr.listen_interface                    =   config[g.conf.solr.section_name]["listen_interface"]
+            # g.conf.solr.listen_port                         =   config[g.conf.solr.section_name]["listen_port"]
+            # g.conf.solr.solr_host                           =   config[g.conf.solr.section_name]["solr_host"]
+            # g.conf.solr.solr_port                           =   config[g.conf.solr.section_name]["solr_port"]
+            # g.conf.solr.java_home                           =   config[g.conf.solr.section_name]["java"]
+            # g.conf.solr.threads                             =   config[g.conf.solr.section_name]["threads"]
 
             # ~~~~~~~ загружаю специфику HTTP ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-            g.conf.http.listen_interface                    =   config[g.conf.http.section_name]["listen_interface"]
-            g.conf.http.listen_port                         =   config[g.conf.http.section_name]["listen_port"]
+            # g.conf.http.listen_interface                    =   config[g.conf.http.section_name]["listen_interface"]
+            # g.conf.http.listen_port                         =   config[g.conf.http.section_name]["listen_port"]
 
             # ~~~~~~~ загружаю специфику парсера~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-            g.parser.threads                                =   config[g.parser.section_name]["threads"]
+            # g.parser.threads                                =   config[g.parser.section_name]["threads"]
 
             # ~~~~~~~ загружаю специфику отладки~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-            try:
-                g.debug.on                                  =   strtobool(config["debug"]["enabled"])
-                t.debug_print(f"Debug enabled = {str(g.debug.on)}")
-            except:
-                pass
-
-            try:
-                g.debug.on_parser                           =   strtobool(config["debug"]["debug_parser"])
-                t.debug_print(f"Debug_parser enabled = {str(g.debug.on_parser)}")
-            except:
-                pass
+            # try:
+            #     g.debug.on                                  =   strtobool(config["debug"]["enabled"])
+            #     t.debug_print(f"Debug enabled = {str(g.debug.on)}")
+            # except:
+            #     pass
+            
+            # try:
+            #     g.debug.on_parser                           =   strtobool(config["debug"]["debug_parser"])
+            #     t.debug_print(f"Debug_parser enabled = {str(g.debug.on_parser)}")
+            # except:
+            #     pass
 
             # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         except Exception as e:
             t.debug_print(f"Error while parsing params {str(e)}")
-            t.seppuku()
+            # t.seppuku() # Don't kill if config file is missing/bad, we have ENV defaults now
     # ------------------------------------------------------------------------------------------------------------------
     # сохранение конфы (отключено)
     # ------------------------------------------------------------------------------------------------------------------
