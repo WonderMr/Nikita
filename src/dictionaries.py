@@ -130,8 +130,24 @@ class dictionary():
                                                                         else "/1Cv8.lgd"
                                                                     )
             if(not os.path.exists(ib_dict_file)):
-                t.debug_print(f"read_ib_dictionary fail for {rib_name} filename {ib_dict_file} not exists")
-                t.seppuku(-3)
+                t.debug_print(f"════════════════════════════════════════════════════════════════")
+                t.debug_print(f"✗ ОШИБКА: Словарь журнала регистрации не найден!")
+                t.debug_print(f"  База: {rib_name}")
+                t.debug_print(f"  Ожидаемый путь: {ib_dict_file}")
+                t.debug_print(f"════════════════════════════════════════════════════════════════")
+                t.debug_print(f"Возможные причины:")
+                t.debug_print(f"  1. Неверно указан путь IBASE_0_JR в файле .env")
+                t.debug_print(f"  2. База данных 1С не существует по указанному пути")
+                t.debug_print(f"  3. Журнал регистрации отключен в базе 1С")
+                t.debug_print(f"════════════════════════════════════════════════════════════════")
+                t.debug_print(f"Как исправить:")
+                t.debug_print(f"  1. Найдите каталог журнала вашей базы 1С:")
+                t.debug_print(f"     find /home/usr1cv8/.1cv8 -name '1Cv8Log' -type d")
+                t.debug_print(f"  2. Укажите найденный путь в .env:")
+                t.debug_print(f"     IBASE_0_JR=/правильный/путь/к/1Cv8Log")
+                t.debug_print(f"  3. Перезапустите приложение")
+                t.debug_print(f"════════════════════════════════════════════════════════════════")
+                t.graceful_shutdown(3)
                 return
             if g.rexp.is_lgD_file_re.findall(ib_dict_file):
                 dictionary.read_new_ib_dictionary(rib_name, ib_dict_file)

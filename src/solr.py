@@ -40,7 +40,7 @@ class solr_thread(threading.Thread):
             for ibase in g.parser.ibases:
                 self.check_base_exists(ibase[g.nms.ib.name])
         else:
-            t.seppuku()
+            t.graceful_shutdown(1)
         t.debug_print("Thread started", self.name)
         g.execution.solr.started                            =   True
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

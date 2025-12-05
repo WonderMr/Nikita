@@ -98,158 +98,130 @@ class conf:
     # ------------------------------------------------------------------------------------------------------------------
     def load(fake_param=0):
         config                                              =   configparser.ConfigParser()
-        config.read(g.conf.filename, encoding="UTF8")
+        
+        # Теперь читаем базы из ENV
         try:
-            # ~~~~~~~ загружаю специфику 1С ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-            try:
-                c1i_exists                                  =   config[g.conf.c1.section_name]["ibase_0"]               # пытаюсь вынть первое значение
-                i                                           =   0
-                while c1i_exists:
-                    try:
-                        ibase_info                          =   {
-                            g.nms.ib.name                   :   config[g.conf.c1.section_name][f"ibase_{str(i)}"],
-                            g.nms.ib.jr_dir                 :   config[g.conf.c1.section_name][f"ibase_{str(i)}_jr"],
-                            g.nms.ib.jr_format              :   config[g.conf.c1.section_name]\
-                                                                [f"ibase_{str(i)}_format"],
+            t.debug_print("Загрузка баз данных 1С из переменных окружения...")
+            i = 0
+            while True:
+                ibase_name = os.getenv(f"IBASE_{i}_NAME") or os.getenv(f"IBASE_{i}")
+                if not ibase_name:
+                    break
+                
+                ibase_jr = os.getenv(f"IBASE_{i}_JR")
+                ibase_format = os.getenv(f"IBASE_{i}_FORMAT", "lgf")
+
+                if ibase_name and ibase_jr:
+                     ibase_info                          =   {
+                            g.nms.ib.name                   :   ibase_name,
+                            g.nms.ib.jr_dir                 :   ibase_jr,
+                            g.nms.ib.jr_format              :   ibase_format,
                             g.nms.ib.total_size             :   0,
                             g.nms.ib.parsed_size            :   0
                         }
-                        g.parser.ibases.append(ibase_info)
-                        i                                   +=  1
-                    except Exception as e:
-                        c1i_exists                          =   False
-                        pass
-            except Exception as e:
-                t.debug_print("В файле конфигурации нет информационных баз")
+                     g.parser.ibases.append(ibase_info)
+                     t.debug_print(f"✓ База #{i} загружена: {ibase_name}, формат: {ibase_format}, журнал: {ibase_jr}")
+                i += 1
+            
+            if len(g.parser.ibases) == 0:
+                t.debug_print("⚠ ВНИМАНИЕ: Не найдено ни одной базы данных 1С в переменных окружения!")
+                t.debug_print("   Проверьте наличие переменных IBASE_0, IBASE_0_JR и т.д. в файле .env")
+            else:
+                t.debug_print(f"Всего загружено баз: {len(g.parser.ibases)}")
+        except Exception as e:
+             t.debug_print(f"✗ Ошибка загрузки баз из переменных окружения: {e}")
+
+        # config.read(g.conf.filename, encoding="UTF8") - no longer needed
+        try:
+            pass
+            # ~~~~~~~ загружаю специфику 1С ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+            # try:
+            #     c1i_exists                                  =   config[g.conf.c1.section_name]["ibase_0"]               # пытаюсь вынть первое значение
+            #     i                                           =   0
+            #     while c1i_exists:
+            #         try:
+            #             ibase_info                          =   {
+            #                 g.nms.ib.name                   :   config[g.conf.c1.section_name][f"ibase_{str(i)}"],
+            #                 g.nms.ib.jr_dir                 :   config[g.conf.c1.section_name][f"ibase_{str(i)}_jr"],
+            #                 g.nms.ib.jr_format              :   config[g.conf.c1.section_name]\
+            #                                                     [f"ibase_{str(i)}_format"],
+            #                 g.nms.ib.total_size             :   0,
+            #                 g.nms.ib.parsed_size            :   0
+            #             }
+            #             g.parser.ibases.append(ibase_info)
+            #             i                                   +=  1
+            #         except Exception as e:
+            #             c1i_exists                          =   False
+            #             pass
+            # except Exception as e:
+            #     t.debug_print("В файле конфигурации нет информационных баз")
             # ~~~~~~~ загружаю специфику ClickHouse ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-            try:
-                g.conf.clickhouse.enabled                   =   strtobool(config[g.conf.clickhouse.section_name]["enabled"])
-                g.conf.clickhouse.host                      =   config[g.conf.clickhouse.section_name]["host"]
-                g.conf.clickhouse.port                      =   config[g.conf.clickhouse.section_name]["port"]
-                g.conf.clickhouse.user                      =   config[g.conf.clickhouse.section_name]["user"]
-                g.conf.clickhouse.password                  =   config[g.conf.clickhouse.section_name]["password"]
-                g.conf.clickhouse.database                  =   config[g.conf.clickhouse.section_name]["database"]
-            except:
-                g.conf.clickhouse.enabled                   =   False
+            # try:
+            #     g.conf.clickhouse.enabled                   =   strtobool(config[g.conf.clickhouse.section_name]["enabled"])
+            #     g.conf.clickhouse.host                      =   config[g.conf.clickhouse.section_name]["host"]
+            #     g.conf.clickhouse.port                      =   config[g.conf.clickhouse.section_name]["port"]
+            #     g.conf.clickhouse.user                      =   config[g.conf.clickhouse.section_name]["user"]
+            #     g.conf.clickhouse.password                  =   config[g.conf.clickhouse.section_name]["password"]
+            #     g.conf.clickhouse.database                  =   config[g.conf.clickhouse.section_name]["database"]
+            # except:
+            #     g.conf.clickhouse.enabled                   =   False
 
             # ~~~~~~~ загружаю специфику Redis ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-            try:
-                g.conf.redis.enabled                        =   strtobool(config[g.conf.redis.section_name]["enabled"])
-                g.conf.redis.server_path                    =   config[g.conf.redis.section_name]["server_path"]
-                g.conf.redis.host                           =   config[g.conf.redis.section_name]["host"]
-                g.conf.redis.port                           =   config[g.conf.redis.section_name]["port"]
-                g.conf.redis.db                             =   config[g.conf.redis.section_name]["db"]
-                g.conf.redis.dir                            =   config[g.conf.redis.section_name]["dir"]
-            except:
-                g.conf.redis.enabled                        =   False
+            # try:
+            #     g.conf.redis.enabled                        =   strtobool(config[g.conf.redis.section_name]["enabled"])
+            #     g.conf.redis.server_path                    =   config[g.conf.redis.section_name]["server_path"]
+            #     g.conf.redis.host                           =   config[g.conf.redis.section_name]["host"]
+            #     g.conf.redis.port                           =   config[g.conf.redis.section_name]["port"]
+            #     g.conf.redis.db                             =   config[g.conf.redis.section_name]["db"]
+            #     g.conf.redis.dir                            =   config[g.conf.redis.section_name]["dir"]
+            # except:
+            #     g.conf.redis.enabled                        =   False
 
             # ~~~~~~~ загружаю специфику SOLR ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-            try:
-                g.conf.solr.enabled                         =   strtobool(config[g.conf.solr.section_name]["enabled"])
-            except:
-                g.conf.solr.enabled                         =   False # По умолчанию выключен
+            # try:
+            #     g.conf.solr.enabled                         =   strtobool(config[g.conf.solr.section_name]["enabled"])
+            # except:
+            #     g.conf.solr.enabled                         =   False # По умолчанию выключен
 
-            g.conf.solr.mem_min                             =   config[g.conf.solr.section_name]["mem_min"]
-            g.conf.solr.mem_max                             =   config[g.conf.solr.section_name]["mem_max"]
-            g.conf.solr.dir                                 =   config[g.conf.solr.section_name]["dir"]
-            g.conf.solr.listen_interface                    =   config[g.conf.solr.section_name]["listen_interface"]
-            g.conf.solr.listen_port                         =   config[g.conf.solr.section_name]["listen_port"]
-            g.conf.solr.solr_host                           =   config[g.conf.solr.section_name]["solr_host"]
-            g.conf.solr.solr_port                           =   config[g.conf.solr.section_name]["solr_port"]
-            g.conf.solr.java_home                           =   config[g.conf.solr.section_name]["java"]
-            g.conf.solr.threads                             =   config[g.conf.solr.section_name]["threads"]
+            # g.conf.solr.mem_min                             =   config[g.conf.solr.section_name]["mem_min"]
+            # g.conf.solr.mem_max                             =   config[g.conf.solr.section_name]["mem_max"]
+            # g.conf.solr.dir                                 =   config[g.conf.solr.section_name]["dir"]
+            # g.conf.solr.listen_interface                    =   config[g.conf.solr.section_name]["listen_interface"]
+            # g.conf.solr.listen_port                         =   config[g.conf.solr.section_name]["listen_port"]
+            # g.conf.solr.solr_host                           =   config[g.conf.solr.section_name]["solr_host"]
+            # g.conf.solr.solr_port                           =   config[g.conf.solr.section_name]["solr_port"]
+            # g.conf.solr.java_home                           =   config[g.conf.solr.section_name]["java"]
+            # g.conf.solr.threads                             =   config[g.conf.solr.section_name]["threads"]
 
             # ~~~~~~~ загружаю специфику HTTP ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-            g.conf.http.listen_interface                    =   config[g.conf.http.section_name]["listen_interface"]
-            g.conf.http.listen_port                         =   config[g.conf.http.section_name]["listen_port"]
+            # g.conf.http.listen_interface                    =   config[g.conf.http.section_name]["listen_interface"]
+            # g.conf.http.listen_port                         =   config[g.conf.http.section_name]["listen_port"]
 
             # ~~~~~~~ загружаю специфику парсера~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-            g.parser.threads                                =   config[g.parser.section_name]["threads"]
+            # g.parser.threads                                =   config[g.parser.section_name]["threads"]
 
             # ~~~~~~~ загружаю специфику отладки~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-            try:
-                g.debug.on                                  =   strtobool(config["debug"]["enabled"])
-                t.debug_print(f"Debug enabled = {str(g.debug.on)}")
-            except:
-                pass
-
-            try:
-                g.debug.on_parser                           =   strtobool(config["debug"]["debug_parser"])
-                t.debug_print(f"Debug_parser enabled = {str(g.debug.on_parser)}")
-            except:
-                pass
+            # try:
+            #     g.debug.on                                  =   strtobool(config["debug"]["enabled"])
+            #     t.debug_print(f"Debug enabled = {str(g.debug.on)}")
+            # except:
+            #     pass
+            
+            # try:
+            #     g.debug.on_parser                           =   strtobool(config["debug"]["debug_parser"])
+            #     t.debug_print(f"Debug_parser enabled = {str(g.debug.on_parser)}")
+            # except:
+            #     pass
 
             # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         except Exception as e:
             t.debug_print(f"Error while parsing params {str(e)}")
-            t.seppuku()
+            # t.graceful_shutdown() # Don't kill if config file is missing/bad, we have ENV defaults now
     # ------------------------------------------------------------------------------------------------------------------
-    # сохранение конфы
+    # сохранение конфы (отключено)
     # ------------------------------------------------------------------------------------------------------------------
     def save(fake_param = 0):
-        if g.conf.solr.dir == "":
-            t.debug_print("Empty configuration will not be saved")
-            return
-        else:
-            t.debug_print("Saving configiration")
-        config                                              =   configparser.ConfigParser()
-        # ~~~~~~~ Специфика 1С ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        config.add_section(g.conf.c1.section_name)
-        i                                                   =   0
-        for ibase in g.parser.ibases:
-            config.set(g.conf.c1.section_name,  f"ibase_{str(i)}"       , ibase[g.nms.ib.name])
-            config.set(g.conf.c1.section_name,  f"ibase_{str(i)}_jr"    , ibase[g.nms.ib.jr_dir])
-            config.set(g.conf.c1.section_name,  f"ibase_{str(i)}_format", ibase[g.nms.ib.jr_format])
-            i                                               +=  1
-
-        # ~~~~~~~ Специфика ClickHouse ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        config.add_section(g.conf.clickhouse.section_name)
-        config.set(g.conf.clickhouse.section_name, "enabled",      str(g.conf.clickhouse.enabled))
-        config.set(g.conf.clickhouse.section_name, "host",         g.conf.clickhouse.host)
-        config.set(g.conf.clickhouse.section_name, "port",         str(g.conf.clickhouse.port))
-        config.set(g.conf.clickhouse.section_name, "user",         g.conf.clickhouse.user)
-        config.set(g.conf.clickhouse.section_name, "password",     g.conf.clickhouse.password)
-        config.set(g.conf.clickhouse.section_name, "database",     g.conf.clickhouse.database)
-
-        # ~~~~~~~ Специфика Redis ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        config.add_section(g.conf.redis.section_name)
-        config.set(g.conf.redis.section_name, "enabled",        str(g.conf.redis.enabled))
-        config.set(g.conf.redis.section_name, "server_path",    g.conf.redis.server_path)
-        config.set(g.conf.redis.section_name, "host",           g.conf.redis.host)
-        config.set(g.conf.redis.section_name, "port",           str(g.conf.redis.port))
-        config.set(g.conf.redis.section_name, "db",             str(g.conf.redis.db))
-        config.set(g.conf.redis.section_name, "dir",            g.conf.redis.dir)
-
-        # ~~~~~~~ Специфика SOLR ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        config.add_section(g.conf.solr.section_name)
-        config.set(g.conf.solr.section_name,    "enabled",          str(g.conf.solr.enabled))
-        config.set(g.conf.solr.section_name,    "mem_min",          g.conf.solr.mem_min)
-        config.set(g.conf.solr.section_name,    "mem_max",          g.conf.solr.mem_max)
-        config.set(g.conf.solr.section_name,    "dir",              g.conf.solr.dir)
-        config.set(g.conf.solr.section_name,    "listen_interface", g.conf.solr.listen_interface)
-        config.set(g.conf.solr.section_name,    "listen_port",      g.conf.solr.listen_port)
-        config.set(g.conf.solr.section_name,    "solr_host",        g.conf.solr.solr_host)
-        config.set(g.conf.solr.section_name,    "solr_port",        g.conf.solr.solr_port)
-        config.set(g.conf.solr.section_name,    "java",             g.conf.solr.java_home)
-        config.set(g.conf.solr.section_name,    "threads",          g.conf.solr.threads)
-
-        # ~~~~~~~ Специфика HTTP ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        config.add_section(g.conf.http.section_name)
-        config.set(g.conf.http.section_name,    "listen_interface", g.conf.http.listen_interface)
-        config.set(g.conf.http.section_name,    "listen_port",      g.conf.http.listen_port)
-
-        # ~~~~~~~ Специфика парсера ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        config.add_section(g.parser.section_name)
-        config.set(g.parser.section_name,       "threads",          g.parser.threads)
-
-        # ~~~~~~~ Специфика отладка~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        config.add_section("debug")
-        config.set("debug", "enabled", str(g.debug.on))
-
-        # ~~~~~~~ Сохраняем ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        config_file_handle                                  =   open(g.conf.filename, 'w', encoding="UTF8")
-        config.write(config_file_handle)
-        config_file_handle.close()
+        pass
     # ------------------------------------------------------------------------------------------------------------------
     # определение настроек по умлочанию
     # ------------------------------------------------------------------------------------------------------------------
@@ -282,7 +254,7 @@ class conf:
                         detect_srvinfos                     =   g.rexp.service_1c_workdir.findall(service.binpath())
                         if not len(detect_srvinfos)>0 :
                             t.debug_print("can't detect srvinfo")
-                            t.seppuku()
+                            t.graceful_shutdown(1)
                         srv_dir                             =   re.sub(r'\\\\\\','\\\\' ,detect_srvinfos[0])
                         thread_name                         =   g.threads.config_updater.name \
                                                                     if g.threads.config_updater \
@@ -357,10 +329,10 @@ class conf:
                             detect_srvinfos                 =   g.rexp.service_1c_workdir.findall(exec_start)
                             if not detect_srvinfos:
                                 t.debug_print("can't detect srvinfo")
-                                t.seppuku()
+                                t.graceful_shutdown(1)
                             if len(detect_srvinfos) == 0:
                                 t.debug_print("can't detect srvinfo")
-                                t.seppuku
+                                t.graceful_shutdown(1)
                             srvinfo                         =   detect_srvinfos[0]
                             if environments.get(srvinfo):
                                 srvinfo                     =   environments[srvinfo]
@@ -377,7 +349,7 @@ class conf:
         if not d_found:
             if not (os.path.exists(g.conf.filename)):
                 t.debug_print("1C services not found, conf detection failed")
-                t.seppuku()
+                t.graceful_shutdown(1)
     # ~~~~~~~ получение списка баз и кластеров 1C ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     def detect2(fake_param=0,initial2=False,d2_srvinfo=""):
         regs                                                =   [element for element
@@ -433,17 +405,22 @@ class conf:
                             'total_size'                    :   0,
                             'parsed_size'                   :   0
                         }                                                                                               # формирую dictionary с информацией о базе
-                        if not initial2:                                                                                # !!!если первоначальное, то не определяем базы!!!
-                            base_found                      =   False
-                            local_bases_array.append(ibase_info)                                                        # добавляю в локальный массив, чтобы определить удалённые базы
-                            for base in g.parser.ibases:
-                                if base[g.nms.ib.name]      ==  ibase_info[g.nms.ib.name]:
-                                    base_found              =   True
-                            if not base_found:
-                                t.debug_print(f"Обнаружена новая ИБ:{ibase_info[g.nms.ib.name]}")
-                                #if g.threads.solr.check_base_exists(cbe_name=ibase_info[g.nms.ib.name]):               # если здесь новоя ядрышко создастся
-                                if True:
-                                    g.parser.ibases.append(ibase_info)                                                  # добавляю его в массив
+                        
+                        # Проверяем, есть ли уже такая база в списке
+                        base_found                          =   False
+                        for base in g.parser.ibases:
+                            if base[g.nms.ib.name]          ==  ibase_info[g.nms.ib.name]:
+                                base_found                  =   True
+                                break
+                        
+                        # Добавляем базу если её ещё нет
+                        if not base_found:
+                            t.debug_print(f"Обнаружена новая ИБ: {ibase_info[g.nms.ib.name]} → {ibase_info[g.nms.ib.jr_dir]}")
+                            g.parser.ibases.append(ibase_info)
+                        
+                        # Для отслеживания удалённых баз (только при периодическом обновлении)
+                        if not initial2:
+                            local_bases_array.append(ibase_info)
 
         if not initial2:                                                                                                # проверяю базы на удалённые
             bases_copy                                      =   g.parser.ibases.copy()                                  # из этой копии будем удалять базы
@@ -510,14 +487,64 @@ def post_init_vars():
 def start_all(wait=False):
     try:
         t.debug_print("Starting all threads")
+        
+        # Вывод конфигурации
+        g.print_config()
+        
         # ~~~~~~~ загружаю или создаю конфигурацию ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        if(os.path.exists(g.conf.filename)):
-            t.debug_print("Load configuration")
-            conf.load()
+        t.debug_print("Load configuration (ENV)")
+        conf.load()
+        
+        # Валидация и очистка баз из ENV
+        valid_ibases                                        =   []
+        for ibase in g.parser.ibases:
+            jr_path                                         =   ibase[g.nms.ib.jr_dir]
+            if os.path.exists(jr_path):
+                valid_ibases.append(ibase)
+                t.debug_print(f"✓ База из ENV: {ibase[g.nms.ib.name]} → {jr_path}")
+            else:
+                t.debug_print(f"✗ База из ENV удалена (путь не существует): {ibase[g.nms.ib.name]} → {jr_path}")
+        
+        g.parser.ibases                                     =   valid_ibases
+        t.debug_print(f"Валидных баз из ENV: {len(g.parser.ibases)}")
+        
+        # Запускаем автодетект если указан корневой путь
+        if g.conf.c1.srvinfo and os.path.exists(g.conf.c1.srvinfo):
+            t.debug_print(f"Запуск автодетекта из корневого пути: {g.conf.c1.srvinfo}")
+            conf.detect2(initial2=False, d2_srvinfo=g.conf.c1.srvinfo)
+            t.debug_print(f"После автодетекта: {len(g.parser.ibases)} баз")
+        elif g.conf.c1.srvinfo:
+            t.debug_print(f"⚠ Корневой путь указан, но не существует: {g.conf.c1.srvinfo}")
         else:
-            t.debug_print("Configuration detection")
-            conf.detect(initial=True)
-            conf.save()
+            t.debug_print("Корневой путь (C1_SRVINFO_PATH) не указан, автодетект пропущен")
+        
+        # Если нет ни баз из ENV, ни автодетекта - пытаемся найти службу
+        if len(g.parser.ibases) == 0:
+            t.debug_print("Базы не найдены, пытаемся найти службу 1С...")
+            conf.detect(initial=True)  # initial=True только для настроек Solr по умолчанию
+            t.debug_print(f"После поиска службы 1С: {len(g.parser.ibases)} баз")
+        
+        if len(g.parser.ibases) == 0:
+            t.debug_print("═" * 80)
+            t.debug_print("⚠ ВНИМАНИЕ: Не найдено ни одной базы данных 1С!")
+            t.debug_print("═" * 80)
+            t.debug_print("Возможные решения:")
+            t.debug_print("  1. Укажите базы в .env:")
+            t.debug_print("     IBASE_0=ИмяБазы")
+            t.debug_print("     IBASE_0_JR=/путь/к/журналу/1Cv8Log")
+            t.debug_print("     IBASE_0_FORMAT=lgf")
+            t.debug_print("")
+            t.debug_print("  2. Укажите корневой путь для автодетекта:")
+            t.debug_print("     C1_SRVINFO_PATH=/home/usr1cv8/.1cv8/1C/1cv8")
+            t.debug_print("═" * 80)
+        
+        # if(os.path.exists(g.conf.filename)):
+        #     t.debug_print("Load configuration")
+        #     conf.load()
+        # else:
+        #     t.debug_print("Configuration detection")
+        #     conf.detect(initial=True)
+        #     conf.save()
         post_init_vars()
         # ~~~~~~~ запускаю cherrypy в фоне ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         #g.threads.cherry                                    =   c.cherry_thread("my little cherry")
@@ -573,10 +600,23 @@ class config_updater(threading.Thread):
         while self.run:
             try:
                 time.sleep(g.waits.sleep_on_conf_detection)
-                conf.detect(initial                         =   False)                                                  # проверяем список баз
-                conf.save()
+                
+                # Проверяем базы из ENV на существование
+                valid_ibases                                =   []
+                for ibase in g.parser.ibases[:]:  # копия списка
+                    if os.path.exists(ibase[g.nms.ib.jr_dir]):
+                        valid_ibases.append(ibase)
+                    else:
+                        t.debug_print(f"База {ibase[g.nms.ib.name]} удалена (журнал недоступен)", "IB monitor")
+                
+                g.parser.ibases                             =   valid_ibases
+                
+                # Запускаем автодетект если указан корневой путь
+                if g.conf.c1.srvinfo and os.path.exists(g.conf.c1.srvinfo):
+                    conf.detect2(initial2=False, d2_srvinfo=g.conf.c1.srvinfo)
+                
             except Exception as e:
-                t.debug_print(f"Exception on confige update. Error is {str(e)}")
+                t.debug_print(f"Exception on config update. Error is {str(e)}", "IB monitor")
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     def stop(self):
         self.run                                            =   False
@@ -612,22 +652,46 @@ class warming_cache(threading.Thread):
 # ======================================================================================================================
 def stop_all():
     try:
+        t.debug_print("Останавливаем все потоки...")
+        
         # ~~~~~~~ останавливаю solr ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        if g.threads.solr: g.threads.solr.stop()
+        if hasattr(g.threads, 'solr') and g.threads.solr: 
+            t.debug_print("Останавливаем Solr...")
+            g.threads.solr.stop()
+            
         # ~~~~~~~ останавливаю redis ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        if g.threads.redis: g.threads.redis.stop()
+        if hasattr(g.threads, 'redis') and g.threads.redis: 
+            t.debug_print("Останавливаем Redis...")
+            g.threads.redis.stop()
+            
         # ~~~~~~~ останавливаю sender ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        if g.threads.sender: g.threads.sender.stop()
+        if hasattr(g.threads, 'sender') and g.threads.sender: 
+            t.debug_print("Останавливаем Sender...")
+            g.threads.sender.stop()
+            
         # ~~~~~~~ останавливаю cherrypy ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        g.threads.cherry.stop()#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        if hasattr(g.threads, 'cherry') and g.threads.cherry:
+            t.debug_print("Останавливаем CherryPy...")
+            g.threads.cherry.stop()
+            
         # ~~~~~~~ останавливаю потоки парсера ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        g.threads.parser.stop()#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        if hasattr(g.threads, 'parser') and g.threads.parser:
+            t.debug_print("Останавливаем Parser...")
+            g.threads.parser.stop()
+            
         # ~~~~~~~ останавливаю обновлятель списка баз ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        g.threads.config_updater.stop()
+        if hasattr(g.threads, 'config_updater') and g.threads.config_updater:
+            t.debug_print("Останавливаем Config Updater...")
+            g.threads.config_updater.stop()
+            
         # ~~~~~~~ останавливаю подогреватель кэша ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        g.threads.warming_cache.stop()
+        if hasattr(g.threads, 'warming_cache') and g.threads.warming_cache:
+            t.debug_print("Останавливаем Warming Cache...")
+            g.threads.warming_cache.stop()
+            
+        t.debug_print("✓ Все потоки остановлены")
     except Exception as e:
-        t.debug_print(f"Exception on stop all:{str(e)}")
+        t.debug_print(f"⚠ Исключение при остановке потоков: {str(e)}")
 # ======================================================================================================================
 # Go
 # ======================================================================================================================

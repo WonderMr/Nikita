@@ -28,3 +28,5 @@ Nikita.ini
 venv/
 
 .env
+
+assets/

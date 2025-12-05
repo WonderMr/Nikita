@@ -1,5 +1,27 @@
 # -*- coding: utf-8 -*-
 import  re
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+# Функция для вывода конфигурации (вызывается после инициализации tools)
+def print_config():
+    """Выводит текущую конфигурацию в лог"""
+    from src.tools import tools as t
+    t.debug_print("=" * 80)
+    t.debug_print("ЗАГРУЗКА КОНФИГУРАЦИИ NIKITA")
+    t.debug_print("=" * 80)
+    t.debug_print(f"CLICKHOUSE_ENABLED: {os.getenv('CLICKHOUSE_ENABLED', 'False')}")
+    t.debug_print(f"CLICKHOUSE_HOST: {os.getenv('CLICKHOUSE_HOST', 'localhost')}")
+    t.debug_print(f"CLICKHOUSE_PORT: {os.getenv('CLICKHOUSE_PORT', '9000')}")
+    t.debug_print(f"CLICKHOUSE_DATABASE: {os.getenv('CLICKHOUSE_DATABASE', 'zhr1c')}")
+    t.debug_print(f"CLICKHOUSE_USER: {os.getenv('CLICKHOUSE_USER', 'default')}")
+    t.debug_print(f"REDIS_ENABLED: {os.getenv('REDIS_ENABLED', 'False')}")
+    t.debug_print(f"SOLR_ENABLED: {os.getenv('SOLR_ENABLED', 'False')}")
+    t.debug_print(f"DEBUG_ENABLED: {os.getenv('DEBUG_ENABLED', 'True')}")
+    t.debug_print("=" * 80)
+
 # ======================================================================================================================
 # в блоке переменных выход за длину разрешён
 # ======================================================================================================================
@@ -51,48 +73,52 @@ class conf:
     # ======= настройки специфики 1с ===================================================================================
     class c1:
         section_name                                            =   "1C settings"                                       # имя секции для файла конфигурации
-        srvinfo                                                 =   ""                                                  # название говорит само за себя - имя каталога с информационными базами 1С
+        srvinfo                                                 =   os.getenv('C1_SRVINFO_PATH', '')                    # корневой путь к базам 1С для автодетекта
         cluster_file                                            =   "1CV8Clst.lst"                                      # имя файла кластера, предопределено
         cluster_file_o                                          =   "1CV8Clsto.lst"                                     # предпочтительно - его
         jr_dir                                                  =   "1Cv8Log"                                           # имя каталога журнала регистрации, предопределено
         jr_new_fname                                            =   "1Cv8.lgd"                                          # имя файла с новым ЖР в формате Sqlite3, предопределено
         jr_old_dict_fname                                       =   "1Cv8.lgf"                                          # имя файла словаря старого формата ЖР, предопределено
+
     # ======= настройки cherrypy =======================================================================================
     class http:
         section_name                                            =   "HTTP settings"                                     # имя секции для файла конфигурации
-        listen_interface                                        =   ""                                                  # имя узла или IP, на котором слушаем мир через cherryPY
-        listen_port                                             =   ""                                                  # имя моего рабочего порта
+        listen_interface                                        =   os.getenv('HTTP_LISTEN_INTERFACE', '0.0.0.0')
+        listen_port                                             =   os.getenv('HTTP_LISTEN_PORT', '8984')
+
     # ======= настройки ClickHouse =====================================================================================
     class clickhouse:
         section_name                                            =   "ClickHouse settings"                               # имя секции для файла конфигурации
-        enabled                                                 =   False                                               # включена ли поддержка ClickHouse
-        host                                                    =   "localhost"                                         # хост
-        port                                                    =   "9000"                                              # порт (native interface)
-        user                                                    =   "default"                                           # пользователь
-        password                                                =   ""                                                  # пароль
-        database                                                =   "zhr1c"                                             # имя базы данных
+        enabled                                                 =   os.getenv('CLICKHOUSE_ENABLED', 'True').lower() in ('true', '1', 't', 'y', 'yes')
+        host                                                    =   os.getenv('CLICKHOUSE_HOST', 'localhost')
+        port                                                    =   int(os.getenv('CLICKHOUSE_PORT', 9000))
+        user                                                    =   os.getenv('CLICKHOUSE_USER', 'default')
+        password                                                =   os.getenv('CLICKHOUSE_PASSWORD', '')
+        database                                                =   os.getenv('CLICKHOUSE_DATABASE', 'zhr1c')
+
     # ======= настройки Redis ==========================================================================================
     class redis:
         section_name                                            =   "Redis settings"
-        enabled                                                 =   False                                               # использовать ли Redis
+        enabled                                                 =   os.getenv('REDIS_ENABLED', 'False').lower() in ('true', '1', 't', 'y', 'yes')
         server_path                                             =   ""                                                  # путь к redis-server (если нужно запускать)
-        host                                                    =   "127.0.0.1"
-        port                                                    =   6379
-        db                                                      =   0
+        host                                                    =   os.getenv('REDIS_HOST', '127.0.0.1')
+        port                                                    =   int(os.getenv('REDIS_PORT', 6379))
+        db                                                      =   int(os.getenv('REDIS_DB', 0))
         dir                                                     =   ""                                                  # каталог для БД redis (для persistence)
+
     # ======= настройки solr ===========================================================================================
     class solr:
         section_name                                            =   "Solr settings"                                     # имя секции для файла конфигурации
-        enabled                                                 =   False                                               # включен ли Solr (по умолчанию False)
-        mem_min                                                 =   ""                                                  # минимальный размер памяти solr
-        mem_max                                                 =   ""                                                  # максимальный размер памяти solr
-        dir                                                     =   ""                                                  # абсолютный путь к каталогу с solr
-        listen_interface                                        =   ""                                                  # имя интерфейса, который будем слушать
-        listen_port                                             =   ""                                                  # порт Solr
-        solr_host                                               =   ""                                                  # имя узла Solr, к которому будем обращаться
-        solr_port                                               =   ""                                                  # порт узла Solr, к которому будем обращаться
-        threads                                                 =   ""                                                  # есть потоки и для solr
-        java_home                                               =   ""                                                  # путь к каталогу с java.exe
+        enabled                                                 =   os.getenv('SOLR_ENABLED', 'False').lower() in ('true', '1', 't', 'y', 'yes')
+        mem_min                                                 =   os.getenv('SOLR_MEM_MIN', '2g')
+        mem_max                                                 =   os.getenv('SOLR_MEM_MAX', '32g')
+        dir                                                     =   os.getenv('SOLR_DIR', '')
+        listen_interface                                        =   os.getenv('SOLR_LISTEN_INTERFACE', '127.0.0.1')
+        listen_port                                             =   os.getenv('SOLR_LISTEN_PORT', '8983')
+        solr_host                                               =   os.getenv('SOLR_HOST', '127.0.0.1')
+        solr_port                                               =   os.getenv('SOLR_PORT', '8983')
+        threads                                                 =   os.getenv('SOLR_THREADS', '12')
+        java_home                                               =   os.getenv('SOLR_JAVA_HOME', '')
         wait_after_start                                        =   3                                                   # сколько сек подождать после старта
         ping                                                    =   "/admin/ping"                                       # указатель на страничку с пингом
         schema                                                  =   '<?xml version="1.0" encoding="UTF-8" ?>\r\n\r\n<schema name="journal2ct" version="1.0">\r\n\r\n  <field name="id"        type="pint"        indexed="true" stored="true"  multiValued="false"/>\r\n  <field name="pos"       type="plong"       indexed="true" stored="true"  multiValued="false" omitNorms="true"/>\r\n  <field name="len"       type="pint"        indexed="true" stored="true"  multiValued="false" omitNorms="true"/>\r\n\r\n  <field name="r1"        type="plong"       indexed="true" stored="false" multiValued="false" omitNorms="true"/>\r\n  <field name="r1nmb"     type="pint"        indexed="true" stored="false" multiValued="false" omitNorms="true"/>\r\n  <field name="r2"        type="string"      indexed="true" stored="false" multiValued="false" omitNorms="true"/>\r\n\r\n  <field name="r3"        type="plong"       indexed="true" stored="false" multiValued="false" omitNorms="true"/>\r\n  <field name="r3a"       type="plong"       indexed="true" stored="false" multiValued="false" omitNorms="true"/>  \r\n  <field name="r4"        type="pint"        indexed="true" stored="false" multiValued="false" omitNorms="true"/>\r\n  <field name="r5"        type="pint"        indexed="true" stored="false" multiValued="false" omitNorms="true"/>\r\n\r\n  <field name="r6"        type="pint"        indexed="true" stored="false" multiValued="false" omitNorms="true"/>\r\n  <field name="r7"        type="pint"        indexed="true" stored="false" multiValued="false" omitNorms="true"/>\r\n  <field name="r8"        type="pint"        indexed="true" stored="false" multiValued="false" omitNorms="true"/>\r\n\r\n  <field name="r9"        type="string"      indexed="true" stored="false" multiValued="false" omitNorms="true"/>\r\n  <field name="r10"       type="text_simple" indexed="true" stored="false" multiValued="false"/>\r\n  <field name="r11"       type="pint"        indexed="true" stored="false" multiValued="false" omitNorms="true"/>\r\n\r\n  <field name="r12"       type="text_simple" indexed="true" stored="false" multiValued="false"/>\r\n  <field name="r13"       type="text_simple" indexed="true" stored="false" multiValued="false" omitNorms="true"/>\r\n  <field name="r14"       type="pint"        indexed="true" stored="false" multiValued="false" omitNorms="true"/>\r\n\r\n  <field name="r15"       type="pint"        indexed="true" stored="false" multiValued="false" omitNorms="true"/>\r\n  <field name="r16"       type="pint"        indexed="true" stored="false" multiValued="false" omitNorms="true"/>\r\n  <field name="r17"       type="pint"        indexed="true" stored="false" multiValued="false" omitNorms="true"/>\r\n  <field name="r18"       type="pint"        indexed="true" stored="false" multiValued="false" omitNorms="true"/>\r\n  <field name="r19"       type="pint"        indexed="true" stored="false" multiValued="false" omitNorms="true"/>\r\n\r\n\r\n<!--  <field name="text"      type="text_simple" indexed="true" stored="false" multiValued="true" />-->\r\n\r\n  <fieldType name="string"       class="solr.StrField"       docValues="false"	sortMissingLast="true"/>\r\n  <fieldType name="plong"        class="solr.LongPointField" docValues="false"/>\r\n  <fieldType name="pint"         class="solr.IntPointField"  docValues="false"/>\r\n  <fieldType name="puuid"        class="solr.UUIDField"      docValues="false"/>\r\n\r\n  <fieldType name="text_simple"  class="solr.TextField"      docValues="false" positionIncrementGap="0">\r\n    <analyzer>\r\n      <tokenizer class="solr.StandardTokenizerFactory"/>\r\n      <filter class="solr.LowerCaseFilterFactory"/>\r\n    </analyzer>\r\n  </fieldType>\r\n\r\n</schema>'  # файл schema для создания нового core\r\n
@@ -105,7 +131,7 @@ class conf:
 # ======================================================================================================================
 class parser:
     section_name                                                =   "Parser settings"                                   # имя секции для файла конфигурации
-    threads                                                     =   ""                                                  # количество потоков парсинга
+    threads                                                     =   os.getenv('PARSER_THREADS', '')
     maxrecsize                                                  =   512                                                 # сколько записей отправляем в ClickHouse
     ibases                                                      =   []                                                  # полный каталог др базы, имя базы, формат жр базы
     state_file                                                  =   ""                                                  # файл с информацией об статусе обработки отдельных файлов
@@ -124,8 +150,8 @@ class parser:
 # всё, касающееся отладки
 # ======================================================================================================================
 class debug:
-    on                                                          =   True                                                # признак работы отладки
-    on_parser                                                   =   False                                               # специально и отдельный для вывода сообщений от парсера. много их
+    on                                                          =   os.getenv('DEBUG_ENABLED', 'True').lower() in ('true', '1', 't', 'y', 'yes')
+    on_parser                                                   =   os.getenv('DEBUG_PARSER', 'False').lower() in ('true', '1', 't', 'y', 'yes')
     filehandle                                                  =   None                                                # указатель на файл лога отладки
     filename                                                    =   ""                                                  # имя файла лога для отладки
     dir                                                         =   ""
