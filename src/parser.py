@@ -259,7 +259,7 @@ class parser(threading.Thread):
                 t.debug_print(json.dumps(local_json, indent=2), self.name)
         except Exception as e:
             t.debug_print(f"Exception while add_to_json {str(e)}", self.name)
-            t.seppuku(111)
+            t.graceful_shutdown(111)
             return False
         return True
     

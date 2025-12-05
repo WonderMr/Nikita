@@ -216,7 +216,7 @@ class conf:
             # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         except Exception as e:
             t.debug_print(f"Error while parsing params {str(e)}")
-            # t.seppuku() # Don't kill if config file is missing/bad, we have ENV defaults now
+            # t.graceful_shutdown() # Don't kill if config file is missing/bad, we have ENV defaults now
     # ------------------------------------------------------------------------------------------------------------------
     # сохранение конфы (отключено)
     # ------------------------------------------------------------------------------------------------------------------
@@ -254,7 +254,7 @@ class conf:
                         detect_srvinfos                     =   g.rexp.service_1c_workdir.findall(service.binpath())
                         if not len(detect_srvinfos)>0 :
                             t.debug_print("can't detect srvinfo")
-                            t.seppuku()
+                            t.graceful_shutdown(1)
                         srv_dir                             =   re.sub(r'\\\\\\','\\\\' ,detect_srvinfos[0])
                         thread_name                         =   g.threads.config_updater.name \
                                                                     if g.threads.config_updater \
@@ -329,10 +329,10 @@ class conf:
                             detect_srvinfos                 =   g.rexp.service_1c_workdir.findall(exec_start)
                             if not detect_srvinfos:
                                 t.debug_print("can't detect srvinfo")
-                                t.seppuku()
+                                t.graceful_shutdown(1)
                             if len(detect_srvinfos) == 0:
                                 t.debug_print("can't detect srvinfo")
-                                t.seppuku
+                                t.graceful_shutdown(1)
                             srvinfo                         =   detect_srvinfos[0]
                             if environments.get(srvinfo):
                                 srvinfo                     =   environments[srvinfo]
@@ -349,7 +349,7 @@ class conf:
         if not d_found:
             if not (os.path.exists(g.conf.filename)):
                 t.debug_print("1C services not found, conf detection failed")
-                t.seppuku()
+                t.graceful_shutdown(1)
     # ~~~~~~~ получение списка баз и кластеров 1C ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     def detect2(fake_param=0,initial2=False,d2_srvinfo=""):
         regs                                                =   [element for element

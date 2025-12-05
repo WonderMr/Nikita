@@ -131,7 +131,7 @@ class dictionary():
                                                                     )
             if(not os.path.exists(ib_dict_file)):
                 t.debug_print(f"read_ib_dictionary fail for {rib_name} filename {ib_dict_file} not exists")
-                t.seppuku(-3)
+                t.graceful_shutdown(3)
                 return
             if g.rexp.is_lgD_file_re.findall(ib_dict_file):
                 dictionary.read_new_ib_dictionary(rib_name, ib_dict_file)
