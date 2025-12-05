@@ -489,7 +489,49 @@ def start_all(wait=False):
         # ~~~~~~~ загружаю или создаю конфигурацию ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         t.debug_print("Load configuration (ENV)")
         conf.load()
-        conf.detect(initial=True)
+        
+        # Валидация и очистка баз из ENV
+        valid_ibases                                        =   []
+        for ibase in g.parser.ibases:
+            jr_path                                         =   ibase[g.nms.ib.jr_dir]
+            if os.path.exists(jr_path):
+                valid_ibases.append(ibase)
+                t.debug_print(f"✓ База из ENV: {ibase[g.nms.ib.name]} → {jr_path}")
+            else:
+                t.debug_print(f"✗ База из ENV удалена (путь не существует): {ibase[g.nms.ib.name]} → {jr_path}")
+        
+        g.parser.ibases                                     =   valid_ibases
+        t.debug_print(f"Валидных баз из ENV: {len(g.parser.ibases)}")
+        
+        # Запускаем автодетект если указан корневой путь
+        if g.conf.c1.srvinfo and os.path.exists(g.conf.c1.srvinfo):
+            t.debug_print(f"Запуск автодетекта из корневого пути: {g.conf.c1.srvinfo}")
+            conf.detect2(initial2=False, d2_srvinfo=g.conf.c1.srvinfo)
+            t.debug_print(f"После автодетекта: {len(g.parser.ibases)} баз")
+        elif g.conf.c1.srvinfo:
+            t.debug_print(f"⚠ Корневой путь указан, но не существует: {g.conf.c1.srvinfo}")
+        else:
+            t.debug_print("Корневой путь (C1_SRVINFO_PATH) не указан, автодетект пропущен")
+        
+        # Если нет ни баз из ENV, ни автодетекта - пытаемся найти службу
+        if len(g.parser.ibases) == 0:
+            t.debug_print("Базы не найдены, пытаемся найти службу 1С...")
+            conf.detect(initial=True)
+        
+        if len(g.parser.ibases) == 0:
+            t.debug_print("═" * 80)
+            t.debug_print("⚠ ВНИМАНИЕ: Не найдено ни одной базы данных 1С!")
+            t.debug_print("═" * 80)
+            t.debug_print("Возможные решения:")
+            t.debug_print("  1. Укажите базы в .env:")
+            t.debug_print("     IBASE_0=ИмяБазы")
+            t.debug_print("     IBASE_0_JR=/путь/к/журналу/1Cv8Log")
+            t.debug_print("     IBASE_0_FORMAT=lgf")
+            t.debug_print("")
+            t.debug_print("  2. Укажите корневой путь для автодетекта:")
+            t.debug_print("     C1_SRVINFO_PATH=/home/usr1cv8/.1cv8/1C/1cv8")
+            t.debug_print("═" * 80)
+        
         # if(os.path.exists(g.conf.filename)):
         #     t.debug_print("Load configuration")
         #     conf.load()
@@ -552,10 +594,23 @@ class config_updater(threading.Thread):
         while self.run:
             try:
                 time.sleep(g.waits.sleep_on_conf_detection)
-                conf.detect(initial                         =   False)                                                  # проверяем список баз
-                # conf.save()
+                
+                # Проверяем базы из ENV на существование
+                valid_ibases                                =   []
+                for ibase in g.parser.ibases[:]:  # копия списка
+                    if os.path.exists(ibase[g.nms.ib.jr_dir]):
+                        valid_ibases.append(ibase)
+                    else:
+                        t.debug_print(f"База {ibase[g.nms.ib.name]} удалена (журнал недоступен)", "IB monitor")
+                
+                g.parser.ibases                             =   valid_ibases
+                
+                # Запускаем автодетект если указан корневой путь
+                if g.conf.c1.srvinfo and os.path.exists(g.conf.c1.srvinfo):
+                    conf.detect2(initial2=False, d2_srvinfo=g.conf.c1.srvinfo)
+                
             except Exception as e:
-                t.debug_print(f"Exception on confige update. Error is {str(e)}")
+                t.debug_print(f"Exception on config update. Error is {str(e)}", "IB monitor")
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     def stop(self):
         self.run                                            =   False
