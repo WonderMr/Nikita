@@ -166,8 +166,11 @@ class StateManager:
                 ''', (filename, basename, offset_start, offset_end, data_hash, record_count))
                 conn.commit()
                 conn.close()
+                
+                # Логируем для отладки
+                t.debug_print(f"✓ Logged block: basename={basename}, records={record_count}, file={os.path.basename(filename) if filename else 'None'}", "StateManager")
         except Exception as e:
-            t.debug_print(f"Ошибка log_committed_block: {e}")
+            t.debug_print(f"Ошибка log_committed_block: {e}", "StateManager")
 
     def get_total_records_sent(self, basename: str) -> int:
         """
@@ -190,13 +193,30 @@ class StateManager:
                     WHERE basename = ? OR filename LIKE ?
                 ''', (basename, f'%{basename}%'))
                 row                                             =   cursor.fetchone()
+                
+                # Отладочный запрос: покажем все записи для этой базы
+                cursor.execute('''
+                    SELECT basename, COUNT(*), SUM(record_count) 
+                    FROM committed_blocks 
+                    WHERE basename = ? OR filename LIKE ?
+                    GROUP BY basename
+                ''', (basename, f'%{basename}%'))
+                debug_rows                                      =   cursor.fetchall()
+                
                 conn.close()
                 
-                if row and row[0]:
-                    return int(row[0])
-                return 0
+                result                                          =   int(row[0]) if row and row[0] else 0
+                
+                # Логируем для отладки
+                if debug_rows:
+                    for db_row in debug_rows:
+                        t.debug_print(f"📊 DB query for '{basename}': found basename='{db_row[0]}', blocks={db_row[1]}, total_records={db_row[2]}", "StateManager")
+                else:
+                    t.debug_print(f"📊 DB query for '{basename}': no records found", "StateManager")
+                
+                return result
         except Exception as e:
-            t.debug_print(f"Ошибка get_total_records_sent: {e}")
+            t.debug_print(f"Ошибка get_total_records_sent: {e}", "StateManager")
             return 0
 
 state_manager                                                   =   StateManager()
