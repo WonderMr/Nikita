@@ -34,6 +34,8 @@ class journal2ct_web(object):
         stats_block                                         +=  f'<span class="stats-label">⏱ Время работы:</span><span class="stats-value">{uptime_str}</span>'
         stats_block                                         +=  '</div>'
         
+        stats_block                                         +=  '<div class="services-grid">'
+        
         # ClickHouse
         if g.conf.clickhouse.enabled:
             ch_status                                       =   "🟢 Подключено" if g.stats.clickhouse_connection_ok else "🔴 Ошибка"
@@ -112,9 +114,11 @@ class journal2ct_web(object):
                 stats_block                                 +=  '</div>'
             stats_block                                     +=  '</div>'
         
+        stats_block                                         +=  '</div>'
+
         # Последние ошибки
         if g.stats.last_errors:
-            stats_block                                     +=  '<div class="service-block">'
+            stats_block                                     +=  '<div class="service-block" style="margin-top: 15px;">'
             stats_block                                     +=  '<h3>🚨 Последние ошибки</h3>'
             for error_time, error_type, error_msg in reversed(g.stats.last_errors[-5:]):  # Показываем последние 5
                 stats_block                                 +=  '<div class="stats-row error">'
@@ -265,17 +269,25 @@ class journal2ct_web(object):
                         border-radius: 8px;
                         box-shadow: 0 2px 4px rgba(0,0,0,0.05);
                     }
+                    .services-grid {
+                        display: grid;
+                        grid-template-columns: repeat(2, 1fr);
+                        gap: 15px;
+                        margin-top: 15px;
+                    }
                     .refresh-controls {
                         display: flex;
                         align-items: center;
                         padding: 15px 20px;
                     }
                     .service-block {
-                        margin: 15px 0;
+                        margin: 0;
                         padding: 15px;
                         background: #f9f9f9;
                         border-left: 4px solid #00b36b;
                         border-radius: 4px;
+                        height: 100%;
+                        box-sizing: border-box;
                     }
                     .stats-row {
                         display: flex;
