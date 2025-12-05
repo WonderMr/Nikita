@@ -481,6 +481,42 @@ def init_vars():
 # ======================================================================================================================
 def post_init_vars():
     g.execution.solr.url_main                               =   f"http://{g.conf.solr.solr_host}:{g.conf.solr.solr_port}/solr"
+    
+    # Проверяем соединение с ClickHouse если он включен
+    if g.conf.clickhouse.enabled:
+        try:
+            from clickhouse_driver import Client
+            t.debug_print("Проверка соединения с ClickHouse...")
+            
+            client                                          =   Client(
+                                                                    host        =   g.conf.clickhouse.host,
+                                                                    port        =   g.conf.clickhouse.port,
+                                                                    user        =   g.conf.clickhouse.user,
+                                                                    password    =   g.conf.clickhouse.password,
+                                                                    database    =   g.conf.clickhouse.database
+                                                                )
+            
+            # Пробуем выполнить простой запрос
+            result                                          =   client.execute('SELECT 1')
+            
+            if result:
+                g.stats.clickhouse_connection_ok            =   True
+                from datetime import datetime
+                g.stats.clickhouse_last_success_time        =   datetime.now()
+                t.debug_print(f"✓ ClickHouse подключен: {g.conf.clickhouse.host}:{g.conf.clickhouse.port}/{g.conf.clickhouse.database}")
+            else:
+                g.stats.clickhouse_connection_ok            =   False
+                t.debug_print(f"✗ ClickHouse не ответил корректно")
+                
+        except Exception as e:
+            g.stats.clickhouse_connection_ok                =   False
+            from datetime import datetime
+            g.stats.clickhouse_last_error_time              =   datetime.now()
+            g.stats.clickhouse_last_error_msg               =   str(e)
+            g.stats.clickhouse_total_errors                 +=  1
+            t.debug_print(f"✗ Ошибка подключения к ClickHouse: {str(e)}")
+    else:
+        t.debug_print("ClickHouse отключен в конфигурации")
 # ======================================================================================================================
 # запускает все потоки парсинга, solr и веб-сервер
 # ======================================================================================================================

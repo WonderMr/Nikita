@@ -869,15 +869,22 @@ class nikita_web(object):
             try:
                 import os
                 
+                t.debug_print(f"debug_logs: g.debug.filename = {g.debug.filename}", "cherry")
+                
                 if not g.debug.filename:
-                    debug_logs_list.append("Файл логов не настроен")
+                    debug_logs_list.append("⚠ Файл логов не настроен (g.debug.filename пуст)")
+                    t.debug_print("debug_logs: filename is empty", "cherry")
                 elif not os.path.exists(g.debug.filename):
-                    debug_logs_list.append(f"Файл логов не найден: {g.debug.filename}")
+                    debug_logs_list.append(f"⚠ Файл логов не найден: {g.debug.filename}")
+                    t.debug_print(f"debug_logs: file not found {g.debug.filename}", "cherry")
                 else:
+                    t.debug_print(f"debug_logs: reading file {g.debug.filename}", "cherry")
                     # Читаем последние 100 строк из файла
                     with open(g.debug.filename, 'r', encoding='utf-8', errors='ignore') as f:
                         all_lines                               =   f.readlines()
                         last_lines                              =   all_lines[-100:] if len(all_lines) > 100 else all_lines
+                        
+                        t.debug_print(f"debug_logs: read {len(last_lines)} lines", "cherry")
                         
                         for line in last_lines:
                             line                                =   line.strip()
@@ -885,7 +892,8 @@ class nikita_web(object):
                                 debug_logs_list.append(line)
                     
                     if not debug_logs_list:
-                        debug_logs_list.append("Логов пока нет")
+                        debug_logs_list.append("📝 Файл логов пуст")
+                        t.debug_print("debug_logs: file is empty", "cherry")
                         
             except Exception as e:
                 import traceback
@@ -894,7 +902,9 @@ class nikita_web(object):
                 debug_logs_list.append(error_msg)
             
             if not debug_logs_list:
-                debug_logs_list.append("Логов пока нет")
+                debug_logs_list.append("📝 Логов пока нет")
+            
+            t.debug_print(f"debug_logs: returning {len(debug_logs_list)} log entries", "cherry")
             
             result                                              =   {'logs': debug_logs_list, 'success': True}
             
@@ -1018,8 +1028,18 @@ class nikita_web(object):
                 # Преобразуем строковое значение в boolean
                 new_debug_state                             =   str(enabled).lower() in ('true', '1', 't', 'y', 'yes')
                 
+                # Логируем изменение статуса (ДО изменения g.debug.on, чтобы всегда логировалось)
+                old_state                                   =   g.debug.on
+                status_msg                                  =   f"🔧 Изменение статуса отладки: {old_state} → {new_debug_state}"
+                if old_state:
+                    t.debug_print(status_msg, "cherry")
+                
                 # Обновляем глобальную переменную отладки
                 g.debug.on                                  =   new_debug_state
+                
+                # Логируем после изменения (если отладка была выключена, теперь включена)
+                if not old_state and new_debug_state:
+                    t.debug_print(status_msg, "cherry")
                 
                 # Обновляем переменную окружения для будущих потоков
                 import os
