@@ -20,9 +20,9 @@ RequestExecutionLevel admin
 ; Welcome page
 !insertmacro MUI_PAGE_WELCOME
 ; License Java page
-!insertmacro MUI_PAGE_LICENSE "installer.java.license.rtf"
+!insertmacro MUI_PAGE_LICENSE "..\licenses\installer.java.license.rtf"
 ; License Solr page
-!insertmacro MUI_PAGE_LICENSE "installer.solr.LICENSE.txt"
+!insertmacro MUI_PAGE_LICENSE "..\licenses\installer.solr.LICENSE.txt"
 ; License Solr page
 ;!insertmacro MUI_PAGE_LICENSE "installer.my.LICENSE.txt"
 ; Directory page
@@ -49,7 +49,7 @@ ShowInstDetails show
 ShowUnInstDetails show
 
 Section "MainSection" SEC01
-  ;всё делаем для allusers!!!!
+  ;пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅ allusers!!!!
   SetShellVarContext all
   
   ExecWait '"$SYSDIR\sc.exe" stop Nikita'
@@ -58,42 +58,42 @@ Section "MainSection" SEC01
   Sleep 2000
   SetOutPath "$INSTDIR"
   SetOverwrite ifnewer
-  File Nikita.epf
-  File Nikita.cfe
+  File ..\Nikita.epf
+  File ..\Nikita.cfe
   File add.firewall.rule.cmd
-  File /r dist\Nikita\*.* 
+  File /r ..\dist\Nikita\*.* 
   
   CreateDirectory   "$SMPROGRAMS\Nikita"
-  ;CreateShortCut    "$SMPROGRAMS\Nikita\Активировать программу.lnk"     "$INSTDIR\pcnsl.exe"
-  CreateShortCut    "$SMPROGRAMS\Nikita\Внешняя обработка ЖР.lnk"       "$INSTDIR\Nikita.epf"
-  WriteINIStr       "$SMPROGRAMS\Nikita\Панель управления.url"          "InternetShortcut"  "URL"  "http://localhost:8984"
+  ;CreateShortCut    "$SMPROGRAMS\Nikita\пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ.lnk"     "$INSTDIR\pcnsl.exe"
+  CreateShortCut    "$SMPROGRAMS\Nikita\пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅ.lnk"       "$INSTDIR\Nikita.epf"
+  WriteINIStr       "$SMPROGRAMS\Nikita\пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ.url"          "InternetShortcut"  "URL"  "http://localhost:8984"
 
-  !define           shortcut_install_svc        "$SMPROGRAMS\Nikita\Установить службу.lnk"
+  !define           shortcut_install_svc        "$SMPROGRAMS\Nikita\пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ.lnk"
   CreateShortCut    "${shortcut_install_svc}"   "$INSTDIR\Nikita.exe"       "install"
   ShellLink::SetRunAsAdministrator              "${shortcut_install_svc}"
 
-  !define           shortcut_run_svc            "$SMPROGRAMS\Nikita\Запустить службу.lnk"
+  !define           shortcut_run_svc            "$SMPROGRAMS\Nikita\пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ.lnk"
   CreateShortCut    "${shortcut_run_svc}"       "$SYSDIR\sc.exe"                "start journal2Ct"  "$INSTDIR\Journal2Ct.exe"
   ShellLink::SetRunAsAdministrator              "${shortcut_run_svc}"
 
-  !define           shortcut_stop_svc           "$SMPROGRAMS\Nikita\Остановить службу.lnk"
+  !define           shortcut_stop_svc           "$SMPROGRAMS\Nikita\пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ.lnk"
   CreateShortCut    "${shortcut_stop_svc}"      "$SYSDIR\sc.exe"                "stop journal2Ct"   "$INSTDIR\Journal2Ct.exe"
   ShellLink::SetRunAsAdministrator              "${shortcut_stop_svc}"
 
-  !define           shortcut_del_svc            "$SMPROGRAMS\Nikita\Удалить службу.lnk"
+  !define           shortcut_del_svc            "$SMPROGRAMS\Nikita\пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ.lnk"
   CreateShortCut    "${shortcut_del_svc}"       "$SYSDIR\sc.exe"                "delete journal2Ct" "$INSTDIR\Journal2Ct.exe"
   ShellLink::SetRunAsAdministrator              "${shortcut_del_svc}"
 
-  !define           shortcut_run_console        "$SMPROGRAMS\Nikita\Запустить в консоли.lnk"
+  !define           shortcut_run_console        "$SMPROGRAMS\Nikita\пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ.lnk"
   CreateShortCut    "${shortcut_run_console}"   "$INSTDIR\Journal2Ct.exe"       "console"
   ShellLink::SetRunAsAdministrator              "${shortcut_run_console}"
 SectionEnd
 
 Section -AdditionalIcons
-  ;всё делаем для allusers!!!!
+  ;пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅ allusers!!!!
   SetShellVarContext all
 
-  CreateShortCut "$SMPROGRAMS\Nikita\Удалить.lnk" "$INSTDIR\uninst.exe"
+  CreateShortCut "$SMPROGRAMS\Nikita\пїЅпїЅпїЅпїЅпїЅпїЅпїЅ.lnk" "$INSTDIR\uninst.exe"
 SectionEnd
 
 Section -Post
@@ -110,16 +110,16 @@ SectionEnd
 
 Function un.onUninstSuccess
   HideWindow
-  MessageBox MB_ICONINFORMATION|MB_OK "Удаление программы $(^Name) было успешно завершено."
+  MessageBox MB_ICONINFORMATION|MB_OK "пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ $(^Name) пїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ."
 FunctionEnd
 
 Function un.onInit
-  MessageBox MB_ICONQUESTION|MB_YESNO|MB_DEFBUTTON2 "Вы уверены в том, что желаете удалить $(^Name) и все построенные индексы программы?" IDYES +2
+  MessageBox MB_ICONQUESTION|MB_YESNO|MB_DEFBUTTON2 "пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅ пїЅпїЅпїЅ, пїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ $(^Name) пїЅ пїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ?" IDYES +2
   Abort
 FunctionEnd
 
 Section Uninstall
-  ;всё делаем для allusers!!!!
+  ;пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅ allusers!!!!
   SetShellVarContext all
 
   ExecWait '"$SYSDIR\sc.exe" stop Nikita'

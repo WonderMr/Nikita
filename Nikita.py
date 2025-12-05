@@ -474,7 +474,7 @@ def init_vars():
     g_debug_filename                                        =   self_name_without_ext  + str(os.getpid())  + '.log'
     g.debug.filename                                        =   os.path.join(g.debug.dir, g_debug_filename)
 
-    g.parser.state_file                                     =   os.path.join(g.execution.self_dir, "parser.state")     # здесь в json хранятся статусы парсинга файлов
+    #g.parser.state_file                                     =   os.path.join(g.execution.self_dir, "parser.state")     # здесь в json хранятся статусы парсинга файлов
     g.parser.solr_id_file                                   =   os.path.join(g.execution.self_dir, "solr.id.state")    # здесь в json хранятся ID файлов для SOLR
 # ======================================================================================================================
 # дополнительная инициализация после загрузки/определения параметров
@@ -487,6 +487,11 @@ def post_init_vars():
 def start_all(wait=False):
     try:
         t.debug_print("Starting all threads")
+        
+        # Инициализируем время старта
+        from datetime import datetime
+        g.stats.start_time                                  =   datetime.now()
+        t.debug_print(f"Время запуска службы: {g.stats.start_time.strftime('%Y-%m-%d %H:%M:%S')}")
         
         # Вывод конфигурации
         g.print_config()
@@ -547,8 +552,8 @@ def start_all(wait=False):
         #     conf.save()
         post_init_vars()
         # ~~~~~~~ запускаю cherrypy в фоне ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        #g.threads.cherry                                    =   c.cherry_thread("my little cherry")
-        #g.threads.cherry.start()
+        g.threads.cherry                                    =   c.cherry_thread("my little cherry")
+        g.threads.cherry.start()
         # ~~~~~~~ запускаю solr в фоне ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         if g.conf.solr.enabled:
             g.threads.solr                                      =   s.solr_thread("my pretty solr thread")

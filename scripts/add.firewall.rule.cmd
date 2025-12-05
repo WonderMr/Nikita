@@ -1,3 +1,4 @@
+cd /d "%~dp0\.."
 @echo off
 netsh advfirewall firewall show rule name="Nikita"
 if errorlevel 1 Goto add

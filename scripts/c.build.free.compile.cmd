@@ -1,3 +1,4 @@
+cd /d "%~dp0\.."
 .\dist\Journal2ct\Journal2ct.exe stop
 .\dist\Journal2ct\Journal2ct.exe remove
 

@@ -14,6 +14,7 @@ from    src                 import  globals                 as  g
 from    src.dictionaries    import  dictionary              as  d
 from    src                 import  reader                  as  r
 from    src.redis_manager   import  queue
+from    src.state_manager   import  state_manager
 from    clickhouse_driver   import  Client                  as  ch
 from    datetime            import  datetime
 import  src.messenger                                       as  m
@@ -161,10 +162,8 @@ class parser(threading.Thread):
                             # прибавляю к общему для базы ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
                             total_files_or_recs_size        +=  this_file_size
                             # добавляю файлы в списко для обработки только размер отличается ~~~~~~~~~~~~~~~~~~~~~~~~~~~
-                            get_saved_size                  =   parser.read_file_state(
-                                                                        full_name,
-                                                                        this_file_size
-                                                                    )
+                            _state                          =   state_manager.get_file_state(full_name)
+                            get_saved_size                  =   _state['filesizeread'] if _state else 0
                             if this_file_size               !=  get_saved_size:
                                 ibase_file                  =   [
                                                                         ibase[g.nms.ib.name],
@@ -287,67 +286,143 @@ class parser(threading.Thread):
         if not self.chclient:
             t.debug_print(f"ClickHouse не настроен, пропускаем отправку {len(data)} записей для базы {base_name}", self.name)
             return True # Если CH не настроен, считаем отправку успешной (или игнорим)
+        
+        start_time                                              =   time.time()
+        
         try:
             t.debug_print(f"→ CLICKHOUSE: Начинаем отправку пакета для базы '{base_name}' (записей: {len(data)})", self.name)
             t.debug_print(f"→ CLICKHOUSE: Подключение к {g.conf.clickhouse.host}:{g.conf.clickhouse.port}, БД: {g.conf.clickhouse.database}", self.name)
             
-            rows = []
+            rows                                                =   []
             for rec in data:
-                date_str = f"{rec['r1'][0:4]}-{rec['r1'][4:6]}-{rec['r1'][6:8]} {rec['r1'][8:10]}:{rec['r1'][10:12]}:{rec['r1'][12:14]}"
-                dt = datetime.fromisoformat(date_str)
+                date_str                                        =   f"{rec['r1'][0:4]}-{rec['r1'][4:6]}-{rec['r1'][6:8]} {rec['r1'][8:10]}:{rec['r1'][10:12]}:{rec['r1'][12:14]}"
+                dt                                              =   datetime.fromisoformat(date_str)
                 
-                row = (
-                    dt,                                         # r1 DateTime
-                    dt,                                         # r1a DateTime (дублируем, как в оригинале)
-                    rec['r2'],                                  # r2
-                    rec['r3'],                                  # r3
-                    rec['r3a'],                                 # r3a
-                    rec['rr4']['name'],                         # r4name
-                    rec['rr4']['uuid'],                         # r4guid
-                    rec['rr5'],                                 # r5
-                    rec['rr6'],                                 # r6
-                    int(rec['rr7']),                            # r7 (теперь Int64)
-                    rec['rr8'],                                 # r8
-                    rec['rr9'],                                 # r9
-                    rec['rr10'],                                # r10
-                    rec['rr11']['name'],                        # r11name
-                    rec['rr11']['uuid'],                        # r11guid
-                    str(rec['rr12']),                           # r12
-                    str(rec['rr13']),                           # r13
-                    str(rec['rr14']),                           # r14
-                    int(rec['rr15']),                           # r15
-                    int(rec['rr16']),                           # r16
-                    int(rec['rr17']),                           # r17
-                    int(rec['rr18']),                           # r18
-                    int(rec['rr19'])                            # r19
-                )
+                row                                             =   (
+                                                                        dt,                                         # r1 DateTime
+                                                                        dt,                                         # r1a DateTime (дублируем, как в оригинале)
+                                                                        rec['r2'],                                  # r2
+                                                                        rec['r3'],                                  # r3
+                                                                        rec['r3a'],                                 # r3a
+                                                                        rec['rr4']['name'],                         # r4name
+                                                                        rec['rr4']['uuid'],                         # r4guid
+                                                                        rec['rr5'],                                 # r5
+                                                                        rec['rr6'],                                 # r6
+                                                                        int(rec['rr7']),                            # r7 (теперь Int64)
+                                                                        rec['rr8'],                                 # r8
+                                                                        rec['rr9'],                                 # r9
+                                                                        rec['rr10'],                                # r10
+                                                                        rec['rr11']['name'],                        # r11name
+                                                                        rec['rr11']['uuid'],                        # r11guid
+                                                                        str(rec['rr12']),                           # r12
+                                                                        str(rec['rr13']),                           # r13
+                                                                        str(rec['rr14']),                           # r14
+                                                                        int(rec['rr15']),                           # r15
+                                                                        int(rec['rr16']),                           # r16
+                                                                        int(rec['rr17']),                           # r17
+                                                                        int(rec['rr18']),                           # r18
+                                                                        int(rec['rr19']),                           # r19
+                                                                        int(rec['id']),                             # file_id (добавлено для дедупликации)
+                                                                        int(rec['pos'])                             # file_pos (добавлено для дедупликации)
+                                                                    )
                 rows.append(row)
             
             if rows:
-                query = f"INSERT INTO {g.conf.clickhouse.database}.`{base_name}` (r1, r1a, r2, r3, r3a, r4name, r4guid, r5, r6, r7, r8, r9, r10, r11name, r11guid, r12, r13, r14, r15, r16, r17, r18, r19) VALUES"
-                self.chclient.execute(query, rows)
+                query                                           =   f"INSERT INTO {g.conf.clickhouse.database}.`{base_name}` (r1, r1a, r2, r3, r3a, r4name, r4guid, r5, r6, r7, r8, r9, r10, r11name, r11guid, r12, r13, r14, r15, r16, r17, r18, r19, file_id, file_pos) VALUES"
+                exec_result                                     =   self.chclient.execute(query, rows)
+                elapsed_time                                    =   time.time() - start_time
+                
+                # Обновляем статистику успешной отправки
+                g.stats.clickhouse_total_sent                   +=  len(rows)
+                g.stats.clickhouse_last_success_time            =   datetime.now()
+                g.stats.clickhouse_connection_ok                =   True
+                
                 t.debug_print(f"✓ CLICKHOUSE: Успешно отправлено {len(rows)} записей в таблицу {g.conf.clickhouse.database}.{base_name}", self.name)
+                t.debug_print(f"✓ CLICKHOUSE: Время выполнения: {elapsed_time:.3f} сек ({len(rows)/elapsed_time:.1f} записей/сек)", self.name)
+                t.debug_print(f"✓ CLICKHOUSE: Результат выполнения: {exec_result}", self.name)
+                t.debug_print(f"✓ CLICKHOUSE: Всего отправлено за сессию: {g.stats.clickhouse_total_sent} записей", self.name)
             return True
 
         except Exception as e:
-            t.debug_print(f"✗ CLICKHOUSE: Ошибка отправки в {g.conf.clickhouse.database}.{base_name}: {str(e)}", self.name)
+            elapsed_time                                        =   time.time() - start_time
+            error_msg                                           =   str(e)
+            
+            # Обновляем статистику ошибок
+            g.stats.clickhouse_total_errors                     +=  1
+            g.stats.clickhouse_last_error_time                  =   datetime.now()
+            g.stats.clickhouse_last_error_msg                   =   error_msg
+            g.stats.clickhouse_connection_ok                    =   False
+            
+            # Добавляем в список последних ошибок
+            error_entry                                         =   (datetime.now(), "ClickHouse", f"{base_name}: {error_msg}")
+            g.stats.last_errors.append(error_entry)
+            if len(g.stats.last_errors)                         >   10:                                                 # храним только последние 10 ошибок
+                g.stats.last_errors.pop(0)
+            
+            t.debug_print(f"✗ CLICKHOUSE: Ошибка отправки в {g.conf.clickhouse.database}.{base_name}: {error_msg}", self.name)
+            t.debug_print(f"✗ CLICKHOUSE: Время до ошибки: {elapsed_time:.3f} сек", self.name)
+            t.debug_print(f"✗ CLICKHOUSE: Всего ошибок за сессию: {g.stats.clickhouse_total_errors}", self.name)
+            import traceback
+            t.debug_print(f"✗ CLICKHOUSE: Traceback:\n{traceback.format_exc()}", self.name)
             return False
             
     # ------------------------------------------------------------------------------------------------------------------
     # Отправка в Solr
     # ------------------------------------------------------------------------------------------------------------------
     def send_to_solr(self, url, data):
+        start_time                                              =   time.time()
+        
         try:
-             t.debug_print(f"→ SOLR: Отправка пакета на {url} (записей: {len(data)})", self.name)
-             # TODO: Добавить STOP.KEY из конфига, если нужно
-             status_code = requests.post(url=url, json=data).status_code
-             if status_code == 200:
-                 t.debug_print(f"✓ SOLR: Успешно отправлено {len(data)} записей на {url}", self.name)
-             else:
-                 t.debug_print(f"✗ SOLR: Ошибка отправки, статус: {status_code}", self.name)
-             return status_code
+            t.debug_print(f"→ SOLR: Отправка пакета на {url} (записей: {len(data)})", self.name)
+            status_code                                         =   requests.post(url=url, json=data).status_code
+            elapsed_time                                        =   time.time() - start_time
+            
+            if status_code                                      ==  200:
+                # Обновляем статистику успешной отправки
+                g.stats.solr_total_sent                         +=  len(data)
+                g.stats.solr_last_success_time                  =   datetime.now()
+                g.stats.solr_connection_ok                      =   True
+                
+                t.debug_print(f"✓ SOLR: Успешно отправлено {len(data)} записей на {url}", self.name)
+                t.debug_print(f"✓ SOLR: Время выполнения: {elapsed_time:.3f} сек ({len(data)/elapsed_time:.1f} записей/сек)", self.name)
+                t.debug_print(f"✓ SOLR: Всего отправлено за сессию: {g.stats.solr_total_sent} записей", self.name)
+            else:
+                # Обновляем статистику ошибок
+                g.stats.solr_total_errors                       +=  1
+                g.stats.solr_last_error_time                    =   datetime.now()
+                g.stats.solr_last_error_msg                     =   f"HTTP статус: {status_code}"
+                g.stats.solr_connection_ok                      =   False
+                
+                # Добавляем в список последних ошибок
+                error_entry                                     =   (datetime.now(), "Solr", f"HTTP {status_code}: {url}")
+                g.stats.last_errors.append(error_entry)
+                if len(g.stats.last_errors)                     >   10:
+                    g.stats.last_errors.pop(0)
+                
+                t.debug_print(f"✗ SOLR: Ошибка отправки, статус: {status_code}", self.name)
+                t.debug_print(f"✗ SOLR: Всего ошибок за сессию: {g.stats.solr_total_errors}", self.name)
+            
+            return status_code
+            
         except Exception as e:
-            t.debug_print(f"✗ SOLR: Исключение при отправке: {str(e)}", self.name)
+            elapsed_time                                        =   time.time() - start_time
+            error_msg                                           =   str(e)
+            
+            # Обновляем статистику ошибок
+            g.stats.solr_total_errors                           +=  1
+            g.stats.solr_last_error_time                        =   datetime.now()
+            g.stats.solr_last_error_msg                         =   error_msg
+            g.stats.solr_connection_ok                          =   False
+            
+            # Добавляем в список последних ошибок
+            error_entry                                         =   (datetime.now(), "Solr", f"{url}: {error_msg}")
+            g.stats.last_errors.append(error_entry)
+            if len(g.stats.last_errors)                         >   10:
+                g.stats.last_errors.pop(0)
+            
+            t.debug_print(f"✗ SOLR: Исключение при отправке: {error_msg}", self.name)
+            t.debug_print(f"✗ SOLR: Время до ошибки: {elapsed_time:.3f} сек", self.name)
+            t.debug_print(f"✗ SOLR: Всего ошибок за сессию: {g.stats.solr_total_errors}", self.name)
             return 500
 
     # ------------------------------------------------------------------------------------------------------------------
@@ -366,35 +441,81 @@ class parser(threading.Thread):
         # 1. Если Redis включен и мы не обходим его (т.е. мы не Sender thread)
         if g.conf.redis.enabled and not bypass_redis:
             t.debug_print("→ REDIS: Отправка в очередь Redis...", self.name)
-            if queue.push(data, base_name):
-                t.debug_print("✓ REDIS: Успешно помещено в очередь", self.name)
-                return ret_ok
-            else:
-                t.debug_print("✗ REDIS: Ошибка, переключение на прямую отправку", self.name)
+            
+            try:
+                if queue.push(data, base_name):
+                    # Обновляем статистику Redis
+                    g.stats.redis_total_queued                  +=  len(data)
+                    g.stats.redis_last_success_time             =   datetime.now()
+                    g.stats.redis_connection_ok                 =   True
+                    
+                    t.debug_print("✓ REDIS: Успешно помещено в очередь", self.name)
+                    t.debug_print(f"✓ REDIS: Всего добавлено в очередь за сессию: {g.stats.redis_total_queued} записей", self.name)
+                    return ret_ok
+                else:
+                    # Обновляем статистику ошибок Redis
+                    g.stats.redis_total_errors                  +=  1
+                    g.stats.redis_last_error_time               =   datetime.now()
+                    g.stats.redis_last_error_msg                =   "Ошибка добавления в очередь"
+                    g.stats.redis_connection_ok                 =   False
+                    
+                    error_entry                                 =   (datetime.now(), "Redis", "Ошибка добавления в очередь")
+                    g.stats.last_errors.append(error_entry)
+                    if len(g.stats.last_errors)                 >   10:
+                        g.stats.last_errors.pop(0)
+                    
+                    t.debug_print("✗ REDIS: Ошибка, переключение на прямую отправку", self.name)
+            except Exception as e:
+                # Обновляем статистику ошибок Redis
+                g.stats.redis_total_errors                      +=  1
+                g.stats.redis_last_error_time                   =   datetime.now()
+                g.stats.redis_last_error_msg                    =   str(e)
+                g.stats.redis_connection_ok                     =   False
+                
+                error_entry                                     =   (datetime.now(), "Redis", str(e))
+                g.stats.last_errors.append(error_entry)
+                if len(g.stats.last_errors)                     >   10:
+                    g.stats.last_errors.pop(0)
+                
+                t.debug_print(f"✗ REDIS: Исключение: {str(e)}, переключение на прямую отправку", self.name)
         
         # 2. Прямая отправка (или если Redis недоступен)
-        success = True
-        sent_to_any = False
+        success                                             =   True
+        sent_to_any                                         =   False
         
         # ClickHouse
         if g.conf.clickhouse.enabled:
+            t.debug_print("→ Попытка отправки в ClickHouse...", self.name)
             if self.send_to_clickhouse(data, base_name):
-                sent_to_any = True
+                sent_to_any                                 =   True
+                t.debug_print("✓ ClickHouse: Отправка успешна", self.name)
             else:
-                success = False
+                success                                     =   False
+                t.debug_print("✗ ClickHouse: Отправка не удалась", self.name)
         
         # Solr (только если включен и URL задан)
         if url and g.conf.solr.enabled:
-             if self.send_to_solr(url, data) == 200:
-                 sent_to_any = True
-             else:
-                 success = False
+            t.debug_print("→ Попытка отправки в Solr...", self.name)
+            solr_status                                     =   self.send_to_solr(url, data)
+            if solr_status                                  ==  200:
+                sent_to_any                                 =   True
+                t.debug_print("✓ Solr: Отправка успешна", self.name)
+            else:
+                success                                     =   False
+                t.debug_print(f"✗ Solr: Отправка не удалась (статус: {solr_status})", self.name)
         
         if not sent_to_any and not g.conf.clickhouse.enabled and not g.conf.solr.enabled:
             t.debug_print("⚠ ВНИМАНИЕ: Ни ClickHouse, ни Solr не настроены! Данные никуда не отправлены.", self.name)
         
-        result = ret_ok if success else ret_err
-        t.debug_print(f"═══ КОНЕЦ ОТПРАВКИ ПАКЕТА (статус: {result}) ═══", self.name)
+        result                                              =   ret_ok if success else ret_err
+        t.debug_print(f"═══ КОНЕЦ ОТПРАВКИ ПАКЕТА (итоговый статус: {result}) ═══", self.name)
+        
+        # Выводим краткую итоговую статистику
+        if g.conf.clickhouse.enabled:
+            t.debug_print(f"📊 ClickHouse: отправлено {g.stats.clickhouse_total_sent} записей, ошибок: {g.stats.clickhouse_total_errors}", self.name)
+        if g.conf.solr.enabled:
+            t.debug_print(f"📊 Solr: отправлено {g.stats.solr_total_sent} записей, ошибок: {g.stats.solr_total_errors}", self.name)
+        
         return result
 
     # ------------------------------------------------------------------------------------------------------------------
@@ -479,8 +600,8 @@ class parser(threading.Thread):
                  try:
                      t.debug_print(f"Проверка существования таблицы {g.conf.clickhouse.database}.{pf_base}", self.name)
                      
-                     # Используем MergeTree с кодеком ZSTD для максимального сжатия
-                     # ORDER BY оптимизирован для поиска по дате и пользователю
+                     # Используем ReplacingMergeTree с кодеком ZSTD для максимального сжатия и дедупликации
+                     # ORDER BY (r1, file_id, file_pos) обеспечивает уникальность записи
                      create_table_query = f"""
                          CREATE TABLE IF NOT EXISTS {g.conf.clickhouse.database}.`{pf_base}` (
                              r1 DateTime CODEC(DoubleDelta, ZSTD(3)),
@@ -505,16 +626,18 @@ class parser(threading.Thread):
                              r16 Int32 CODEC(ZSTD(3)),
                              r17 Int64 CODEC(ZSTD(3)),
                              r18 Int32 CODEC(ZSTD(3)),
-                             r19 Int32 CODEC(ZSTD(3))
+                             r19 Int32 CODEC(ZSTD(3)),
+                             file_id UInt32 CODEC(ZSTD(3)),
+                             file_pos UInt64 CODEC(ZSTD(3))
                          ) 
-                         ENGINE = MergeTree()
-                         ORDER BY (r1, r4name, r8)
+                         ENGINE = ReplacingMergeTree()
+                         ORDER BY (r1, file_id, file_pos)
                          PARTITION BY toYYYYMM(r1)
                          SETTINGS index_granularity = 8192
-                         COMMENT 'Журнал регистрации 1С с максимальным сжатием ZSTD'
+                         COMMENT 'Журнал регистрации 1С с максимальным сжатием ZSTD (ReplacingMergeTree)'
                      """
                      self.chclient.execute(create_table_query)
-                     t.debug_print(f"✓ Таблица {g.conf.clickhouse.database}.{pf_base} готова (MergeTree + ZSTD)", self.name)
+                     t.debug_print(f"✓ Таблица {g.conf.clickhouse.database}.{pf_base} готова (ReplacingMergeTree + ZSTD)", self.name)
                  except Exception as e:
                      t.debug_print(f"✗ Ошибка создания таблицы {pf_base}: {str(e)}", self.name)
 
@@ -546,7 +669,9 @@ class parser(threading.Thread):
                 t.debug_print(pf_base+":pf_size = " + str(pf_size), self.name)
             file_state['filename']                          =   pf_name                                                 # локальная структура json с именем файла
             file_state['filesize']                          =   pf_size                                                 # локальная структура json с размером файла
-            file_state['filesizeread']                      =   parser.read_file_state(pf_name,file_state['filesize'])  # пытаюсь получить размер прочитанных байт из сохранённого состояния
+            _state                          =   state_manager.get_file_state(pf_name)
+            file_state['filesizeread']      =   _state['filesizeread'] if _state else 0
+            batch_start_offset              =   file_state['filesizeread']
             # сообщим о начале обработки, при необходимости~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             if int(file_state['filesizeread'])              <   int(file_state['filesize']):
                 t.debug_print(pf_base+":processing " + pf_base + "@" + pf_name, self.name)
@@ -640,7 +765,15 @@ class parser(threading.Thread):
                     file_state['filesizeread']              =   int(file_state['filesizeread']) + \
                                                                 len(self.json_data[self.name])
                     self.solr_post_json_data(pf_base)
-                    parser.write_file_state(file_state)
+                    state_manager.log_committed_block(
+                        pf_name,
+                        batch_start_offset,
+                        file_state['filesizeread'],
+                        self.json_data[self.name],
+                        pf_base
+                    )
+                    state_manager.update_file_state(file_state['filename'], file_state['filesize'], file_state['filesizeread'])
+                    batch_start_offset              =   file_state['filesizeread']
                     parser.set_parsed_size(pf_base,file_state['filesizeread'])                                          # устанавливаю размер на количетво распарсенных данных
                 else:                                                                                                   # в ret ничего не вернулось
                     t.debug_print("no rows was returned",self.name)
@@ -663,7 +796,9 @@ class parser(threading.Thread):
         pf_size                                             =   os.stat(pf_name).st_size                                # текущий размер файла
         file_state['filename']                              =   pf_name                                                 # локальная структура json с именем файла
         file_state['filesize']                              =   pf_size                                                 # локальная структура json с размером файла
-        file_state['filesizeread']                          =   parser.read_file_state(pf_name,file_state['filesize'])  # пытаюсь получить размер прочитанных байт из сохранённого состояния
+        _state                          =   state_manager.get_file_state(pf_name)
+        file_state['filesizeread']      =   _state['filesizeread'] if _state else 0
+        batch_start_offset              =   file_state['filesizeread']
         # Немного переменных ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         pf_block_mul                                        =   1                                                       # мультипликатор для блоков.
         #pf_match_no                                         =   0                                                       # номер записи
@@ -736,7 +871,7 @@ class parser(threading.Thread):
                                                                     pf_name,
                                                                     file_state['filesizeread'],
                                                                     pf_size_read
-                                                            )
+                                                                )
                             else:
                                 t.debug_print(pf_base+":Exception: всё очень плохо, я не придумал что с этим делать"
                                               ,self.name)
@@ -806,7 +941,15 @@ class parser(threading.Thread):
                                     )
                                     block_commit_start      =   time.time()
                                 self.solr_post_json_data(pf_base)                                                       # отправляем данные
-                                parser.write_file_state(file_state)
+                                state_manager.log_committed_block(
+                                    pf_name,
+                                    batch_start_offset,
+                                    file_state['filesizeread'],
+                                    self.json_data[self.name],
+                                    pf_base
+                                )
+                                state_manager.update_file_state(file_state['filename'], file_state['filesize'], file_state['filesizeread'])
+                                batch_start_offset          =   file_state['filesizeread']
                                 # увеличиваю размер на количетво распарсенных данных ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
                                 parser.inc_parsed_size(pf_base, pf_bytes_2_commit)                                      # увеличиваю размер на количетво распарсенных данных
                                 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -834,7 +977,15 @@ class parser(threading.Thread):
                                 parser.inc_parsed_size(pf_base,pf_size_read)                                            # увеличиваю размер на количетво распарсенных данных
                                 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
                                 pf_bytes_2_commit           =   0
-                            parser.write_file_state(file_state)                                                         # и заносим сведения об этом в файл
+                            state_manager.log_committed_block(
+                                pf_name,
+                                batch_start_offset,
+                                file_state['filesizeread'],
+                                self.json_data[self.name],
+                                pf_base
+                            )
+                            state_manager.update_file_state(file_state['filename'], file_state['filesize'], file_state['filesizeread'])
+                            batch_start_offset              =   file_state['filesizeread']
                         else:
                             pf_block_mul                    *=  2                                                       # разобрать блок на записи ЖР не получилось, увеличиваю мультипликатор
                             t.debug_print("Block too large. Current size is " + str(g.parser.blocksize * pf_block_mul))
@@ -856,114 +1007,9 @@ class parser(threading.Thread):
             rb_fh.close()
         return rb_chunk
     # ------------------------------------------------------------------------------------------------------------------
-    # читаю информацию о статус обработки файла данных в файле статусов
+    # Механизм сохранения состояния перенесён в src/state_manager.py
+    # Функции read_file_state и write_file_state удалены
     # ------------------------------------------------------------------------------------------------------------------
-    def read_file_state(rfs_name, rfs_size):                                                                            # читаю информацию о закомиченных данных в файле статусов
-        if os.path.exists(g.parser.state_file):                                                                         # если файл статуса есть
-            while g.parser.state_file_lock:                                                                             # если файл заперт, то ждём
-                time.sleep(g.waits.in_cycle_we_trust)
-            g.parser.state_file_lock                        =   True                                                    # запираем state
-            rfs_done                                        =   False
-            while not rfs_done:                                                                                         # делаем, пока не получится
-                # поищем в кэше ----------------------------------------------------------------------------------------
-                for rfs_elem in g.cache.filesizes:
-                    if rfs_name == rfs_elem['filename'] and rfs_size == rfs_elem['filesize']:
-                        g.parser.state_file_lock            =   False
-                        return rfs_elem['filesizeread']                                                                 # возвращаем из кэша
-                try:
-                    # в кэше нету --------------------------------------------------------------------------------------
-                    del g.cache.filesizes[:]                                                                            # чистим его
-                    rfs_found                               =   False                                                   # запись найдена в файле
-                    rfs_handle                              =   open(g.parser.state_file, 'r', encoding='UTF8')         # открываю файл статуса
-                    rfs_context                             =   rfs_handle.read()                                       # читаем файл статуса
-                    rfs_handle.close()                                                                                  # закрываю хэндл
-                    try:
-                        rfs_json                            =   json.loads(rfs_context)                                 # читаю содержимое
-                        # заполняем кэш --------------------------------------------------------------------------------
-                        for rfc_rec in rfs_json:                                                                        # по всем записям
-                            rfc_local                       =   {}
-                            rfc_local['filename']           =   rfc_rec['filename']
-                            rfc_local['filesizeread']       =   rfc_rec['filesizeread']
-                            rfc_local['filesize']           =   rfc_rec['filesize']
-                            g.cache.filesizes.append(rfc_local)
-                        # ищем уже в кэше ------------------------------------------------------------------------------
-                        for rfs_elem in g.cache.filesizes:
-                            if rfs_elem['filename']         ==  rfs_name:                                               # если такой файл есть
-                                rfs_found                   =   True
-                                g.parser.state_file_lock    =   False
-                                return rfs_elem['filesizeread']                                                         # сколько уже прочитанно
-                    except Exception as e:
-                        t.debug_print("read_file_state got Exception while parsing state file " + str(e))
-                        sys.exit(-1)
-                    if not rfs_found:                                                                                   # в файле такой записи нет
-                        g.parser.state_file_lock            =   False  # отпираем state
-                        return 0                                                                                        # возвращаем 0
-                except Exception as e:
-                    t.debug_print("read_file_state got Exception"+str(e))
-                finally:
-                    g.parser.state_file_lock                =   False                                                   # отпираем state
-                    rfs_handle.close()
-                    rfs_done                                =   True
-            if not rfs_done:
-                time.sleep(g.waits.read_state_exception)                                                                # ждём таймаут
-        else:                                                                                                           # если файла нет,
-            return 0                                                                                                    # возвращаем ноль
-    # ------------------------------------------------------------------------------------------------------------------
-    # сохраняю информацию о статус обработки файла в файле статусов
-    # ------------------------------------------------------------------------------------------------------------------
-    def write_file_state(ws_json):                                                                                      # сохраняет статус обработки файлов
-        ws_done                                             =   False
-        if os.path.exists(g.parser.state_file):                                                                         # если state-файл уже есть
-            while g.parser.state_file_lock:                                                                             # если файл заперт, то ждём
-                time.sleep(g.waits.in_cycle_we_trust)
-            g.parser.state_file_lock                        =   True                                                    # запираем state
-            while not ws_done:
-                try:
-                    ws_handle                               =   open(g.parser.state_file, 'r+', encoding='UTF8')
-                    ws_state                                =   ws_handle.read()
-                    ws_found                                =   False
-                    try:
-                        ws_state_json_arr                   =   json.loads(ws_state)
-                        for ws_json_rec in ws_state_json_arr:
-                            if(ws_json_rec['filename']      ==  ws_json['filename']):
-                                ws_json_rec['filesize']     =   ws_json['filesize']
-                                ws_json_rec['filesizeread'] =   ws_json['filesizeread']
-                                ws_found                    =   True
-                    except Exception as e:
-                        t.debug_print("write_file_state got error while parsing state json "+str(e))
-                    if not ws_found:
-                        if 'ws_state_json_arr' in locals():                                                             # если массив вообще есть
-                            ws_state_json_arr.append(ws_json)                                                           # дополняем его
-                        else:                                                                                           # иначе пилим новый массив
-                            ws_state_json_arr               =   []
-                            ws_state_json_arr.append(ws_json)
-                    ws_handle.close()
-                    ws_handle                               =   open(g.parser.state_file, 'w', encoding='UTF8')
-                    json.dump(ws_state_json_arr, ws_handle, indent=2)
-                    ws_done                                 =   True
-                except Exception as e:
-                    t.debug_print("write_file_state got Exception "+str(e))
-                finally:
-                    ws_handle.close()
-                    g.parser.state_file_lock                =   False                                                   # отпираем state
-                if not ws_done:
-                    time.sleep(g.waits.read_state_exception)                                                            # ждём таймаут
-        else:                                                                                                           # если же создаём state-файл
-            while not ws_done:
-                g.parser.state_file_lock                    =   True                                                    # запираем state
-                try:
-                    ws_state_json_arr                       =   []
-                    ws_state_json_arr.append(ws_json)
-                    ws_handle                               =   open(g.parser.state_file, 'w', encoding='UTF8')
-                    json.dump(ws_state_json_arr, ws_handle, indent=2)
-                except Exception as e:
-                    t.debug_print("write_file_state got Exception"+str(e))
-                finally:
-                    ws_handle.close()
-                    g.parser.state_file_lock                =   False                                                   # отпираем state
-                    ws_done                                 =   True
-                if not ws_done:
-                    time.sleep(g.waits.read_state_exception)                                                            # ждём таймаут
     #-------------------------------------------------------------------------------------------------------------------
     # увеличиваю размер распарсенных данных для базы
     # ------------------------------------------------------------------------------------------------------------------

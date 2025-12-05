@@ -1,3 +1,4 @@
+cd /d "%~dp0\.."
 cls
 .\dist\Nikita\Nikita.exe stop
 .\dist\Nikita\Nikita.exe remove
