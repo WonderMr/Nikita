@@ -655,6 +655,7 @@ class nikita_web(object):
                         // --- Автообновление ---
                         const checkbox = document.getElementById('autoRefresh');
                         const intervalInput = document.getElementById('refreshInterval');
+                        const debugToggle = document.getElementById('debugToggle');
                         let timer = null;
 
                         const savedState = localStorage.getItem('nikita_autoRefresh');
@@ -686,7 +687,14 @@ class nikita_web(object):
                             }
                         }
 
-                        checkbox.addEventListener('change', updateTimer);
+                        checkbox.addEventListener('change', function() {
+                            // Если включаем автообновление, выключаем отладку
+                            if (this.checked && debugToggle.checked) {
+                                debugToggle.checked = false;
+                                debugToggle.dispatchEvent(new Event('change'));
+                            }
+                            updateTimer();
+                        });
                         intervalInput.addEventListener('change', updateTimer);
                         updateTimer();
                         
@@ -733,7 +741,6 @@ class nikita_web(object):
                         updateTimes(parseInt(currentOffset));
                         
                         // --- Отладка ---
-                        const debugToggle = document.getElementById('debugToggle');
                         const debugBlock = document.getElementById('debugBlock');
                         const debugMessages = document.getElementById('debugMessages');
                         
@@ -748,8 +755,14 @@ class nikita_web(object):
                             .then(data => {
                                 if (data.success) {
                                     debugToggle.checked = data.debug_enabled;
+                                    
+                                    // Если отладка включена при загрузке, выключаем автообновление
                                     if (data.debug_enabled) {
                                         debugBlock.style.display = 'block';
+                                        if (checkbox.checked) {
+                                            checkbox.checked = false;
+                                            updateTimer();
+                                        }
                                         loadDebugLogs();
                                     }
                                 }
@@ -761,6 +774,12 @@ class nikita_web(object):
                         debugToggle.addEventListener('change', function() {
                             const enabled = this.checked;
                             debugBlock.style.display = enabled ? 'block' : 'none';
+                            
+                            // Если включаем отладку, выключаем автообновление
+                            if (enabled && checkbox.checked) {
+                                checkbox.checked = false;
+                                updateTimer();
+                            }
                             
                             // Отправляем изменение на сервер
                             fetch('/set_debug?enabled=' + enabled)
@@ -841,39 +860,58 @@ class nikita_web(object):
         
         debug_logs_list                                     =   []
         
+        # Если отладка выключена, возвращаем пустой список
+        if not g.debug.on:
+            return json.dumps({'logs': ['Отладка выключена'], 'success': True}, ensure_ascii=False)
+        
         # Читаем последние записи из логов StateManager
         try:
             from src.state_manager import state_manager
             
-            # Получаем последние записи из БД для отладки
-            with state_manager.conn_lock:
+            # Проверяем, что state_manager инициализирован
+            if not hasattr(state_manager, 'db_path') or not state_manager.db_path:
+                debug_logs_list.append("StateManager не инициализирован")
+            else:
+                # Получаем последние записи из БД для отладки
                 import sqlite3
-                conn                                        =   sqlite3.connect(state_manager.db_path, check_same_thread=False)
-                cursor                                      =   conn.cursor()
+                import os
                 
-                # Получаем последние 50 записей
-                cursor.execute('''
-                    SELECT basename, record_count, timestamp, filename 
-                    FROM committed_blocks 
-                    ORDER BY timestamp DESC 
-                    LIMIT 50
-                ''')
-                rows                                        =   cursor.fetchall()
-                conn.close()
-                
-                for row in rows:
-                    basename, record_count, timestamp, filename = row
-                    log_msg                                 =   f"[{timestamp}] ✓ Записан блок: база={basename}, записей={record_count}, файл={filename}"
-                    debug_logs_list.append(log_msg)
-                    
-                if not debug_logs_list:
-                    debug_logs_list.append("Логов пока нет")
+                if not os.path.exists(state_manager.db_path):
+                    debug_logs_list.append(f"База данных не найдена: {state_manager.db_path}")
+                else:
+                    with state_manager.conn_lock:
+                        conn                                        =   sqlite3.connect(state_manager.db_path, check_same_thread=False)
+                        cursor                                      =   conn.cursor()
+                        
+                        # Проверяем существование таблицы
+                        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='committed_blocks'")
+                        if not cursor.fetchone():
+                            debug_logs_list.append("Таблица committed_blocks не существует")
+                        else:
+                            # Получаем последние 50 записей
+                            cursor.execute('''
+                                SELECT basename, record_count, timestamp, filename 
+                                FROM committed_blocks 
+                                ORDER BY timestamp DESC 
+                                LIMIT 50
+                            ''')
+                            rows                                        =   cursor.fetchall()
+                            
+                            for row in rows:
+                                basename, record_count, timestamp, filename = row
+                                log_msg                                 =   f"[{timestamp}] ✓ Записан блок: база={basename}, записей={record_count}, файл={filename}"
+                                debug_logs_list.append(log_msg)
+                        
+                        conn.close()
                     
         except Exception as e:
             import traceback
             error_msg                                       =   f"✗ Ошибка получения логов: {str(e)}"
             t.debug_print(error_msg + "\n" + traceback.format_exc(), "cherry")
             debug_logs_list.append(error_msg)
+        
+        if not debug_logs_list:
+            debug_logs_list.append("Логов пока нет")
         
         result                                              =   {'logs': debug_logs_list, 'success': True}
         
