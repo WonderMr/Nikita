@@ -48,67 +48,62 @@ class journal2ct_web(object):
         
         # Заголовки колонок
         stats_block                                         +=  '<div class="row header">'
-        stats_block                                         +=  '<span class="cell">ClickHouse</span>'
-        stats_block                                         +=  '<span class="cell">Solr</span>'
-        stats_block                                         +=  '<span class="cell">Redis</span>'
+        stats_block                                         +=  '<span class="cell">Сервис</span>'
+        stats_block                                         +=  '<span class="cell">Статус</span>'
         stats_block                                         +=  '<span class="cell">Хост</span>'
         stats_block                                         +=  '<span class="cell">БД</span>'
         stats_block                                         +=  '<span class="cell">Записей</span>'
         stats_block                                         +=  '<span class="cell">Ошибок</span>'
         stats_block                                         +=  '</div>'
         
-        # Строка со значениями
-        stats_block                                         +=  '<div class="row">'
-        
-        # CH Status
+        # ClickHouse
         if g.conf.clickhouse.enabled:
             ch_icon                                         =   "🟢" if g.stats.clickhouse_connection_ok else "🔴"
             ch_text                                         =   "Подключено" if g.stats.clickhouse_connection_ok else "Ошибка"
-            stats_block                                     +=  f'<span class="cell">{ch_icon} {ch_text}</span>'
-        else:
-            stats_block                                     +=  '<span class="cell disabled">Отключено</span>'
+            ch_sent                                         =   locale.format("%d", g.stats.clickhouse_total_sent, grouping=True)
+            ch_errors                                       =   str(g.stats.clickhouse_total_errors)
             
-        # Solr Status
+            stats_block                                     +=  '<div class="row">'
+            stats_block                                     +=  '<span class="cell"><b>ClickHouse</b></span>'
+            stats_block                                     +=  f'<span class="cell">{ch_icon} {ch_text}</span>'
+            stats_block                                     +=  f'<span class="cell">{g.conf.clickhouse.host}:{g.conf.clickhouse.port}</span>'
+            stats_block                                     +=  f'<span class="cell">{g.conf.clickhouse.database}</span>'
+            stats_block                                     +=  f'<span class="cell">{ch_sent}</span>'
+            stats_block                                     +=  f'<span class="cell">{ch_errors}</span>'
+            stats_block                                     +=  '</div>'
+        
+        # Solr
         if g.conf.solr.enabled:
             solr_icon                                       =   "🟢" if g.stats.solr_connection_ok else "🔴"
             solr_text                                       =   "Подключено" if g.stats.solr_connection_ok else "Ошибка"
-            stats_block                                     +=  f'<span class="cell">{solr_icon} {solr_text}</span>'
-        else:
-            stats_block                                     +=  '<span class="cell disabled">Отключено</span>'
+            solr_sent                                       =   locale.format("%d", g.stats.solr_total_sent, grouping=True)
+            solr_errors                                     =   str(g.stats.solr_total_errors)
             
-        # Redis Status
+            stats_block                                     +=  '<div class="row">'
+            stats_block                                     +=  '<span class="cell"><b>Solr</b></span>'
+            stats_block                                     +=  f'<span class="cell">{solr_icon} {solr_text}</span>'
+            stats_block                                     +=  f'<span class="cell">{g.conf.solr.solr_host}:{g.conf.solr.solr_port}</span>'
+            stats_block                                     +=  '<span class="cell">default</span>'
+            stats_block                                     +=  f'<span class="cell">{solr_sent}</span>'
+            stats_block                                     +=  f'<span class="cell">{solr_errors}</span>'
+            stats_block                                     +=  '</div>'
+        
+        # Redis
         if g.conf.redis.enabled:
             redis_icon                                      =   "🟢" if g.stats.redis_connection_ok else "🔴"
             redis_text                                      =   "Подключено" if g.stats.redis_connection_ok else "Ошибка"
+            redis_queued                                    =   locale.format("%d", g.stats.redis_total_queued, grouping=True)
+            redis_errors                                    =   str(g.stats.redis_total_errors)
+            
+            stats_block                                     +=  '<div class="row">'
+            stats_block                                     +=  '<span class="cell"><b>Redis</b></span>'
             stats_block                                     +=  f'<span class="cell">{redis_icon} {redis_text}</span>'
-        else:
-            stats_block                                     +=  '<span class="cell disabled">Отключено</span>'
+            stats_block                                     +=  f'<span class="cell">{g.conf.redis.host}:{g.conf.redis.port}</span>'
+            stats_block                                     +=  f'<span class="cell">{g.conf.redis.db}</span>'
+            stats_block                                     +=  f'<span class="cell">{redis_queued}</span>'
+            stats_block                                     +=  f'<span class="cell">{redis_errors}</span>'
+            stats_block                                     +=  '</div>'
         
-        # Хосты
-        ch_host                                             =   f'{g.conf.clickhouse.host}:{g.conf.clickhouse.port}' if g.conf.clickhouse.enabled else '-'
-        solr_host                                           =   f'{g.conf.solr.solr_host}:{g.conf.solr.solr_port}' if g.conf.solr.enabled else '-'
-        redis_host                                          =   f'{g.conf.redis.host}:{g.conf.redis.port}' if g.conf.redis.enabled else '-'
-        stats_block                                         +=  f'<span class="cell">{ch_host}<br>{solr_host}<br>{redis_host}</span>'
-        
-        # Базы
-        ch_db                                               =   g.conf.clickhouse.database if g.conf.clickhouse.enabled else '-'
-        solr_db                                             =   'default' if g.conf.solr.enabled else '-'
-        redis_db                                            =   str(g.conf.redis.db) if g.conf.redis.enabled else '-'
-        stats_block                                         +=  f'<span class="cell">{ch_db}<br>{solr_db}<br>{redis_db}</span>'
-        
-        # Записей
-        ch_sent                                             =   locale.format("%d", g.stats.clickhouse_total_sent, grouping=True) if g.conf.clickhouse.enabled else '-'
-        solr_sent                                           =   locale.format("%d", g.stats.solr_total_sent, grouping=True) if g.conf.solr.enabled else '-'
-        redis_queued                                        =   locale.format("%d", g.stats.redis_total_queued, grouping=True) if g.conf.redis.enabled else '-'
-        stats_block                                         +=  f'<span class="cell">{ch_sent}<br>{solr_sent}<br>{redis_queued}</span>'
-        
-        # Ошибок
-        ch_errors                                           =   str(g.stats.clickhouse_total_errors) if g.conf.clickhouse.enabled else '-'
-        solr_errors                                         =   str(g.stats.solr_total_errors) if g.conf.solr.enabled else '-'
-        redis_errors                                        =   str(g.stats.redis_total_errors) if g.conf.redis.enabled else '-'
-        stats_block                                         +=  f'<span class="cell">{ch_errors}<br>{solr_errors}<br>{redis_errors}</span>'
-        
-        stats_block                                         +=  '</div>' # end row
         stats_block                                         +=  '</div>' # end table
         
         # Последние ошибки (глобальные)
@@ -162,7 +157,7 @@ class journal2ct_web(object):
                                                             +   ' байт</span>'
         bases                                               +=  f'<span class="cell">'  \
                                                             +   locale.format('%d', total_sent_all, grouping=True)  \
-                                                            +   ' шт.</span>'
+                                                            +   '</span>'
         bases                                               +=  '<span class="cell"></span>'  # % - пусто
         bases                                               +=  '</div>'
         
@@ -173,7 +168,7 @@ class journal2ct_web(object):
         bases                                               +=  '<span class="cell">Тип ЖР</span>'
         bases                                               +=  '<span class="cell">Размер ЖР</span>'
         bases                                               +=  '<span class="cell">Обработано</span>'
-        bases                                               +=  '<span class="cell">Отправлено</span>'
+        bases                                               +=  '<span class="cell">Опр. (записи)</span>'
         bases                                               +=  '<span class="cell">% Обработано</span>'
         bases                                               +=  '</div>'
 
@@ -228,7 +223,6 @@ class journal2ct_web(object):
                                                                     records_sent,
                                                                     grouping        =   True
                                                                 )                                               \
-                                                            +   ' шт.'                                          \
                                                             +   "</span>"
                                                             
             bases                                           +=  '<span class="cell">'                           \
@@ -355,7 +349,7 @@ class journal2ct_web(object):
                     }
                     .stats-table .row {
                         display: grid;
-                        grid-template-columns: 1fr 1fr 1fr 2fr 1.5fr 1.5fr 1fr;
+                        grid-template-columns: 150px 1.5fr 2fr 1.5fr 1.5fr 1fr;
                         border-bottom: 1px solid #eee;
                     }
                     .stats-table .row.header {
