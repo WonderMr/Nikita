@@ -405,17 +405,22 @@ class conf:
                             'total_size'                    :   0,
                             'parsed_size'                   :   0
                         }                                                                                               # формирую dictionary с информацией о базе
-                        if not initial2:                                                                                # !!!если первоначальное, то не определяем базы!!!
-                            base_found                      =   False
-                            local_bases_array.append(ibase_info)                                                        # добавляю в локальный массив, чтобы определить удалённые базы
-                            for base in g.parser.ibases:
-                                if base[g.nms.ib.name]      ==  ibase_info[g.nms.ib.name]:
-                                    base_found              =   True
-                            if not base_found:
-                                t.debug_print(f"Обнаружена новая ИБ:{ibase_info[g.nms.ib.name]}")
-                                #if g.threads.solr.check_base_exists(cbe_name=ibase_info[g.nms.ib.name]):               # если здесь новоя ядрышко создастся
-                                if True:
-                                    g.parser.ibases.append(ibase_info)                                                  # добавляю его в массив
+                        
+                        # Проверяем, есть ли уже такая база в списке
+                        base_found                          =   False
+                        for base in g.parser.ibases:
+                            if base[g.nms.ib.name]          ==  ibase_info[g.nms.ib.name]:
+                                base_found                  =   True
+                                break
+                        
+                        # Добавляем базу если её ещё нет
+                        if not base_found:
+                            t.debug_print(f"Обнаружена новая ИБ: {ibase_info[g.nms.ib.name]} → {ibase_info[g.nms.ib.jr_dir]}")
+                            g.parser.ibases.append(ibase_info)
+                        
+                        # Для отслеживания удалённых баз (только при периодическом обновлении)
+                        if not initial2:
+                            local_bases_array.append(ibase_info)
 
         if not initial2:                                                                                                # проверяю базы на удалённые
             bases_copy                                      =   g.parser.ibases.copy()                                  # из этой копии будем удалять базы
@@ -516,7 +521,8 @@ def start_all(wait=False):
         # Если нет ни баз из ENV, ни автодетекта - пытаемся найти службу
         if len(g.parser.ibases) == 0:
             t.debug_print("Базы не найдены, пытаемся найти службу 1С...")
-            conf.detect(initial=True)
+            conf.detect(initial=True)  # initial=True только для настроек Solr по умолчанию
+            t.debug_print(f"После поиска службы 1С: {len(g.parser.ibases)} баз")
         
         if len(g.parser.ibases) == 0:
             t.debug_print("═" * 80)
