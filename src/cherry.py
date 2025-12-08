@@ -871,9 +871,10 @@ class nikita_web(object):
                                         const offset = parseInt(localStorage.getItem('nikita_timezone') || "3");
                                         
                                         data.logs.forEach(log => {
-                                            // Пытаемся распарсить дату из строки лога: [YYYY-MM-DD HH:MM:SS.mmm]
+                                            // Пытаемся распарсить дату из строки лога: YYYY-MM-DD HH:MM:SS.mmmmmm:::thread:::msg
                                             let displayLog = log;
-                                            const match = log.match(/^\[(\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}\.\d{3})\](.*)/);
+                                            // Regex: начало строки, дата, разделитель, остальное
+                                            const match = log.match(/^(\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}\.\d+)(:::.*)/);
                                             
                                             if (match) {
                                                 const timeStr = match[1];
@@ -909,9 +910,9 @@ class nikita_web(object):
                                                         // Мы не меняем исходный текст лога, а рендерим его части
                                                         const level = log.includes('✓') ? 'info' : (log.includes('✗') || log.includes('Ошибка') ? 'error' : 'info');
                                                         html += `<div class="log-entry">
-                                                                    <span class="log-timestamp" style="color:#666; margin-right:5px;">[${newTimeStr}]</span>
+                                                                    <span class="log-timestamp" style="color:#666; margin-right:5px;">${newTimeStr}</span>
                                                                     <span class="log-level ${level}">${level.toUpperCase()}</span>
-                                                                    ${content}
+                                                                    ${content.substring(3)} 
                                                                  </div>`;
                                                         return; // переходим к следующей итерации
                                                     }
@@ -1014,7 +1015,8 @@ class nikita_web(object):
                         # Если фильтра нет - берем последние limit
                         if not filter_text:
                              last_lines = all_lines[-limit_int:] if len(all_lines) > limit_int else all_lines
-                             for line in last_lines:
+                             # Разворачиваем, чтобы новые были сверху
+                             for line in reversed(last_lines):
                                  if line.strip(): debug_logs_list.append(line.strip())
                         
                         else:
@@ -1040,7 +1042,8 @@ class nikita_web(object):
                                 # Защита от слишком долгого поиска (если просмотрели 50000 строк и не нашли)
                                 # Для readlines() это уже не важно (все в памяти), но логически верно
                             
-                            debug_logs_list = list(reversed(temp_list))
+                            # temp_list уже содержит записи от новых к старым
+                            debug_logs_list = temp_list
                     
                     if not debug_logs_list:
                         if filter_text:
