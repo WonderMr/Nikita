@@ -1004,46 +1004,46 @@ class nikita_web(object):
                     # Оптимизация: если фильтра нет, читаем последние limit строк
                     # Если фильтр есть, читаем больше (до 50000 строк с конца), чтобы найти limit подходящих
                     
-                    read_limit = limit_int if not filter_text else 50000
+                    read_limit                              =   limit_int if not filter_text else 50000
                     
                     with open(g.debug.filename, 'r', encoding='utf-8', errors='ignore') as f:
                         # Читаем все строки. Для очень больших файлов это может быть медленно,
                         # но в рамках текущей архитектуры (file.readlines) это безопасно.
                         # Если нужно супер-быстро, надо использовать deque(f, limit) или seek
-                        all_lines = f.readlines()
+                        all_lines                           =   f.readlines()
                         
                         # Если фильтра нет - берем последние limit
                         if not filter_text:
-                             last_lines = all_lines[-limit_int:] if len(all_lines) > limit_int else all_lines
+                             last_lines                     =   all_lines[-limit_int:] if len(all_lines) > limit_int else all_lines
                              # Разворачиваем, чтобы новые были сверху
                              for line in reversed(last_lines):
                                  if line.strip(): debug_logs_list.append(line.strip())
                         
                         else:
                             # Если фильтр есть - идем с конца и ищем совпадения
-                            count = 0
-                            temp_list = []
+                            count                           =   0
+                            temp_list                       =   []
                             # Перебираем с конца
                             for line in reversed(all_lines):
-                                line_clean = line.strip()
+                                line_clean                  =   line.strip()
                                 if not line_clean: continue
                                 
-                                match = False
+                                match                       =   False
                                 if filter_re:
                                     if filter_re.search(line_clean): match = True
                                 elif filter_text.lower() in line_clean.lower():
-                                    match = True
+                                    match                   =   True
                                     
                                 if match:
                                     temp_list.append(line_clean)
-                                    count += 1
+                                    count                   +=  1
                                     if count >= limit_int: break
                                     
                                 # Защита от слишком долгого поиска (если просмотрели 50000 строк и не нашли)
                                 # Для readlines() это уже не важно (все в памяти), но логически верно
                             
                             # temp_list уже содержит записи от новых к старым
-                            debug_logs_list = temp_list
+                            debug_logs_list                 =   temp_list
                     
                     if not debug_logs_list:
                         if filter_text:

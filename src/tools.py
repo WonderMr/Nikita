@@ -47,7 +47,7 @@ class tools():
             if g.debug.filehandle:
                 tools.debug_print("Закрываем файл лога...")
                 g.debug.filehandle.close()
-                g.debug.filehandle = None
+                g.debug.filehandle                          =   None
                 tools.debug_print("✓ Файл лога закрыт")
         except Exception as e:
             tools.debug_print(f"⚠ Ошибка при закрытии лога: {str(e)}")

@@ -102,14 +102,14 @@ class conf:
         # Теперь читаем базы из ENV
         try:
             t.debug_print("Загрузка баз данных 1С из переменных окружения...")
-            i = 0
+            i                                               =   0
             while True:
-                ibase_name = os.getenv(f"IBASE_{i}_NAME") or os.getenv(f"IBASE_{i}")
+                ibase_name                                  =   os.getenv(f"IBASE_{i}_NAME") or os.getenv(f"IBASE_{i}")
                 if not ibase_name:
                     break
                 
-                ibase_jr = os.getenv(f"IBASE_{i}_JR")
-                ibase_format = os.getenv(f"IBASE_{i}_FORMAT", "lgf")
+                ibase_jr                                    =   os.getenv(f"IBASE_{i}_JR")
+                ibase_format                                =   os.getenv(f"IBASE_{i}_FORMAT", "lgf")
 
                 if ibase_name and ibase_jr:
                      ibase_info                          =   {
@@ -121,7 +121,7 @@ class conf:
                         }
                      g.parser.ibases.append(ibase_info)
                      t.debug_print(f"✓ База #{i} загружена: {ibase_name}, формат: {ibase_format}, журнал: {ibase_jr}")
-                i += 1
+                i                                           +=  1
             
             if len(g.parser.ibases) == 0:
                 t.debug_print("⚠ ВНИМАНИЕ: Не найдено ни одной базы данных 1С в переменных окружения!")
@@ -644,16 +644,16 @@ def start_all(wait=False):
             t.status_print("ВНИМАНИЕ: Режим отладки выключен. Подробные логи скрыты.")
             t.status_print("Статистика будет выводиться каждую минуту.")
 
-        last_stats_time = time.time()
+        last_stats_time                                     =   time.time()
         
         while wait:
             # Heartbeat каждую минуту
-            current_time = time.time()
+            current_time                                    =   time.time()
             if current_time - last_stats_time >= 60:
-                uptime = datetime.now() - g.stats.start_time
-                uptime_str = str(uptime).split('.')[0] # убираем микросекунды
+                uptime                                      =   datetime.now() - g.stats.start_time
+                uptime_str                                  =   str(uptime).split('.')[0] # убираем микросекунды
                 
-                stats_parts = []
+                stats_parts                                 =   []
                 stats_parts.append(f"HEARTBEAT | Uptime: {uptime_str}")
                 stats_parts.append(f"Баз: {len(g.parser.ibases)}")
                 stats_parts.append(f"Записей: {g.stats.total_records_parsed}")
@@ -669,7 +669,7 @@ def start_all(wait=False):
                 
                 t.status_print(" | ".join(stats_parts))
                     
-                last_stats_time = current_time
+                last_stats_time                             =   current_time
                 
             time.sleep(g.waits.in_cycle_we_trust)
     except Exception as e:

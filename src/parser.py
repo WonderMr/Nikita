@@ -58,13 +58,13 @@ class parser(threading.Thread):
                 
                 # Проверяем и создаём базу данных с максимальным сжатием
                 try:
-                    databases = self.chclient.execute("SHOW DATABASES")
-                    db_list = [db[0] for db in databases]
+                    databases                               =   self.chclient.execute("SHOW DATABASES")
+                    db_list                                 =   [db[0] for db in databases]
                     
                     if g.conf.clickhouse.database not in db_list:
                         t.debug_print(f"⚠ База данных '{g.conf.clickhouse.database}' не существует, создаём...", self.name)
                         # Создаём базу с движком Atomic и кодеком ZSTD для максимального сжатия
-                        create_db_query = f"""
+                        create_db_query                     =   f"""
                             CREATE DATABASE IF NOT EXISTS {g.conf.clickhouse.database}
                             ENGINE = Atomic
                             COMMENT 'База данных для журналов регистрации 1С с максимальным сжатием'
@@ -575,7 +575,7 @@ class parser(threading.Thread):
                 t.debug_print("Commit was succefully sended", self.name)
                 spjd_sended                                 =   True
             except Exception as ee:
-                error_message                               = f"Ошибка при отправке в SOLR: {str(ee)}"
+                error_message                               =   f"Ошибка при отправке в SOLR: {str(ee)}"
                 t.debug_print(error_message, self.name)
                 time.sleep(g.waits.solr_on_bad_send_to)
         t.debug_print("Post took "+str(time.time()-start_time),self.name)
@@ -604,7 +604,7 @@ class parser(threading.Thread):
                      
                      # Используем ReplacingMergeTree с кодеком ZSTD для максимального сжатия и дедупликации
                      # ORDER BY (r1, file_id, file_pos) обеспечивает уникальность записи
-                     create_table_query = f"""
+                     create_table_query                      =   f"""
                          CREATE TABLE IF NOT EXISTS {g.conf.clickhouse.database}.`{pf_base}` (
                              r1 DateTime CODEC(DoubleDelta, ZSTD(3)),
                              r1a DateTime CODEC(DoubleDelta, ZSTD(3)),
@@ -671,9 +671,9 @@ class parser(threading.Thread):
                 t.debug_print(pf_base+":pf_size = " + str(pf_size), self.name)
             file_state['filename']                          =   pf_name                                                 # локальная структура json с именем файла
             file_state['filesize']                          =   pf_size                                                 # локальная структура json с размером файла
-            _state                          =   state_manager.get_file_state(pf_name)
-            file_state['filesizeread']      =   _state['filesizeread'] if _state else 0
-            batch_start_offset              =   file_state['filesizeread']
+            _state                                          =   state_manager.get_file_state(pf_name)
+            file_state['filesizeread']                      =   _state['filesizeread'] if _state else 0
+            batch_start_offset                              =   file_state['filesizeread']
             # сообщим о начале обработки, при необходимости~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             if int(file_state['filesizeread'])              <   int(file_state['filesize']):
                 t.debug_print(pf_base+":processing " + pf_base + "@" + pf_name, self.name)
@@ -800,9 +800,9 @@ class parser(threading.Thread):
         pf_size                                             =   os.stat(pf_name).st_size                                # текущий размер файла
         file_state['filename']                              =   pf_name                                                 # локальная структура json с именем файла
         file_state['filesize']                              =   pf_size                                                 # локальная структура json с размером файла
-        _state                          =   state_manager.get_file_state(pf_name)
-        file_state['filesizeread']      =   _state['filesizeread'] if _state else 0
-        batch_start_offset              =   file_state['filesizeread']
+        _state                                              =   state_manager.get_file_state(pf_name)
+        file_state['filesizeread']                          =   _state['filesizeread'] if _state else 0
+        batch_start_offset                                  =   file_state['filesizeread']
         # Немного переменных ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         pf_block_mul                                        =   1                                                       # мультипликатор для блоков.
         #pf_match_no                                         =   0                                                       # номер записи
