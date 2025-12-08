@@ -1,4 +1,4 @@
-# Nikita (Journal2Ct)
+# Nikita
 
 Высокопроизводительный сервис парсинга и экспорта журналов событий 1С:Предприятие в ClickHouse, Solr и Redis.
 
@@ -9,8 +9,8 @@
 sudo git clone https://github.com/your-repo/Nikita.git /opt/Nikita
 cd /opt/Nikita && sudo python3 -m venv venv && sudo venv/bin/pip install -r requirments.lin
 sudo cp env.example .env && sudo nano .env
-sudo ln -s /opt/Nikita/journal2ct.service /etc/systemd/system/journal2ct.service && sudo systemctl daemon-reload
-sudo systemctl enable journal2ct && sudo systemctl start journal2ct
+sudo ln -s /opt/Nikita/Nikita.service /etc/systemd/system/Nikita.service && sudo systemctl daemon-reload
+sudo systemctl enable Nikita && sudo systemctl start Nikita
 ```
 
 Подробности: [QUICKSTART.md](QUICKSTART.md)
@@ -53,13 +53,13 @@ sudo systemctl enable journal2ct && sudo systemctl start journal2ct
 
 ```bash
 # Статус
-sudo systemctl status journal2ct
+sudo systemctl status Nikita
 
 # Логи
-sudo journalctl -u journal2ct -f
+sudo journalctl -u Nikita -f
 
 # Перезапуск
-sudo systemctl restart journal2ct
+sudo systemctl restart Nikita
 ```
 
 ## 📝 Лицензия
@@ -69,3 +69,4 @@ sudo systemctl restart journal2ct
 ## 🤝 Участие в разработке
 
 Pull requests приветствуются! Для значительных изменений сначала откройте issue для обсуждения.
+

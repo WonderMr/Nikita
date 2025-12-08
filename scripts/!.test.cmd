@@ -3,7 +3,7 @@ rmdir /S /Q .\dist\
 rmdir /S /Q .\build\
 
 set PYTHONOPTIMIZE=1 && ^
-pyinstaller ..\Journal2ct\Journal2Ct.py ^
+pyinstaller ..\Nikita\Nikita.py ^
 --onedir ^
 --console ^
 --clean ^
@@ -31,8 +31,8 @@ pyinstaller ..\Journal2ct\Journal2Ct.py ^
 --hidden-import src.dictionaries ^
 --hidden-import src.messenger ^
 --log-level DEBUG ^
---name=Journal2ct 
+--name=Nikita 
 
-copy .\dlls\*.dll .\dist\Journal2ct\
+copy .\dlls\*.dll .\dist\Nikita\
 
-.\dist\Journal2ct\Journal2ct.exe
+.\dist\Nikita\Nikita.exe

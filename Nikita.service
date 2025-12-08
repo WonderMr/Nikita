@@ -5,15 +5,15 @@
 # БЫСТРЫЙ СТАРТ:
 # 1. Убедитесь, что Nikita установлена в /opt/Nikita (или измените WorkingDirectory ниже)
 # 2. Создайте симлинк:
-#    sudo ln -s /opt/Nikita/journal2ct.service /etc/systemd/system/journal2ct.service
+#    sudo ln -s /opt/Nikita/Nikita.service /etc/systemd/system/Nikita.service
 # 3. Перезагрузите systemd:
 #    sudo systemctl daemon-reload
 # 4. Включите и запустите:
-#    sudo systemctl enable journal2ct
-#    sudo systemctl start journal2ct
+#    sudo systemctl enable Nikita
+#    sudo systemctl start Nikita
 # 5. Проверьте статус:
-#    sudo systemctl status journal2ct
-#    sudo journalctl -u journal2ct -f
+#    sudo systemctl status Nikita
+#    sudo journalctl -u Nikita -f
 #
 # ВАЖНО:
 # - Пользователь usr1cv8 должен существовать и иметь доступ к журналам 1С
@@ -45,7 +45,7 @@ PrivateTmp=true
 # Логирование
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=nikita
+SyslogIdentifier=Nikita
 
 # Ограничения ресурсов (опционально, раскомментируйте при необходимости)
 #LimitNOFILE=65536

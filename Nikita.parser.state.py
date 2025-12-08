@@ -29,3 +29,4 @@ if __name__ == '__main__':
     print("  - get_file_state(filename) -> dict или None")
     print("  - update_file_state(filename, filesize, filesizeread)")
     print("  - log_committed_block(filename, offset_start, offset_end, data_records)")
+

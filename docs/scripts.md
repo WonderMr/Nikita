@@ -153,7 +153,7 @@ scripts\run.dist.install.cmd
 ```
 
 **Что происходит**:
-- Регистрация службы `Journal2Ct` в Windows Service Manager
+- Регистрация службы `Nikita` в Windows Service Manager
 - Настройка автозапуска (опционально)
 
 #### `run.dist.console.cmd`
@@ -176,7 +176,7 @@ scripts\run.dist.start.cmd
 
 Эквивалентно:
 ```cmd
-net start Journal2Ct
+net start Nikita
 ```
 
 #### `run.dist.stop.cmd`
@@ -189,7 +189,7 @@ scripts\run.dist.stop.cmd
 
 Эквивалентно:
 ```cmd
-net stop Journal2Ct
+net stop Nikita
 ```
 
 #### `run.dist.remove.cmd`
@@ -304,8 +304,8 @@ scripts\!.test.cmd
 1. pip install -r requirments.lin               # Установка зависимостей
 2. sudo ./scripts/share.1cdata.sh               # Настройка прав доступа к 1С
 3. python Nikita.py console                     # Тестирование в консоли
-4. sudo systemctl enable journal2ct             # Установка службы
-5. sudo systemctl start journal2ct              # Запуск службы
+4. sudo systemctl enable Nikita             # Установка службы
+5. sudo systemctl start Nikita              # Запуск службы
 ```
 
 #### Для создания дистрибутива (Windows):
@@ -368,4 +368,4 @@ chmod +x scripts/*.sh
 ---
 
 *Обновлено: 2025-12-05*  
-*Проект: Nikita / Journal2Ct*
+*Проект: Nikita / Nikita*
