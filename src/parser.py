@@ -18,6 +18,7 @@ from    src.state_manager   import  state_manager
 from    clickhouse_driver   import  Client                  as  ch
 from    datetime            import  datetime
 import  src.messenger                                       as  m
+from    src                 import  sender                  as  snd
 # ======================================================================================================================
 # класс, умеющий разбирать записи ЖР 1с и отправлять их в Solr
 # ======================================================================================================================
@@ -189,15 +190,6 @@ class parser(threading.Thread):
                 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Безусловное ожидание для https://github.com/WonderMr/Journal2Ct/issues/48
                 time.sleep(g.waits.parser_sleep_on_update_filelist)
 
-    def escape_clickhouse(self, s: str) -> str:
-        return (
-            s
-            .replace("\\", r"\\")     # обратный слеш
-            .replace("'", r"\'")      # одинарная кавычка
-            .replace("\n", r"\n")     # переход строки
-            .replace("\r", r"\r")     # возврат каретки
-            # при необходимости добавить .replace("\t", r"\t")
-        )
     # ------------------------------------------------------------------------------------------------------------------
     # ------------------------------------------------------------------------------------------------------------------
     # добавление в parser.json_data данных из разобранной записи
@@ -233,7 +225,7 @@ class parser(threading.Thread):
                 local_json['rr6']                           =   ""
             else:
                 vocab                                       =   str(g.execution.c1_dicts.applications[fj_base])
-                local_json['rr6']                           =   f"Not Found in Dictionary code = {fj_rec[6]}, vocab = {self.escape_clickhouse(vocab)}"
+                local_json['rr6']                           =   f"Not Found in Dictionary code = {fj_rec[6]}, vocab = {snd.escape_clickhouse(vocab)}"
             cc = 7
             local_json['rr7']                               =   fj_rec[7]
             cc = 8
@@ -282,256 +274,6 @@ class parser(threading.Thread):
         return True
     
     # ------------------------------------------------------------------------------------------------------------------
-    # Отправка в ClickHouse
-    # ------------------------------------------------------------------------------------------------------------------
-    def send_to_clickhouse(self, data, base_name):
-        if not self.chclient:
-            t.debug_print(f"ClickHouse не настроен, пропускаем отправку {len(data)} записей для базы {base_name}", self.name)
-            return True # Если CH не настроен, считаем отправку успешной (или игнорим)
-        
-        start_time                                              =   time.time()
-        
-        try:
-            t.debug_print(f"→ CLICKHOUSE: Начинаем отправку пакета для базы '{base_name}' (записей: {len(data)})", self.name)
-            t.debug_print(f"→ CLICKHOUSE: Подключение к {g.conf.clickhouse.host}:{g.conf.clickhouse.port}, БД: {g.conf.clickhouse.database}", self.name)
-            
-            rows                                                =   []
-            for rec in data:
-                date_str                                        =   f"{rec['r1'][0:4]}-{rec['r1'][4:6]}-{rec['r1'][6:8]} {rec['r1'][8:10]}:{rec['r1'][10:12]}:{rec['r1'][12:14]}"
-                dt                                              =   datetime.fromisoformat(date_str)
-                
-                row                                             =   (
-                                                                        dt,                                         # r1 DateTime
-                                                                        dt,                                         # r1a DateTime (дублируем, как в оригинале)
-                                                                        rec['r2'],                                  # r2
-                                                                        rec['r3'],                                  # r3
-                                                                        rec['r3a'],                                 # r3a
-                                                                        rec['rr4']['name'],                         # r4name
-                                                                        rec['rr4']['uuid'],                         # r4guid
-                                                                        rec['rr5'],                                 # r5
-                                                                        rec['rr6'],                                 # r6
-                                                                        int(rec['rr7']),                            # r7 (теперь Int64)
-                                                                        rec['rr8'],                                 # r8
-                                                                        rec['rr9'],                                 # r9
-                                                                        rec['rr10'],                                # r10
-                                                                        rec['rr11']['name'],                        # r11name
-                                                                        rec['rr11']['uuid'],                        # r11guid
-                                                                        str(rec['rr12']),                           # r12
-                                                                        str(rec['rr13']),                           # r13
-                                                                        str(rec['rr14']),                           # r14
-                                                                        int(rec['rr15']),                           # r15
-                                                                        int(rec['rr16']),                           # r16
-                                                                        int(rec['rr17']),                           # r17
-                                                                        int(rec['rr18']),                           # r18
-                                                                        int(rec['rr19']),                           # r19
-                                                                        int(rec['id']),                             # file_id (добавлено для дедупликации)
-                                                                        int(rec['pos'])                             # file_pos (добавлено для дедупликации)
-                                                                    )
-                rows.append(row)
-            
-            if rows:
-                query                                           =   f"INSERT INTO {g.conf.clickhouse.database}.`{base_name}` (r1, r1a, r2, r3, r3a, r4name, r4guid, r5, r6, r7, r8, r9, r10, r11name, r11guid, r12, r13, r14, r15, r16, r17, r18, r19, file_id, file_pos) VALUES"
-                exec_result                                     =   self.chclient.execute(query, rows)
-                elapsed_time                                    =   time.time() - start_time
-                
-                # Обновляем статистику успешной отправки
-                g.stats.clickhouse_total_sent                   +=  len(rows)
-                g.stats.clickhouse_last_success_time            =   datetime.now()
-                g.stats.clickhouse_connection_ok                =   True
-                
-                t.debug_print(f"✓ CLICKHOUSE: Успешно отправлено {len(rows)} записей в таблицу {g.conf.clickhouse.database}.{base_name}", self.name)
-                t.debug_print(f"✓ CLICKHOUSE: Время выполнения: {elapsed_time:.3f} сек ({len(rows)/elapsed_time:.1f} записей/сек)", self.name)
-                t.debug_print(f"✓ CLICKHOUSE: Результат выполнения: {exec_result}", self.name)
-                t.debug_print(f"✓ CLICKHOUSE: Всего отправлено за сессию: {g.stats.clickhouse_total_sent} записей", self.name)
-            return True
-
-        except Exception as e:
-            elapsed_time                                        =   time.time() - start_time
-            error_msg                                           =   str(e)
-            
-            # Обновляем статистику ошибок
-            g.stats.clickhouse_total_errors                     +=  1
-            g.stats.clickhouse_last_error_time                  =   datetime.now()
-            g.stats.clickhouse_last_error_msg                   =   error_msg
-            g.stats.clickhouse_connection_ok                    =   False
-            
-            # Добавляем в список последних ошибок
-            error_entry                                         =   (datetime.now(), "ClickHouse", f"{base_name}: {error_msg}")
-            g.stats.last_errors.append(error_entry)
-            if len(g.stats.last_errors)                         >   10:                                                 # храним только последние 10 ошибок
-                g.stats.last_errors.pop(0)
-            
-            t.debug_print(f"✗ CLICKHOUSE: Ошибка отправки в {g.conf.clickhouse.database}.{base_name}: {error_msg}", self.name)
-            t.debug_print(f"✗ CLICKHOUSE: Время до ошибки: {elapsed_time:.3f} сек", self.name)
-            t.debug_print(f"✗ CLICKHOUSE: Всего ошибок за сессию: {g.stats.clickhouse_total_errors}", self.name)
-            import traceback
-            t.debug_print(f"✗ CLICKHOUSE: Traceback:\n{traceback.format_exc()}", self.name)
-            return False
-            
-    # ------------------------------------------------------------------------------------------------------------------
-    # Отправка в Solr
-    # ------------------------------------------------------------------------------------------------------------------
-    def send_to_solr(self, url, data):
-        start_time                                              =   time.time()
-        
-        try:
-            t.debug_print(f"→ SOLR: Отправка пакета на {url} (записей: {len(data)})", self.name)
-            status_code                                         =   requests.post(url=url, json=data).status_code
-            elapsed_time                                        =   time.time() - start_time
-            
-            if status_code                                      ==  200:
-                # Обновляем статистику успешной отправки
-                g.stats.solr_total_sent                         +=  len(data)
-                g.stats.solr_last_success_time                  =   datetime.now()
-                g.stats.solr_connection_ok                      =   True
-                
-                t.debug_print(f"✓ SOLR: Успешно отправлено {len(data)} записей на {url}", self.name)
-                t.debug_print(f"✓ SOLR: Время выполнения: {elapsed_time:.3f} сек ({len(data)/elapsed_time:.1f} записей/сек)", self.name)
-                t.debug_print(f"✓ SOLR: Всего отправлено за сессию: {g.stats.solr_total_sent} записей", self.name)
-            else:
-                # Обновляем статистику ошибок
-                g.stats.solr_total_errors                       +=  1
-                g.stats.solr_last_error_time                    =   datetime.now()
-                g.stats.solr_last_error_msg                     =   f"HTTP статус: {status_code}"
-                g.stats.solr_connection_ok                      =   False
-                
-                # Добавляем в список последних ошибок
-                error_entry                                     =   (datetime.now(), "Solr", f"HTTP {status_code}: {url}")
-                g.stats.last_errors.append(error_entry)
-                if len(g.stats.last_errors)                     >   10:
-                    g.stats.last_errors.pop(0)
-                
-                t.debug_print(f"✗ SOLR: Ошибка отправки, статус: {status_code}", self.name)
-                t.debug_print(f"✗ SOLR: Всего ошибок за сессию: {g.stats.solr_total_errors}", self.name)
-            
-            return status_code
-            
-        except Exception as e:
-            elapsed_time                                        =   time.time() - start_time
-            error_msg                                           =   str(e)
-            
-            # Обновляем статистику ошибок
-            g.stats.solr_total_errors                           +=  1
-            g.stats.solr_last_error_time                        =   datetime.now()
-            g.stats.solr_last_error_msg                         =   error_msg
-            g.stats.solr_connection_ok                          =   False
-            
-            # Добавляем в список последних ошибок
-            error_entry                                         =   (datetime.now(), "Solr", f"{url}: {error_msg}")
-            g.stats.last_errors.append(error_entry)
-            if len(g.stats.last_errors)                         >   10:
-                g.stats.last_errors.pop(0)
-            
-            t.debug_print(f"✗ SOLR: Исключение при отправке: {error_msg}", self.name)
-            t.debug_print(f"✗ SOLR: Время до ошибки: {elapsed_time:.3f} сек", self.name)
-            t.debug_print(f"✗ SOLR: Всего ошибок за сессию: {g.stats.solr_total_errors}", self.name)
-            return 500
-
-    # ------------------------------------------------------------------------------------------------------------------
-    # отправка post запроса (Диспетчер)
-    # ------------------------------------------------------------------------------------------------------------------
-    def post_query(self, url, data, base_name, bypass_redis=False):
-        ret_ok                                              =   200
-        ret_err                                             =   500
-        
-        t.debug_print(f"═══ НАЧАЛО ОТПРАВКИ ПАКЕТА ═══", self.name)
-        t.debug_print(f"База: {base_name}, Записей: {len(data)}", self.name)
-        t.debug_print(f"ClickHouse enabled: {g.conf.clickhouse.enabled}", self.name)
-        t.debug_print(f"Solr enabled: {g.conf.solr.enabled}", self.name)
-        t.debug_print(f"Redis enabled: {g.conf.redis.enabled} (bypass: {bypass_redis})", self.name)
-        
-        # 1. Если Redis включен и мы не обходим его (т.е. мы не Sender thread)
-        if g.conf.redis.enabled and not bypass_redis:
-            t.debug_print("→ REDIS: Отправка в очередь Redis...", self.name)
-            
-            try:
-                if queue.push(data, base_name):
-                    # Обновляем статистику Redis
-                    g.stats.redis_total_queued                  +=  len(data)
-                    g.stats.redis_last_success_time             =   datetime.now()
-                    g.stats.redis_connection_ok                 =   True
-                    
-                    t.debug_print("✓ REDIS: Успешно помещено в очередь", self.name)
-                    t.debug_print(f"✓ REDIS: Всего добавлено в очередь за сессию: {g.stats.redis_total_queued} записей", self.name)
-                    return ret_ok
-                else:
-                    # Обновляем статистику ошибок Redis
-                    g.stats.redis_total_errors                  +=  1
-                    g.stats.redis_last_error_time               =   datetime.now()
-                    g.stats.redis_last_error_msg                =   "Ошибка добавления в очередь"
-                    g.stats.redis_connection_ok                 =   False
-                    
-                    error_entry                                 =   (datetime.now(), "Redis", "Ошибка добавления в очередь")
-                    g.stats.last_errors.append(error_entry)
-                    if len(g.stats.last_errors)                 >   10:
-                        g.stats.last_errors.pop(0)
-                    
-                    t.debug_print("✗ REDIS: Ошибка, переключение на прямую отправку", self.name)
-            except Exception as e:
-                # Обновляем статистику ошибок Redis
-                g.stats.redis_total_errors                      +=  1
-                g.stats.redis_last_error_time                   =   datetime.now()
-                g.stats.redis_last_error_msg                    =   str(e)
-                g.stats.redis_connection_ok                     =   False
-                
-                error_entry                                     =   (datetime.now(), "Redis", str(e))
-                g.stats.last_errors.append(error_entry)
-                if len(g.stats.last_errors)                     >   10:
-                    g.stats.last_errors.pop(0)
-                
-                t.debug_print(f"✗ REDIS: Исключение: {str(e)}, переключение на прямую отправку", self.name)
-        
-        # 2. Прямая отправка (или если Redis недоступен)
-        success                                             =   True
-        sent_to_any                                         =   False
-        
-        # ClickHouse
-        if g.conf.clickhouse.enabled:
-            t.debug_print("→ Попытка отправки в ClickHouse...", self.name)
-            if self.send_to_clickhouse(data, base_name):
-                sent_to_any                                 =   True
-                t.debug_print("✓ ClickHouse: Отправка успешна", self.name)
-            else:
-                success                                     =   False
-                t.debug_print("✗ ClickHouse: Отправка не удалась", self.name)
-        
-        # Solr (только если включен и URL задан)
-        if url and g.conf.solr.enabled:
-            t.debug_print("→ Попытка отправки в Solr...", self.name)
-            solr_status                                     =   self.send_to_solr(url, data)
-            if solr_status                                  ==  200:
-                sent_to_any                                 =   True
-                t.debug_print("✓ Solr: Отправка успешна", self.name)
-            else:
-                success                                     =   False
-                t.debug_print(f"✗ Solr: Отправка не удалась (статус: {solr_status})", self.name)
-        
-        if not sent_to_any and not g.conf.clickhouse.enabled and not g.conf.solr.enabled:
-            t.debug_print("⚠ ВНИМАНИЕ: Ни ClickHouse, ни Solr не настроены! Данные никуда не отправлены.", self.name)
-        
-        result                                              =   ret_ok if success else ret_err
-        t.debug_print(f"═══ КОНЕЦ ОТПРАВКИ ПАКЕТА (итоговый статус: {result}) ═══", self.name)
-        
-        # Выводим краткую итоговую статистику
-        if g.conf.clickhouse.enabled:
-            t.debug_print(f"📊 ClickHouse: отправлено {g.stats.clickhouse_total_sent} записей, ошибок: {g.stats.clickhouse_total_errors}", self.name)
-        if g.conf.solr.enabled:
-            t.debug_print(f"📊 Solr: отправлено {g.stats.solr_total_sent} записей, ошибок: {g.stats.solr_total_errors}", self.name)
-        
-        return result
-
-    # ------------------------------------------------------------------------------------------------------------------
-    # отправка get запроса
-    # ------------------------------------------------------------------------------------------------------------------
-    def get_query(self, url):
-        ret                                                 =   0
-        try:
-            #t.debug_print("post to "+url,g.threads.parser.name)
-            ret                                             =   requests.get(url=url).status_code
-        except Exception as e:
-            t.debug_print(f"Exception 10 {str(e)}")
-        return ret
-    # ------------------------------------------------------------------------------------------------------------------
     # отправка parser.json_data в solr и commit. До победного
     # ------------------------------------------------------------------------------------------------------------------
     def solr_post_json_data(self, spjd_base):
@@ -545,19 +287,23 @@ class parser(threading.Thread):
                 t.debug_print("Posting", self.name)
                 # первый запрос ----------------------------------------------------------------------------------------
                 spjd_post_url                               =   f"{g.execution.solr.url_main}/{spjd_base}/update?wt=json"
-                spjd_ret_code                               =   self.post_query(
+                spjd_ret_code                               =   snd.post_query(
+                                                                    self.chclient,
                                                                     spjd_post_url,
                                                                     data      = self.json_data[self.name],
-                                                                    base_name = spjd_base
+                                                                    base_name = spjd_base,
+                                                                    logger_name = self.name
                                                                 )
                 # шлём, пока не пройдёт --------------------------------------------------------------------------------
                 while spjd_ret_code                         !=  200:                                                    # http://localhost:8983/solr/PER/update?wt=json
                     t.debug_print(f"Post data returned {str(spjd_ret_code)}, retrying")
                     time.sleep(g.waits.solr_on_bad_send_to)
-                    spjd_ret_code                           =   self.post_query(
+                    spjd_ret_code                           =   snd.post_query(
+                                                                    self.chclient,
                                                                     spjd_post_url,
                                                                     data    =   self.json_data[self.name],
-                                                                    base_name = spjd_base
+                                                                    base_name = spjd_base,
+                                                                    logger_name = self.name
                                                                 )
                 t.debug_print("Post data was sucesfully sended", self.name)
                 del self.json_data[self.name][:]                                                                        # пачку отправили, обнуляем данные

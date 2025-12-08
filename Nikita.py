@@ -30,14 +30,6 @@ from    src                 import  sender                  as  snd
 # ======================================================================================================================
 # from distutils.util         import  strtobool replacement
 # ======================================================================================================================
-def strtobool(val):
-    val                                                     =   val.lower()
-    if val in ('y', 'yes', 't', 'true', 'on', '1'):
-        return True
-    elif val in ('n', 'no', 'f', 'false', 'off', '0'):
-        return False
-    else:
-        raise ValueError("Invalid truth value: %r" % (val,))
 # ======================================================================================================================
 # собственно, сервис windows
 # ======================================================================================================================
@@ -227,7 +219,7 @@ class conf:
     # ------------------------------------------------------------------------------------------------------------------
     def detect(fake_param=0, initial=False):
         # Redis default settings
-        g.conf.redis.enabled                            =   strtobool(os.getenv("REDIS_ENABLED", "False"))
+        g.conf.redis.enabled                            =   t.strtobool(os.getenv("REDIS_ENABLED", "False"))
         g.conf.redis.server_path                        =   os.getenv("REDIS_SERVER_PATH", "")
         g.conf.redis.host                               =   os.getenv("REDIS_HOST", "127.0.0.1")
         g.conf.redis.port                               =   os.getenv("REDIS_PORT", "6379")
@@ -235,7 +227,7 @@ class conf:
         g.conf.redis.dir                                =   os.getenv("REDIS_DIR", os.path.join(g.execution.self_dir, "redis_data"))
 
         # Solr default settings
-        g.conf.solr.enabled                             =   strtobool(os.getenv("SOLR_ENABLED", "False"))
+        g.conf.solr.enabled                             =   t.strtobool(os.getenv("SOLR_ENABLED", "False"))
 
         t.debug_print("Conf detection")
         d_found                                             =   False

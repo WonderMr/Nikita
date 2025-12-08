@@ -1,0 +1,56 @@
+# Nikita - Systemd Unit File
+# ======================================================================================================================
+# Готовый файл для запуска службы парсинга журналов 1С в Linux
+#
+# БЫСТРЫЙ СТАРТ:
+# 1. Убедитесь, что Nikita установлена в /opt/Nikita (или измените WorkingDirectory ниже)
+# 2. Создайте симлинк:
+#    sudo ln -s /opt/Nikita/nikita.service /etc/systemd/system/nikita.service
+# 3. Перезагрузите systemd:
+#    sudo systemctl daemon-reload
+# 4. Включите и запустите:
+#    sudo systemctl enable nikita
+#    sudo systemctl start nikita
+# 5. Проверьте статус:
+#    sudo systemctl status nikita
+#    sudo journalctl -u nikita -f
+#
+# ВАЖНО:
+# - Пользователь usr1cv8 должен существовать и иметь доступ к журналам 1С
+# - Файл /opt/Nikita/.env должен быть настроен
+# - Виртуальное окружение должно быть создано в /opt/Nikita/venv/
+# ======================================================================================================================
+
+[Unit]
+Description=Nikita - 1C Journal Parser Service
+Documentation=https://github.com/WonderMr/Nikita
+After=network.target clickhouse-server.service
+
+[Service]
+Type=simple
+User=usr1cv8
+Group=usr1cv8
+WorkingDirectory=/opt/Nikita
+ExecStart=/opt/Nikita/venv/bin/python /opt/Nikita/Nikita.py console
+EnvironmentFile=/opt/Nikita/.env
+
+# Политика перезапуска
+Restart=always
+RestartSec=10s
+
+# Ограничения безопасности
+NoNewPrivileges=true
+PrivateTmp=true
+
+# Логирование
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=nikita
+
+# Ограничения ресурсов (опционально, раскомментируйте при необходимости)
+#LimitNOFILE=65536
+#MemoryMax=4G
+#CPUQuota=200%
+
+[Install]
+WantedBy=multi-user.target
