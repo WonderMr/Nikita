@@ -16,22 +16,22 @@ sudo cp env.example .env
 sudo nano .env  # Отредактируйте: укажите пути к базам 1С, настройки ClickHouse
 
 # 4. Установка systemd service через симлинк
-sudo ln -s /opt/Nikita/journal2ct.service /etc/systemd/system/journal2ct.service
+sudo ln -s /opt/Nikita/Nikita.service /etc/systemd/system/Nikita.service
 sudo systemctl daemon-reload
 
 # 5. Запуск службы
-sudo systemctl enable journal2ct
-sudo systemctl start journal2ct
+sudo systemctl enable Nikita
+sudo systemctl start Nikita
 ```
 
 ## Проверка работы
 
 ```bash
 # Статус службы
-sudo systemctl status journal2ct
+sudo systemctl status Nikita
 
 # Логи в реальном времени
-sudo journalctl -u journal2ct -f
+sudo journalctl -u Nikita -f
 
 # Веб-панель мониторинга
 # Откройте в браузере: http://your-server:8984/
@@ -41,23 +41,23 @@ sudo journalctl -u journal2ct -f
 
 ```bash
 # Перезапуск
-sudo systemctl restart journal2ct
+sudo systemctl restart Nikita
 
 # Остановка
-sudo systemctl stop journal2ct
+sudo systemctl stop Nikita
 
 # Отключение автозапуска
-sudo systemctl disable journal2ct
+sudo systemctl disable Nikita
 
 # Просмотр последних 100 строк логов
-sudo journalctl -u journal2ct -n 100
+sudo journalctl -u Nikita -n 100
 ```
 
 ## Важные замечания
 
-1. **Пользователь usr1cv8**: Служба запускается от пользователя `usr1cv8`. Если у вас другой пользователь, отредактируйте `journal2ct.service` перед созданием симлинка:
+1. **Пользователь usr1cv8**: Служба запускается от пользователя `usr1cv8`. Если у вас другой пользователь, отредактируйте `Nikita.service` перед созданием симлинка:
    ```bash
-   sudo nano /opt/Nikita/journal2ct.service
+   sudo nano /opt/Nikita/Nikita.service
    # Измените строки User= и Group=
    ```
 
@@ -81,7 +81,7 @@ sudo journalctl -u journal2ct -n 100
 ### Служба не запускается
 ```bash
 # Смотрим подробные логи
-sudo journalctl -u journal2ct -n 50 --no-pager
+sudo journalctl -u Nikita -n 50 --no-pager
 
 # Проверяем конфигурацию
 /opt/Nikita/venv/bin/python /opt/Nikita/Nikita.py console
@@ -98,7 +98,7 @@ ls -la /home/usr1cv8/.1cv8/1C/1cv8/
 ### Не открывается веб-панель
 ```bash
 # Проверьте, что служба запущена
-sudo systemctl status journal2ct
+sudo systemctl status Nikita
 
 # Проверьте настройку порта в .env
 grep HTTP_LISTEN_PORT /opt/Nikita/.env

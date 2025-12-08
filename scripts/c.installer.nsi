@@ -31,7 +31,7 @@ RequestExecutionLevel admin
 !insertmacro MUI_PAGE_INSTFILES
 ; Finish page
 !define MUI_FINISHPAGE_RUN "$SYSDIR\sc.exe"
-!define MUI_FINISHPAGE_RUN_PARAMETERS 'start journal2Ct'
+!define MUI_FINISHPAGE_RUN_PARAMETERS 'start Nikita'
 !insertmacro MUI_PAGE_FINISH
 
 ; Uninstaller pages
@@ -73,19 +73,19 @@ Section "MainSection" SEC01
   ShellLink::SetRunAsAdministrator              "${shortcut_install_svc}"
 
   !define           shortcut_run_svc            "$SMPROGRAMS\Nikita\��������� ������.lnk"
-  CreateShortCut    "${shortcut_run_svc}"       "$SYSDIR\sc.exe"                "start journal2Ct"  "$INSTDIR\Journal2Ct.exe"
+  CreateShortCut    "${shortcut_run_svc}"       "$SYSDIR\sc.exe"                "start Nikita"  "$INSTDIR\Nikita.exe"
   ShellLink::SetRunAsAdministrator              "${shortcut_run_svc}"
 
   !define           shortcut_stop_svc           "$SMPROGRAMS\Nikita\���������� ������.lnk"
-  CreateShortCut    "${shortcut_stop_svc}"      "$SYSDIR\sc.exe"                "stop journal2Ct"   "$INSTDIR\Journal2Ct.exe"
+  CreateShortCut    "${shortcut_stop_svc}"      "$SYSDIR\sc.exe"                "stop Nikita"   "$INSTDIR\Nikita.exe"
   ShellLink::SetRunAsAdministrator              "${shortcut_stop_svc}"
 
   !define           shortcut_del_svc            "$SMPROGRAMS\Nikita\������� ������.lnk"
-  CreateShortCut    "${shortcut_del_svc}"       "$SYSDIR\sc.exe"                "delete journal2Ct" "$INSTDIR\Journal2Ct.exe"
+  CreateShortCut    "${shortcut_del_svc}"       "$SYSDIR\sc.exe"                "delete Nikita" "$INSTDIR\Nikita.exe"
   ShellLink::SetRunAsAdministrator              "${shortcut_del_svc}"
 
   !define           shortcut_run_console        "$SMPROGRAMS\Nikita\��������� � �������.lnk"
-  CreateShortCut    "${shortcut_run_console}"   "$INSTDIR\Journal2Ct.exe"       "console"
+  CreateShortCut    "${shortcut_run_console}"   "$INSTDIR\Nikita.exe"       "console"
   ShellLink::SetRunAsAdministrator              "${shortcut_run_console}"
 SectionEnd
 
@@ -98,14 +98,14 @@ SectionEnd
 
 Section -Post
   WriteUninstaller "$INSTDIR\uninst.exe"
-  WriteRegStr HKLM "${PRODUCT_DIR_REGKEY}" "" "$INSTDIR\Journal2Ct.exe"
+  WriteRegStr HKLM "${PRODUCT_DIR_REGKEY}" "" "$INSTDIR\Nikita.exe"
   WriteRegStr ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "DisplayName" "$(^Name)"
   WriteRegStr ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "UninstallString" "$INSTDIR\uninst.exe"
-  WriteRegStr ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "DisplayIcon" "$INSTDIR\Journal2Ct.exe"
+  WriteRegStr ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "DisplayIcon" "$INSTDIR\Nikita.exe"
   WriteRegStr ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "DisplayVersion" "${PRODUCT_VERSION}"
   ExecWait '"$SYSDIR\cmd.exe" /c "$INSTDIR\add.firewall.rule.cmd"'
   ExecWait '"$INSTDIR\pcnsl.exe"'
-  ExecWait '"$INSTDIR\Journal2Ct.exe" --startup auto install'
+  ExecWait '"$INSTDIR\Nikita.exe" --startup auto install'
 SectionEnd
 
 Function un.onUninstSuccess

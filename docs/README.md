@@ -1,4 +1,4 @@
-# Journal2Ct / Nikita
+# Nikita
 
 Высокопроизводительный сервис парсинга и экспорта журналов событий 1С:Предприятие.
 Поддерживает экспорт в **ClickHouse** (для аналитики и длительного хранения), **Solr** (для полнотекстового поиска), с опциональной буферизацией через **Redis** для надежности.
@@ -45,13 +45,13 @@ sudo cp env.example .env
 sudo nano .env  # Отредактируйте под вашу конфигурацию
 
 # 4. Установите службу через симлинк
-sudo ln -s /opt/Nikita/journal2ct.service /etc/systemd/system/journal2ct.service
+sudo ln -s /opt/Nikita/Nikita.service /etc/systemd/system/Nikita.service
 sudo systemctl daemon-reload
-sudo systemctl enable journal2ct
-sudo systemctl start journal2ct
+sudo systemctl enable Nikita
+sudo systemctl start Nikita
 
 # 5. Проверьте статус
-sudo systemctl status journal2ct
+sudo systemctl status Nikita
 ```
 
 ### Альтернативная установка (произвольный путь)
@@ -194,25 +194,25 @@ python Nikita.py console
 
 #### Быстрая установка (рекомендуется)
 
-В репозитории уже есть готовый файл `journal2ct.service`. Просто создайте симлинк:
+В репозитории уже есть готовый файл `Nikita.service`. Просто создайте симлинк:
 
 ```bash
 # Создаём симлинк на unit-файл
-sudo ln -s /opt/Nikita/journal2ct.service /etc/systemd/system/journal2ct.service
+sudo ln -s /opt/Nikita/Nikita.service /etc/systemd/system/Nikita.service
 
 # Перезагружаем конфигурацию systemd
 sudo systemctl daemon-reload
 
 # Включаем автозапуск и запускаем службу
-sudo systemctl enable journal2ct
-sudo systemctl start journal2ct
+sudo systemctl enable Nikita
+sudo systemctl start Nikita
 
 # Проверяем статус
-sudo systemctl status journal2ct
+sudo systemctl status Nikita
 ```
 
 **Важно:** Убедитесь, что:
-- Путь установки соответствует `/opt/Nikita` (или отредактируйте `WorkingDirectory` в `journal2ct.service`)
+- Путь установки соответствует `/opt/Nikita` (или отредактируйте `WorkingDirectory` в `Nikita.service`)
 - Пользователь `usr1cv8` существует и имеет доступ к каталогам журналов 1С
 - Файл `.env` настроен корректно
 
@@ -223,8 +223,8 @@ sudo systemctl status journal2ct
 1.  Скопируйте и отредактируйте unit-файл:
 
     ```bash
-    sudo cp /path/to/Nikita/journal2ct.service /etc/systemd/system/
-    sudo nano /etc/systemd/system/journal2ct.service
+sudo cp /path/to/Nikita/Nikita.service /etc/systemd/system/
+sudo nano /etc/systemd/system/Nikita.service
     ```
     
     Измените параметры `User`, `Group` и `WorkingDirectory` под вашу конфигурацию.
@@ -233,8 +233,8 @@ sudo systemctl status journal2ct
 
     ```bash
     sudo systemctl daemon-reload
-    sudo systemctl enable journal2ct
-    sudo systemctl start journal2ct
+sudo systemctl enable Nikita
+sudo systemctl start Nikita
     ```
 
 ### Windows Service
@@ -405,29 +405,29 @@ REDIS_ENABLED=false
 **Linux (systemd)**:
 ```bash
 # Статус службы
-sudo systemctl status journal2ct
+sudo systemctl status Nikita
 
 # Просмотр логов в реальном времени
-sudo journalctl -u journal2ct -f
+sudo journalctl -u Nikita -f
 
 # Последние 100 строк логов
-sudo journalctl -u journal2ct -n 100
+sudo journalctl -u Nikita -n 100
 
 # Логи с определённого времени
-sudo journalctl -u journal2ct --since "10 minutes ago"
+sudo journalctl -u Nikita --since "10 minutes ago"
 
 # Перезапуск службы
-sudo systemctl restart journal2ct
+sudo systemctl restart Nikita
 
 # Остановка службы
-sudo systemctl stop journal2ct
+sudo systemctl stop Nikita
 
 # Отключение автозапуска
-sudo systemctl disable journal2ct
+sudo systemctl disable Nikita
 ```
 
 **Windows**:
 ```powershell
-sc query Journal2Ct
-Get-EventLog -LogName Application -Source Journal2Ct -Newest 10
+sc query Nikita
+Get-EventLog -LogName Application -Source Nikita -Newest 10
 ```
