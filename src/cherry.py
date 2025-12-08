@@ -1131,13 +1131,14 @@ class cherry_thread(threading.Thread):
             
             cherrypy.config.update({'server.socket_host'        :   g.conf.http.listen_interface})
             cherrypy.config.update({'server.socket_port'        :   int(g.conf.http.listen_port)})
-            cherrypy.config.update({'log.screen'                :   False})
+            cherrypy.config.update({'log.screen'                :   g.execution.running_in_console})
             
             t.debug_print(f"✓ CherryPy запущен на http://{g.conf.http.listen_interface}:{g.conf.http.listen_port}/", self.name)
             t.debug_print(f"✓ Веб-панель мониторинга: http://{g.conf.http.listen_interface}:{g.conf.http.listen_port}/", self.name)
             t.debug_print(f"✓ JSON API статистики: http://{g.conf.http.listen_interface}:{g.conf.http.listen_port}/stats_api", self.name)
             
-            cherrypy.quickstart(nikita_web())
+            conf                                                =   {'/': {}}
+            cherrypy.quickstart(nikita_web(), config=conf)
         except Exception as e:
             t.debug_print(f"✗ Ошибка запуска CherryPy: {str(e)}", self.name)
             import traceback
