@@ -522,6 +522,7 @@ def post_init_vars():
 # ======================================================================================================================
 def start_all(wait=False):
     try:
+        t.status_print("Инициализация сервиса...")
         t.debug_print("Starting all threads")
         
         # Инициализируем время старта
@@ -627,7 +628,49 @@ def start_all(wait=False):
         #g.threads.parser_new2                                =   p.parser("lgd")
         #g.threads.parser_new2.start(); # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         t.debug_print("✓ SERVICE STARTED AND READY")
+        t.status_print("Сервис успешно запущен. Ожидание событий...")
+        
+        # Вывод конфигурации в консоль
+        t.status_print("=" * 60)
+        t.status_print("ТЕКУЩАЯ КОНФИГУРАЦИЯ:")
+        t.status_print(f"• ClickHouse: {'ВКЛ' if g.conf.clickhouse.enabled else 'ВЫКЛ'}")
+        t.status_print(f"• Redis:      {'ВКЛ' if g.conf.redis.enabled else 'ВЫКЛ'}")
+        t.status_print(f"• Solr:       {'ВКЛ' if g.conf.solr.enabled else 'ВЫКЛ'}")
+        t.status_print(f"• Debug:      {'ВКЛ' if g.debug.on else 'ВЫКЛ'}")
+        t.status_print(f"• Баз 1С:     {len(g.parser.ibases)}")
+        t.status_print("=" * 60)
+        
+        if not g.debug.on:
+            t.status_print("ВНИМАНИЕ: Режим отладки выключен. Подробные логи скрыты.")
+            t.status_print("Статистика будет выводиться каждую минуту.")
+
+        last_stats_time = time.time()
+        
         while wait:
+            # Heartbeat каждую минуту
+            current_time = time.time()
+            if current_time - last_stats_time >= 60:
+                uptime = datetime.now() - g.stats.start_time
+                uptime_str = str(uptime).split('.')[0] # убираем микросекунды
+                
+                stats_parts = []
+                stats_parts.append(f"HEARTBEAT | Uptime: {uptime_str}")
+                stats_parts.append(f"Баз: {len(g.parser.ibases)}")
+                stats_parts.append(f"Записей: {g.stats.total_records_parsed}")
+                
+                if g.conf.clickhouse.enabled:
+                    stats_parts.append(f"CH: {g.stats.clickhouse_total_sent}/{g.stats.clickhouse_total_errors}")
+                    
+                if g.conf.solr.enabled:
+                    stats_parts.append(f"Solr: {g.stats.solr_total_sent}/{g.stats.solr_total_errors}")
+                    
+                if g.conf.redis.enabled:
+                    stats_parts.append(f"Redis: {g.stats.redis_total_queued}/{g.stats.redis_total_errors}")
+                
+                t.status_print(" | ".join(stats_parts))
+                    
+                last_stats_time = current_time
+                
             time.sleep(g.waits.in_cycle_we_trust)
     except Exception as e:
         t.debug_print(f"Exception3 {str(e)}")
@@ -745,6 +788,7 @@ def main():
     init_vars()
     if ('console' in sys.argv):
         g.execution.running_in_console                  =   True
+        print(f"Запуск в консольном режиме. Debug enabled: {g.debug.on}")
         start_all(wait = True)
     elif is_windows:
         if len(sys.argv) == 1:
