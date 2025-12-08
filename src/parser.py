@@ -58,13 +58,13 @@ class parser(threading.Thread):
                 
                 # Проверяем и создаём базу данных с максимальным сжатием
                 try:
-                    databases = self.chclient.execute("SHOW DATABASES")
-                    db_list = [db[0] for db in databases]
+                    databases                               =   self.chclient.execute("SHOW DATABASES")
+                    db_list                                 =   [db[0] for db in databases]
                     
                     if g.conf.clickhouse.database not in db_list:
                         t.debug_print(f"⚠ База данных '{g.conf.clickhouse.database}' не существует, создаём...", self.name)
                         # Создаём базу с движком Atomic и кодеком ZSTD для максимального сжатия
-                        create_db_query = f"""
+                        create_db_query                     =   f"""
                             CREATE DATABASE IF NOT EXISTS {g.conf.clickhouse.database}
                             ENGINE = Atomic
                             COMMENT 'База данных для журналов регистрации 1С с максимальным сжатием'
@@ -138,6 +138,8 @@ class parser(threading.Thread):
             if (self.name.upper()).find('LGD')              >   0:                                                      # если новый формат ЖР
                 regexp                                      =   g.rexp.is_lgD_file_re                                   # если новый формат ЖР
             while True:
+                if g.debug.on:
+                     t.debug_print("Scanning for log files...", self.name)
                 g.parser.ibases_lpf_files                   =   []
                 local_list                                  =   []
                 for ibase in g.parser.ibases:                                                                           # по всем базам
@@ -573,7 +575,7 @@ class parser(threading.Thread):
                 t.debug_print("Commit was succefully sended", self.name)
                 spjd_sended                                 =   True
             except Exception as ee:
-                error_message                               = f"Ошибка при отправке в SOLR: {str(ee)}"
+                error_message                               =   f"Ошибка при отправке в SOLR: {str(ee)}"
                 t.debug_print(error_message, self.name)
                 time.sleep(g.waits.solr_on_bad_send_to)
         t.debug_print("Post took "+str(time.time()-start_time),self.name)
@@ -602,7 +604,7 @@ class parser(threading.Thread):
                      
                      # Используем ReplacingMergeTree с кодеком ZSTD для максимального сжатия и дедупликации
                      # ORDER BY (r1, file_id, file_pos) обеспечивает уникальность записи
-                     create_table_query = f"""
+                     create_table_query                      =   f"""
                          CREATE TABLE IF NOT EXISTS {g.conf.clickhouse.database}.`{pf_base}` (
                              r1 DateTime CODEC(DoubleDelta, ZSTD(3)),
                              r1a DateTime CODEC(DoubleDelta, ZSTD(3)),
@@ -669,9 +671,9 @@ class parser(threading.Thread):
                 t.debug_print(pf_base+":pf_size = " + str(pf_size), self.name)
             file_state['filename']                          =   pf_name                                                 # локальная структура json с именем файла
             file_state['filesize']                          =   pf_size                                                 # локальная структура json с размером файла
-            _state                          =   state_manager.get_file_state(pf_name)
-            file_state['filesizeread']      =   _state['filesizeread'] if _state else 0
-            batch_start_offset              =   file_state['filesizeread']
+            _state                                          =   state_manager.get_file_state(pf_name)
+            file_state['filesizeread']                      =   _state['filesizeread'] if _state else 0
+            batch_start_offset                              =   file_state['filesizeread']
             # сообщим о начале обработки, при необходимости~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             if int(file_state['filesizeread'])              <   int(file_state['filesize']):
                 t.debug_print(pf_base+":processing " + pf_base + "@" + pf_name, self.name)
@@ -764,12 +766,14 @@ class parser(threading.Thread):
                                                                 )                                                       # add 2019.02.15 для https://github.com/WonderMr/Journal2Ct/issues/40
                     file_state['filesizeread']              =   int(file_state['filesizeread']) + \
                                                                 len(self.json_data[self.name])
+                    # сохраняем копию данных для логирования, так как solr_post_json_data очистит список
+                    records_to_log                          =   list(self.json_data[self.name])
                     self.solr_post_json_data(pf_base)
                     state_manager.log_committed_block(
                         pf_name,
                         batch_start_offset,
                         file_state['filesizeread'],
-                        self.json_data[self.name],
+                        records_to_log,
                         pf_base
                     )
                     state_manager.update_file_state(file_state['filename'], file_state['filesize'], file_state['filesizeread'])
@@ -796,9 +800,9 @@ class parser(threading.Thread):
         pf_size                                             =   os.stat(pf_name).st_size                                # текущий размер файла
         file_state['filename']                              =   pf_name                                                 # локальная структура json с именем файла
         file_state['filesize']                              =   pf_size                                                 # локальная структура json с размером файла
-        _state                          =   state_manager.get_file_state(pf_name)
-        file_state['filesizeread']      =   _state['filesizeread'] if _state else 0
-        batch_start_offset              =   file_state['filesizeread']
+        _state                                              =   state_manager.get_file_state(pf_name)
+        file_state['filesizeread']                          =   _state['filesizeread'] if _state else 0
+        batch_start_offset                                  =   file_state['filesizeread']
         # Немного переменных ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         pf_block_mul                                        =   1                                                       # мультипликатор для блоков.
         #pf_match_no                                         =   0                                                       # номер записи
@@ -940,12 +944,13 @@ class parser(threading.Thread):
                                         self.name
                                     )
                                     block_commit_start      =   time.time()
+                                records_to_log              =   list(self.json_data[self.name])                         # сохраняем копию перед отправкой
                                 self.solr_post_json_data(pf_base)                                                       # отправляем данные
                                 state_manager.log_committed_block(
                                     pf_name,
                                     batch_start_offset,
                                     file_state['filesizeread'],
-                                    self.json_data[self.name],
+                                    records_to_log,
                                     pf_base
                                 )
                                 state_manager.update_file_state(file_state['filename'], file_state['filesize'], file_state['filesizeread'])
@@ -968,7 +973,9 @@ class parser(threading.Thread):
                                                                                 self.name
                                                                             )                                           # add 2019.02.15 для https://github.com/WonderMr/Journal2Ct/issues/40
                             file_state['filesizeread']      =   pf_size                                                 # закрываем чтение
+                            records_to_log                  =   []
                             if(len(self.json_data[self.name])>  0):                                                     # если есть неотправленные данные
+                                records_to_log              =   list(self.json_data[self.name])                         # сохраняем копию
                                 if block_time_start:
                                     t.debug_print("Block tooked before commit " + str(time.time() - block_commit_start))
                                     block_commit_start      =   time.time()
@@ -981,7 +988,7 @@ class parser(threading.Thread):
                                 pf_name,
                                 batch_start_offset,
                                 file_state['filesizeread'],
-                                self.json_data[self.name],
+                                records_to_log,
                                 pf_base
                             )
                             state_manager.update_file_state(file_state['filename'], file_state['filesize'], file_state['filesizeread'])

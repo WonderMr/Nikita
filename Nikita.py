@@ -42,7 +42,7 @@ def strtobool(val):
 # собственно, сервис windows
 # ======================================================================================================================
 if is_windows:
-    class journal2ct_service(win32serviceutil.ServiceFramework):
+    class nikita_service(win32serviceutil.ServiceFramework):
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         _svc_name_                                          =   g.service.name
         _svc_display_name_                                  =   g.service.display_name
@@ -102,14 +102,14 @@ class conf:
         # Теперь читаем базы из ENV
         try:
             t.debug_print("Загрузка баз данных 1С из переменных окружения...")
-            i = 0
+            i                                               =   0
             while True:
-                ibase_name = os.getenv(f"IBASE_{i}_NAME") or os.getenv(f"IBASE_{i}")
+                ibase_name                                  =   os.getenv(f"IBASE_{i}_NAME") or os.getenv(f"IBASE_{i}")
                 if not ibase_name:
                     break
                 
-                ibase_jr = os.getenv(f"IBASE_{i}_JR")
-                ibase_format = os.getenv(f"IBASE_{i}_FORMAT", "lgf")
+                ibase_jr                                    =   os.getenv(f"IBASE_{i}_JR")
+                ibase_format                                =   os.getenv(f"IBASE_{i}_FORMAT", "lgf")
 
                 if ibase_name and ibase_jr:
                      ibase_info                          =   {
@@ -121,7 +121,7 @@ class conf:
                         }
                      g.parser.ibases.append(ibase_info)
                      t.debug_print(f"✓ База #{i} загружена: {ibase_name}, формат: {ibase_format}, журнал: {ibase_jr}")
-                i += 1
+                i                                           +=  1
             
             if len(g.parser.ibases) == 0:
                 t.debug_print("⚠ ВНИМАНИЕ: Не найдено ни одной базы данных 1С в переменных окружения!")
@@ -481,11 +481,48 @@ def init_vars():
 # ======================================================================================================================
 def post_init_vars():
     g.execution.solr.url_main                               =   f"http://{g.conf.solr.solr_host}:{g.conf.solr.solr_port}/solr"
+    
+    # Проверяем соединение с ClickHouse если он включен
+    if g.conf.clickhouse.enabled:
+        try:
+            from clickhouse_driver import Client
+            t.debug_print("Проверка соединения с ClickHouse...")
+            
+            client                                          =   Client(
+                                                                    host        =   g.conf.clickhouse.host,
+                                                                    port        =   g.conf.clickhouse.port,
+                                                                    user        =   g.conf.clickhouse.user,
+                                                                    password    =   g.conf.clickhouse.password,
+                                                                    database    =   g.conf.clickhouse.database
+                                                                )
+            
+            # Пробуем выполнить простой запрос
+            result                                          =   client.execute('SELECT 1')
+            
+            if result:
+                g.stats.clickhouse_connection_ok            =   True
+                from datetime import datetime
+                g.stats.clickhouse_last_success_time        =   datetime.now()
+                t.debug_print(f"✓ ClickHouse подключен: {g.conf.clickhouse.host}:{g.conf.clickhouse.port}/{g.conf.clickhouse.database}")
+            else:
+                g.stats.clickhouse_connection_ok            =   False
+                t.debug_print(f"✗ ClickHouse не ответил корректно")
+                
+        except Exception as e:
+            g.stats.clickhouse_connection_ok                =   False
+            from datetime import datetime
+            g.stats.clickhouse_last_error_time              =   datetime.now()
+            g.stats.clickhouse_last_error_msg               =   str(e)
+            g.stats.clickhouse_total_errors                 +=  1
+            t.debug_print(f"✗ Ошибка подключения к ClickHouse: {str(e)}")
+    else:
+        t.debug_print("ClickHouse отключен в конфигурации")
 # ======================================================================================================================
 # запускает все потоки парсинга, solr и веб-сервер
 # ======================================================================================================================
 def start_all(wait=False):
     try:
+        t.status_print("Инициализация сервиса...")
         t.debug_print("Starting all threads")
         
         # Инициализируем время старта
@@ -566,8 +603,12 @@ def start_all(wait=False):
         g.threads.sender.start()
 
         # ~~~~~~~ до парсера надо дёрнуть словари ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        for ib in g.parser.ibases:
-            d.read_ib_dictionary(ib['ibase_name'])
+        if len(g.parser.ibases) > 0:
+            t.debug_print(f"Reading dictionaries for {len(g.parser.ibases)} bases...")
+            for ib in g.parser.ibases:
+                t.debug_print(f"Reading dictionary for {ib['ibase_name']}...")
+                d.read_ib_dictionary(ib['ibase_name'])
+                t.debug_print(f"✓ Dictionary for {ib['ibase_name']} loaded")
         # ~~~~~~~ создаю и запускаю потоки парсеров ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         g.threads.parser                                    =   p.parser("lgp")
         g.threads.parser.start(); # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -586,7 +627,50 @@ def start_all(wait=False):
         # ~~~~~~~ создаю и запускаю потоки парсеров для нового формата ЖР ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         #g.threads.parser_new2                                =   p.parser("lgd")
         #g.threads.parser_new2.start(); # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        t.debug_print("✓ SERVICE STARTED AND READY")
+        t.status_print("Сервис успешно запущен. Ожидание событий...")
+        
+        # Вывод конфигурации в консоль
+        t.status_print("=" * 60)
+        t.status_print("ТЕКУЩАЯ КОНФИГУРАЦИЯ:")
+        t.status_print(f"• ClickHouse: {'ВКЛ' if g.conf.clickhouse.enabled else 'ВЫКЛ'}")
+        t.status_print(f"• Redis:      {'ВКЛ' if g.conf.redis.enabled else 'ВЫКЛ'}")
+        t.status_print(f"• Solr:       {'ВКЛ' if g.conf.solr.enabled else 'ВЫКЛ'}")
+        t.status_print(f"• Debug:      {'ВКЛ' if g.debug.on else 'ВЫКЛ'}")
+        t.status_print(f"• Баз 1С:     {len(g.parser.ibases)}")
+        t.status_print("=" * 60)
+        
+        if not g.debug.on:
+            t.status_print("ВНИМАНИЕ: Режим отладки выключен. Подробные логи скрыты.")
+            t.status_print("Статистика будет выводиться каждую минуту.")
+
+        last_stats_time                                     =   time.time()
+        
         while wait:
+            # Heartbeat каждую минуту
+            current_time                                    =   time.time()
+            if current_time - last_stats_time >= 60:
+                uptime                                      =   datetime.now() - g.stats.start_time
+                uptime_str                                  =   str(uptime).split('.')[0] # убираем микросекунды
+                
+                stats_parts                                 =   []
+                stats_parts.append(f"HEARTBEAT | Uptime: {uptime_str}")
+                stats_parts.append(f"Баз: {len(g.parser.ibases)}")
+                stats_parts.append(f"Записей: {g.stats.total_records_parsed}")
+                
+                if g.conf.clickhouse.enabled:
+                    stats_parts.append(f"CH: {g.stats.clickhouse_total_sent}/{g.stats.clickhouse_total_errors}")
+                    
+                if g.conf.solr.enabled:
+                    stats_parts.append(f"Solr: {g.stats.solr_total_sent}/{g.stats.solr_total_errors}")
+                    
+                if g.conf.redis.enabled:
+                    stats_parts.append(f"Redis: {g.stats.redis_total_queued}/{g.stats.redis_total_errors}")
+                
+                t.status_print(" | ".join(stats_parts))
+                    
+                last_stats_time                             =   current_time
+                
             time.sleep(g.waits.in_cycle_we_trust)
     except Exception as e:
         t.debug_print(f"Exception3 {str(e)}")
@@ -704,6 +788,7 @@ def main():
     init_vars()
     if ('console' in sys.argv):
         g.execution.running_in_console                  =   True
+        print(f"Запуск в консольном режиме. Debug enabled: {g.debug.on}")
         start_all(wait = True)
     elif is_windows:
         if len(sys.argv) == 1:
@@ -718,12 +803,12 @@ def main():
                   "Для удаления службы - ключ 'remove'")
             import win32traceutil
             servicemanager.Initialize()
-            servicemanager.PrepareToHostSingle(journal2ct_service)
+            servicemanager.PrepareToHostSingle(nikita_service)
             # Now ask the service manager to fire things up for us...
             servicemanager.StartServiceCtrlDispatcher()
             print("service done!")
         else:
-            win32serviceutil.HandleCommandLine(journal2ct_service)
+            win32serviceutil.HandleCommandLine(nikita_service)
     else:
         g.execution.running_in_console                  =   True
         start_all(wait = True)

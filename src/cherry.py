@@ -12,7 +12,7 @@ from    src                 import  reader                  as  r
 # ======================================================================================================================
 # собственно, имплементация веб-сервера
 # ======================================================================================================================
-class journal2ct_web(object):
+class nikita_web(object):
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     @cherrypy.expose
     def index(self):
@@ -51,7 +51,6 @@ class journal2ct_web(object):
         stats_block                                         +=  '<span class="cell">ClickHouse</span>'
         stats_block                                         +=  '<span class="cell">Solr</span>'
         stats_block                                         +=  '<span class="cell">Redis</span>'
-        stats_block                                         +=  '<span class="cell">Хост</span>'
         stats_block                                         +=  '<span class="cell">БД</span>'
         stats_block                                         +=  '<span class="cell">Записей<br>(с запуска)</span>'
         stats_block                                         +=  '<span class="cell">Ошибок<br>(с запуска)</span>'
@@ -63,7 +62,7 @@ class journal2ct_web(object):
         # ClickHouse Status
         if g.conf.clickhouse.enabled:
             ch_icon                                         =   "🟢" if g.stats.clickhouse_connection_ok else "🔴"
-            ch_text                                         =   "Подключено" if g.stats.clickhouse_connection_ok else "Ошибка"
+            ch_text                                         =   f"{g.conf.clickhouse.host}:{g.conf.clickhouse.port}" if g.stats.clickhouse_connection_ok else "Ошибка"
             stats_block                                     +=  f'<span class="cell">{ch_icon} {ch_text}</span>'
         else:
             stats_block                                     +=  '<span class="cell disabled">Отключено</span>'
@@ -71,7 +70,7 @@ class journal2ct_web(object):
         # Solr Status
         if g.conf.solr.enabled:
             solr_icon                                       =   "🟢" if g.stats.solr_connection_ok else "🔴"
-            solr_text                                       =   "Подключено" if g.stats.solr_connection_ok else "Ошибка"
+            solr_text                                       =   f"{g.conf.solr.solr_host}:{g.conf.solr.solr_port}" if g.stats.solr_connection_ok else "Ошибка"
             stats_block                                     +=  f'<span class="cell">{solr_icon} {solr_text}</span>'
         else:
             stats_block                                     +=  '<span class="cell disabled">Отключено</span>'
@@ -79,20 +78,11 @@ class journal2ct_web(object):
         # Redis Status
         if g.conf.redis.enabled:
             redis_icon                                      =   "🟢" if g.stats.redis_connection_ok else "🔴"
-            redis_text                                      =   "Подключено" if g.stats.redis_connection_ok else "Ошибка"
+            redis_text                                      =   f"{g.conf.redis.host}:{g.conf.redis.port}" if g.stats.redis_connection_ok else "Ошибка"
             stats_block                                     +=  f'<span class="cell">{redis_icon} {redis_text}</span>'
         else:
             stats_block                                     +=  '<span class="cell disabled">Отключено</span>'
         
-        # Хосты (только для включенных сервисов)
-        hosts_list                                          =   []
-        if g.conf.clickhouse.enabled:
-            hosts_list.append(f'{g.conf.clickhouse.host}:{g.conf.clickhouse.port}')
-        if g.conf.solr.enabled:
-            hosts_list.append(f'{g.conf.solr.solr_host}:{g.conf.solr.solr_port}')
-        if g.conf.redis.enabled:
-            hosts_list.append(f'{g.conf.redis.host}:{g.conf.redis.port}')
-        stats_block                                         +=  f'<span class="cell">{("<br>".join(hosts_list)) if hosts_list else "-"}</span>'
         
         # Базы данных (только для включенных сервисов)
         db_list                                             =   []
@@ -314,6 +304,18 @@ class journal2ct_web(object):
         top_bar                                             +=  '<span class="slider round"></span>'
         top_bar                                             +=  '</label>'
         top_bar                                             +=  '</div>'
+        
+        # Debug Controls (Filter & Limit) - initially hidden
+        top_bar                                             +=  '<div id="debugControls" style="display: none; align-items: center; margin-right: 20px;">'
+        top_bar                                             +=  '<div style="display: flex; align-items: center; margin-right: 15px;" title="Фильтрация строк лога (серверная). Поддерживаются регулярные выражения.">'
+        top_bar                                             +=  '<span>🔍 Фильтр:</span>'
+        top_bar                                             +=  '<input type="text" id="logFilter" placeholder="Regex..." style="margin-left: 5px; padding: 2px 5px; border: 1px solid #ccc; border-radius: 4px; width: 150px;">'
+        top_bar                                             +=  '</div>'
+        top_bar                                             +=  '<div style="display: flex; align-items: center;" title="Количество последних найденных строк">'
+        top_bar                                             +=  '<span>🔢 Строк:</span>'
+        top_bar                                             +=  '<input type="number" id="logLimit" value="100" min="10" max="10000" style="margin-left: 5px; padding: 2px 5px; border: 1px solid #ccc; border-radius: 4px; width: 60px;">'
+        top_bar                                             +=  '</div>'
+        top_bar                                             +=  '</div>'
 
         # Units
         top_bar                                             +=  '<div class="units-controls" style="display: flex; align-items: center;">'
@@ -394,7 +396,7 @@ class journal2ct_web(object):
                     }
                     .stats-table .row {
                         display: grid;
-                        grid-template-columns: 1fr 1fr 1fr 2fr 1.5fr 1.5fr 1fr;
+                        grid-template-columns: 1fr 1fr 1fr 1.5fr 1.5fr 1fr;
                         border-bottom: 1px solid #eee;
                     }
                     .stats-table .row.header {
@@ -655,6 +657,7 @@ class journal2ct_web(object):
                         // --- Автообновление ---
                         const checkbox = document.getElementById('autoRefresh');
                         const intervalInput = document.getElementById('refreshInterval');
+                        const debugToggle = document.getElementById('debugToggle');
                         let timer = null;
 
                         const savedState = localStorage.getItem('nikita_autoRefresh');
@@ -686,7 +689,14 @@ class journal2ct_web(object):
                             }
                         }
 
-                        checkbox.addEventListener('change', updateTimer);
+                        checkbox.addEventListener('change', function() {
+                            // Если включаем автообновление, выключаем отладку
+                            if (this.checked && debugToggle.checked) {
+                                debugToggle.checked = false;
+                                debugToggle.dispatchEvent(new Event('change'));
+                            }
+                            updateTimer();
+                        });
                         intervalInput.addEventListener('change', updateTimer);
                         updateTimer();
                         
@@ -723,56 +733,206 @@ class journal2ct_web(object):
                         
                         tzSelect.value = currentOffset;
                         
-                        tzSelect.addEventListener('change', function() {
-                            const offset = parseInt(this.value);
-                            localStorage.setItem('nikita_timezone', offset);
+                        // Функция обновления временных меток в логах и статистике
+                        function updateAllTimes() {
+                            const offset = parseInt(currentOffset);
+                            // Обновляем статистику
                             updateTimes(offset);
+                            // Обновляем логи (если есть)
+                            document.querySelectorAll('.log-timestamp').forEach(el => {
+                                const ts = el.getAttribute('data-ts');
+                                if (ts) {
+                                     // Для логов логика та же, если есть атрибут
+                                     // Но логи приходят готовым текстом, нам нужно парсить их
+                                }
+                            });
+                        }
+
+                        tzSelect.addEventListener('change', function() {
+                            currentOffset = parseInt(this.value);
+                            localStorage.setItem('nikita_timezone', currentOffset);
+                            updateTimes(currentOffset);
+                            // Перезагружаем логи, чтобы применился новый пояс (клиентский парсинг сложнее)
+                            if (debugToggle.checked) {
+                                loadDebugLogs();
+                            }
                         });
                         
                         // Инициализация времени
                         updateTimes(parseInt(currentOffset));
                         
                         // --- Отладка ---
-                        const debugToggle = document.getElementById('debugToggle');
                         const debugBlock = document.getElementById('debugBlock');
                         const debugMessages = document.getElementById('debugMessages');
+                        const logFilter = document.getElementById('logFilter');
+                        const logLimit = document.getElementById('logLimit');
+                        const debugControls = document.getElementById('debugControls');
                         
-                        // Загружаем состояние из localStorage
-                        const debugEnabled = localStorage.getItem('nikita_debug') === 'true';
-                        debugToggle.checked = debugEnabled;
-                        if (debugEnabled) {
-                            debugBlock.style.display = 'block';
-                            loadDebugLogs();
+                        function updateFilterUI() {
+                            const val = logFilter.value;
+                            try {
+                                if (val) new RegExp(val, 'i');
+                                logFilter.style.borderColor = '#ccc';
+                                logFilter.title = "Фильтрация строк лога (серверная).";
+                            } catch (e) {
+                                logFilter.style.borderColor = '#ff6b6b';
+                                logFilter.title = "Ошибка в регулярном выражении: " + e.message;
+                            }
                         }
+
+                        // При изменении фильтра или лимита перезагружаем логи
+                        let filterTimeout;
+                        function debouncedLoad() {
+                            clearTimeout(filterTimeout);
+                            updateFilterUI();
+                            filterTimeout = setTimeout(loadDebugLogs, 500);
+                        }
+
+                        logFilter.addEventListener('input', debouncedLoad);
+                        logLimit.addEventListener('change', loadDebugLogs);
+                        
+                        // Загружаем состояние с сервера
+                        fetch('/set_debug')
+                            .then(response => {
+                                if (!response.ok) {
+                                    throw new Error('Network response was not ok');
+                                }
+                                return response.json();
+                            })
+                            .then(data => {
+                                if (data.success) {
+                                    debugToggle.checked = data.debug_enabled;
+                                    
+                                    // Если отладка включена при загрузке, выключаем автообновление
+                                    if (data.debug_enabled) {
+                                        debugBlock.style.display = 'block';
+                                        debugControls.style.display = 'flex';
+                                        if (checkbox.checked) {
+                                            checkbox.checked = false;
+                                            updateTimer();
+                                        }
+                                        loadDebugLogs();
+                                    }
+                                }
+                            })
+                            .catch(err => {
+                                console.error('Ошибка загрузки состояния отладки:', err);
+                            });
                         
                         debugToggle.addEventListener('change', function() {
                             const enabled = this.checked;
-                            localStorage.setItem('nikita_debug', enabled);
                             debugBlock.style.display = enabled ? 'block' : 'none';
+                            debugControls.style.display = enabled ? 'flex' : 'none';
                             
-                            if (enabled) {
-                                loadDebugLogs();
+                            // Если включаем отладку, выключаем автообновление
+                            if (enabled && checkbox.checked) {
+                                checkbox.checked = false;
+                                updateTimer();
                             }
+                            
+                            // Отправляем изменение на сервер
+                            fetch('/set_debug?enabled=' + enabled)
+                                .then(response => {
+                                    if (!response.ok) {
+                                        throw new Error('Network response was not ok');
+                                    }
+                                    return response.json();
+                                })
+                                .then(data => {
+                                    if (data.success) {
+                                        console.log(data.message);
+                                        if (enabled) {
+                                            loadDebugLogs();
+                                        }
+                                    } else {
+                                        console.error('Ошибка изменения режима отладки:', data.error);
+                                    }
+                                })
+                                .catch(err => {
+                                    console.error('Ошибка запроса к серверу:', err);
+                                });
                         });
                         
                         // Функция загрузки логов
                         function loadDebugLogs() {
-                            fetch('/debug_logs')
-                                .then(response => response.json())
+                            const filterVal = encodeURIComponent(logFilter.value);
+                            const limitVal = logLimit.value;
+                            
+                            fetch(`/debug_logs?filter_text=${filterVal}&limit=${limitVal}`)
+                                .then(response => {
+                                    if (!response.ok) {
+                                        throw new Error('Network response was not ok');
+                                    }
+                                    return response.json();
+                                })
                                 .then(data => {
-                                    if (data.logs && data.logs.length > 0) {
+                                    if (data.success && data.logs && data.logs.length > 0) {
                                         let html = '';
+                                        const offset = parseInt(localStorage.getItem('nikita_timezone') || "3");
+                                        
                                         data.logs.forEach(log => {
+                                            // Пытаемся распарсить дату из строки лога: YYYY-MM-DD HH:MM:SS.mmmmmm:::thread:::msg
+                                            let displayLog = log;
+                                            // Regex: начало строки, дата, разделитель, остальное
+                                            const match = log.match(/^(\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}\.\d+)(:::.*)/);
+                                            
+                                            if (match) {
+                                                const timeStr = match[1];
+                                                const content = match[2];
+                                                
+                                                // Считаем время в логе как локальное время сервера
+                                                // Но так как у нас нет инфы о таймзоне сервера, считаем, что это "Server Time"
+                                                // И просто сдвигаем его, если пользователь хочет видеть "Server Time + Offset"
+                                                // Или более правильно: парсим как UTC (добавляем Z) и сдвигаем на Offset
+                                                
+                                                try {
+                                                    // Предполагаем, что логи пишутся в UTC или мы просто хотим сдвинуть отображаемое время
+                                                    // Самый простой вариант: парсим, добавляем смещение и форматируем обратно
+                                                    
+                                                    // Заменяем пробел на T для ISO
+                                                    const isoStr = timeStr.replace(' ', 'T') + 'Z'; 
+                                                    const date = new Date(isoStr);
+                                                    
+                                                    if (!isNaN(date.getTime())) {
+                                                        const targetTime = new Date(date.getTime() + (offset * 3600000));
+                                                        
+                                                        const y = targetTime.getUTCFullYear();
+                                                        const m = (targetTime.getUTCMonth() + 1).toString().padStart(2, '0');
+                                                        const d = targetTime.getUTCDate().toString().padStart(2, '0');
+                                                        const h = targetTime.getUTCHours().toString().padStart(2, '0');
+                                                        const min = targetTime.getUTCMinutes().toString().padStart(2, '0');
+                                                        const s = targetTime.getUTCSeconds().toString().padStart(2, '0');
+                                                        const ms = targetTime.getUTCMilliseconds().toString().padStart(3, '0');
+                                                        
+                                                        const newTimeStr = `${y}-${m}-${d} ${h}:${min}:${s}.${ms}`;
+                                                        
+                                                        // Формируем новую строку
+                                                        // Мы не меняем исходный текст лога, а рендерим его части
+                                                        const level = log.includes('✓') ? 'info' : (log.includes('✗') || log.includes('Ошибка') ? 'error' : 'info');
+                                                        html += `<div class="log-entry">
+                                                                    <span class="log-timestamp" style="color:#666; margin-right:5px;">${newTimeStr}</span>
+                                                                    <span class="log-level ${level}">${level.toUpperCase()}</span>
+                                                                    ${content.substring(3)} 
+                                                                 </div>`;
+                                                        return; // переходим к следующей итерации
+                                                    }
+                                                } catch(e) {
+                                                    console.error("Date parse error", e);
+                                                }
+                                            }
+                                            
+                                            // Fallback если не удалось распарсить
                                             const level = log.includes('✓') ? 'info' : (log.includes('✗') || log.includes('Ошибка') ? 'error' : 'info');
                                             html += `<div class="log-entry"><span class="log-level ${level}">${level.toUpperCase()}</span>${log}</div>`;
                                         });
                                         debugMessages.innerHTML = html;
+                                        // Фильтрация теперь на сервере, клиентская не нужна
                                     } else {
-                                        debugMessages.innerHTML = '<div style="color: #999;">Логов пока нет</div>';
+                                        debugMessages.innerHTML = '<div style="color: #999;">Логов пока нет (или не найдено по фильтру)</div>';
                                     }
                                 })
                                 .catch(err => {
-                                    debugMessages.innerHTML = '<div style="color: #ff6b6b;">Ошибка загрузки логов: ' + err + '</div>';
+                                    debugMessages.innerHTML = '<div style="color: #ff6b6b;">Ошибка загрузки логов: ' + err.message + '</div>';
                                 });
                         }
                         
@@ -800,41 +960,126 @@ class journal2ct_web(object):
         return "Hello World!"
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     @cherrypy.expose
-    def debug_logs(self):
+    def debug_logs(self, filter_text=None, limit=100):
         """API endpoint для получения отладочных логов"""
-        cherrypy.response.headers['Content-Type']           =   'application/json; charset=utf-8'
-        
-        debug_logs_list                                     =   []
-        
-        # Читаем последние записи из логов StateManager
         try:
-            from src.state_manager import state_manager
+            cherrypy.response.headers['Content-Type']           =   'application/json; charset=utf-8'
             
-            # Получаем последние записи из БД для отладки
-            with state_manager.conn_lock:
-                import sqlite3
-                conn                                        =   sqlite3.connect(state_manager.db_path, check_same_thread=False)
-                cursor                                      =   conn.cursor()
+            # Параметры запроса
+            try:
+                limit_int                                   =   int(limit)
+                if limit_int < 1: limit_int = 100
+                if limit_int > 10000: limit_int = 10000
+            except:
+                limit_int                                   =   100
+            
+            debug_logs_list                                     =   []
+            
+            # Если отладка выключена, возвращаем пустой список
+            if not g.debug.on:
+                return json.dumps({'logs': ['Отладка выключена'], 'success': True}, ensure_ascii=False).encode('utf-8')
+            
+            # Пробуем прочитать последние строки из файла отладочного лога
+            try:
+                import os
+                import re
                 
-                # Получаем последние 50 записей
-                cursor.execute('''
-                    SELECT basename, record_count, timestamp, filename 
-                    FROM committed_blocks 
-                    ORDER BY timestamp DESC 
-                    LIMIT 50
-                ''')
-                rows                                        =   cursor.fetchall()
-                conn.close()
+                # t.debug_print(f"debug_logs: g.debug.filename = {g.debug.filename}", "cherry")
                 
-                for row in rows:
-                    basename, record_count, timestamp, filename = row
-                    log_msg                                 =   f"[{timestamp}] ✓ Logged block: basename={basename}, records={record_count}, file={filename}"
-                    debug_logs_list.append(log_msg)
-        except Exception as e:
-            debug_logs_list.append(f"✗ Ошибка получения логов: {str(e)}")
+                if not g.debug.filename:
+                    debug_logs_list.append("⚠ Файл логов не настроен (g.debug.filename пуст)")
+                elif not os.path.exists(g.debug.filename):
+                    debug_logs_list.append(f"⚠ Файл логов не найден: {g.debug.filename}")
+                else:
+                    # Компилируем regex, если передан
+                    filter_re = None
+                    if filter_text:
+                        try:
+                            filter_re = re.compile(filter_text, re.IGNORECASE)
+                        except:
+                            # Если regex невалидный, будем искать как подстроку
+                            pass
+                    
+                    # Читаем файл
+                    # Оптимизация: если фильтра нет, читаем последние limit строк
+                    # Если фильтр есть, читаем больше (до 50000 строк с конца), чтобы найти limit подходящих
+                    
+                    read_limit                              =   limit_int if not filter_text else 50000
+                    
+                    with open(g.debug.filename, 'r', encoding='utf-8', errors='ignore') as f:
+                        # Читаем все строки. Для очень больших файлов это может быть медленно,
+                        # но в рамках текущей архитектуры (file.readlines) это безопасно.
+                        # Если нужно супер-быстро, надо использовать deque(f, limit) или seek
+                        all_lines                           =   f.readlines()
+                        
+                        # Если фильтра нет - берем последние limit
+                        if not filter_text:
+                             last_lines                     =   all_lines[-limit_int:] if len(all_lines) > limit_int else all_lines
+                             # Разворачиваем, чтобы новые были сверху
+                             for line in reversed(last_lines):
+                                 if line.strip(): debug_logs_list.append(line.strip())
+                        
+                        else:
+                            # Если фильтр есть - идем с конца и ищем совпадения
+                            count                           =   0
+                            temp_list                       =   []
+                            # Перебираем с конца
+                            for line in reversed(all_lines):
+                                line_clean                  =   line.strip()
+                                if not line_clean: continue
+                                
+                                match                       =   False
+                                if filter_re:
+                                    if filter_re.search(line_clean): match = True
+                                elif filter_text.lower() in line_clean.lower():
+                                    match                   =   True
+                                    
+                                if match:
+                                    temp_list.append(line_clean)
+                                    count                   +=  1
+                                    if count >= limit_int: break
+                                    
+                                # Защита от слишком долгого поиска (если просмотрели 50000 строк и не нашли)
+                                # Для readlines() это уже не важно (все в памяти), но логически верно
+                            
+                            # temp_list уже содержит записи от новых к старым
+                            debug_logs_list                 =   temp_list
+                    
+                    if not debug_logs_list:
+                        if filter_text:
+                            debug_logs_list.append(f"📝 По фильтру '{filter_text}' ничего не найдено (в последних строках)")
+                        else:
+                            debug_logs_list.append("📝 Файл логов пуст")
+                        
+            except Exception as e:
+                import traceback
+                error_msg                                       =   f"✗ Ошибка чтения файла логов: {str(e)}"
+                t.debug_print(error_msg + "\n" + traceback.format_exc(), "cherry")
+                debug_logs_list.append(error_msg)
+            
+            if not debug_logs_list:
+                debug_logs_list.append("📝 Логов пока нет")
+            
+            t.debug_print(f"debug_logs: returning {len(debug_logs_list)} log entries", "cherry")
+            
+            result                                              =   {'logs': debug_logs_list, 'success': True}
+            
+            try:
+                return json.dumps(result, ensure_ascii=False).encode('utf-8')
+            except Exception as json_err:
+                # Если не удалось сериализовать в JSON, возвращаем безопасный ответ
+                t.debug_print(f"✗ Ошибка JSON сериализации: {str(json_err)}", "cherry")
+                return json.dumps({'logs': [f'Ошибка сериализации: {str(json_err)}'], 'success': False}, ensure_ascii=False).encode('utf-8')
         
-        result                                              =   {'logs': debug_logs_list}
-        return json.dumps(result, ensure_ascii=False, indent=2)
+        except Exception as top_err:
+            # Гарантируем возврат корректного JSON в любом случае
+            import traceback
+            t.debug_print(f"✗ Критическая ошибка в debug_logs: {str(top_err)}\n{traceback.format_exc()}", "cherry")
+            cherrypy.response.headers['Content-Type']           =   'application/json; charset=utf-8'
+            return json.dumps({
+                'logs'      :   [f'Критическая ошибка: {str(top_err)}'],
+                'success'   :   False
+            }, ensure_ascii=False).encode('utf-8')
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     @cherrypy.expose
     def stats_api(self):
@@ -927,7 +1172,80 @@ class journal2ct_web(object):
                                                                     'percent'       :   percent
                                                                 })
         
-        return json.dumps(stats_data, ensure_ascii=False, indent=2)
+        return json.dumps(stats_data, ensure_ascii=False, indent=2).encode('utf-8')
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    @cherrypy.expose
+    def set_debug(self, enabled=None):
+        """API endpoint для управления флагом отладки"""
+        cherrypy.response.headers['Content-Type']           =   'application/json; charset=utf-8'
+        
+        try:
+            if enabled is not None:
+                # Преобразуем строковое значение в boolean
+                new_debug_state                             =   str(enabled).lower() in ('true', '1', 't', 'y', 'yes')
+                
+                # Логируем изменение статуса (ДО изменения g.debug.on, чтобы всегда логировалось)
+                old_state                                   =   g.debug.on
+                status_msg                                  =   f"🔧 Изменение статуса отладки: {old_state} → {new_debug_state}"
+                if old_state:
+                    t.debug_print(status_msg, "cherry")
+                
+                # Обновляем глобальную переменную отладки
+                g.debug.on                                  =   new_debug_state
+                
+                # Логируем после изменения (если отладка была выключена, теперь включена)
+                if not old_state and new_debug_state:
+                    t.debug_print(status_msg, "cherry")
+                
+                # Обновляем переменную окружения для будущих потоков
+                import os
+                os.environ['DEBUG_ENABLED']                 =   'True' if new_debug_state else 'False'
+                
+                # Сохраняем в .env файл
+                env_path                                    =   os.path.join(g.execution.self_dir, '.env')
+                try:
+                    # Читаем текущий .env файл
+                    env_lines                               =   []
+                    debug_found                             =   False
+                    
+                    if os.path.exists(env_path):
+                        with open(env_path, 'r', encoding='utf-8') as f:
+                            for line in f:
+                                if line.strip().startswith('DEBUG_ENABLED='):
+                                    env_lines.append(f'DEBUG_ENABLED={"True" if new_debug_state else "False"}\n')
+                                    debug_found         =   True
+                                else:
+                                    env_lines.append(line)
+                    
+                    # Если переменная не найдена, добавляем её
+                    if not debug_found:
+                        env_lines.append(f'DEBUG_ENABLED={"True" if new_debug_state else "False"}\n')
+                    
+                    # Записываем обратно в файл
+                    with open(env_path, 'w', encoding='utf-8') as f:
+                        f.writelines(env_lines)
+                    
+                    t.debug_print(f"✓ Отладка {'включена' if new_debug_state else 'выключена'} и сохранена в .env", "cherry")
+                except Exception as env_err:
+                    t.debug_print(f"⚠ Не удалось сохранить в .env: {str(env_err)}, но отладка {'включена' if new_debug_state else 'выключена'}", "cherry")
+                
+                return json.dumps({
+                    'success'       :   True,
+                    'debug_enabled' :   g.debug.on,
+                    'message'       :   f"Отладка {'включена' if g.debug.on else 'выключена'}"
+                }, ensure_ascii=False).encode('utf-8')
+            else:
+                # Возвращаем текущее состояние
+                return json.dumps({
+                    'success'       :   True,
+                    'debug_enabled' :   g.debug.on
+                }, ensure_ascii=False).encode('utf-8')
+        except Exception as e:
+            t.debug_print(f"✗ Ошибка изменения режима отладки: {str(e)}", "cherry")
+            return json.dumps({
+                'success'   :   False,
+                'error'     :   str(e)
+            }, ensure_ascii=False).encode('utf-8')
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     @cherrypy.expose
     def show(self, length=9):
@@ -969,13 +1287,14 @@ class cherry_thread(threading.Thread):
             
             cherrypy.config.update({'server.socket_host'        :   g.conf.http.listen_interface})
             cherrypy.config.update({'server.socket_port'        :   int(g.conf.http.listen_port)})
-            cherrypy.config.update({'log.screen'                :   False})
+            cherrypy.config.update({'log.screen'                :   g.execution.running_in_console})
             
             t.debug_print(f"✓ CherryPy запущен на http://{g.conf.http.listen_interface}:{g.conf.http.listen_port}/", self.name)
             t.debug_print(f"✓ Веб-панель мониторинга: http://{g.conf.http.listen_interface}:{g.conf.http.listen_port}/", self.name)
             t.debug_print(f"✓ JSON API статистики: http://{g.conf.http.listen_interface}:{g.conf.http.listen_port}/stats_api", self.name)
             
-            cherrypy.quickstart(journal2ct_web())
+            conf                                                =   {'/': {}}
+            cherrypy.quickstart(nikita_web(), config=conf)
         except Exception as e:
             t.debug_print(f"✗ Ошибка запуска CherryPy: {str(e)}", self.name)
             import traceback
