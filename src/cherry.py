@@ -863,7 +863,7 @@ class nikita_web(object):
             
             # Если отладка выключена, возвращаем пустой список
             if not g.debug.on:
-                return json.dumps({'logs': ['Отладка выключена'], 'success': True}, ensure_ascii=False)
+                return json.dumps({'logs': ['Отладка выключена'], 'success': True}, ensure_ascii=False).encode('utf-8')
             
             # Пробуем прочитать последние строки из файла отладочного лога
             try:
@@ -909,11 +909,11 @@ class nikita_web(object):
             result                                              =   {'logs': debug_logs_list, 'success': True}
             
             try:
-                return json.dumps(result, ensure_ascii=False)
+                return json.dumps(result, ensure_ascii=False).encode('utf-8')
             except Exception as json_err:
                 # Если не удалось сериализовать в JSON, возвращаем безопасный ответ
                 t.debug_print(f"✗ Ошибка JSON сериализации: {str(json_err)}", "cherry")
-                return json.dumps({'logs': [f'Ошибка сериализации: {str(json_err)}'], 'success': False}, ensure_ascii=False)
+                return json.dumps({'logs': [f'Ошибка сериализации: {str(json_err)}'], 'success': False}, ensure_ascii=False).encode('utf-8')
         
         except Exception as top_err:
             # Гарантируем возврат корректного JSON в любом случае
@@ -923,7 +923,7 @@ class nikita_web(object):
             return json.dumps({
                 'logs'      :   [f'Критическая ошибка: {str(top_err)}'],
                 'success'   :   False
-            }, ensure_ascii=False)
+            }, ensure_ascii=False).encode('utf-8')
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     @cherrypy.expose
     def stats_api(self):
@@ -1016,7 +1016,7 @@ class nikita_web(object):
                                                                     'percent'       :   percent
                                                                 })
         
-        return json.dumps(stats_data, ensure_ascii=False, indent=2)
+        return json.dumps(stats_data, ensure_ascii=False, indent=2).encode('utf-8')
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     @cherrypy.expose
     def set_debug(self, enabled=None):
@@ -1077,19 +1077,19 @@ class nikita_web(object):
                     'success'       :   True,
                     'debug_enabled' :   g.debug.on,
                     'message'       :   f"Отладка {'включена' if g.debug.on else 'выключена'}"
-                }, ensure_ascii=False)
+                }, ensure_ascii=False).encode('utf-8')
             else:
                 # Возвращаем текущее состояние
                 return json.dumps({
                     'success'       :   True,
                     'debug_enabled' :   g.debug.on
-                }, ensure_ascii=False)
+                }, ensure_ascii=False).encode('utf-8')
         except Exception as e:
             t.debug_print(f"✗ Ошибка изменения режима отладки: {str(e)}", "cherry")
             return json.dumps({
                 'success'   :   False,
                 'error'     :   str(e)
-            }, ensure_ascii=False)
+            }, ensure_ascii=False).encode('utf-8')
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     @cherrypy.expose
     def show(self, length=9):
