@@ -602,8 +602,12 @@ def start_all(wait=False):
         g.threads.sender.start()
 
         # ~~~~~~~ до парсера надо дёрнуть словари ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        for ib in g.parser.ibases:
-            d.read_ib_dictionary(ib['ibase_name'])
+        if len(g.parser.ibases) > 0:
+            t.debug_print(f"Reading dictionaries for {len(g.parser.ibases)} bases...")
+            for ib in g.parser.ibases:
+                t.debug_print(f"Reading dictionary for {ib['ibase_name']}...")
+                d.read_ib_dictionary(ib['ibase_name'])
+                t.debug_print(f"✓ Dictionary for {ib['ibase_name']} loaded")
         # ~~~~~~~ создаю и запускаю потоки парсеров ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         g.threads.parser                                    =   p.parser("lgp")
         g.threads.parser.start(); # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -622,6 +626,7 @@ def start_all(wait=False):
         # ~~~~~~~ создаю и запускаю потоки парсеров для нового формата ЖР ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         #g.threads.parser_new2                                =   p.parser("lgd")
         #g.threads.parser_new2.start(); # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        t.debug_print("✓ SERVICE STARTED AND READY")
         while wait:
             time.sleep(g.waits.in_cycle_we_trust)
     except Exception as e:

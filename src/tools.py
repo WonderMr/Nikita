@@ -66,7 +66,7 @@ class tools():
             dp_msg                                          =   dp_dt + ":::" + dp_thread + ":::" + dp_msg
             # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             if g.execution.running_in_console:
-                print(dp_msg)
+                print(dp_msg, flush=True)
             #else:
             #    servicemanager.LogErrorMsg(dp_msg)
             # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

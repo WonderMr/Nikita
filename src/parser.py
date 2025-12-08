@@ -138,6 +138,8 @@ class parser(threading.Thread):
             if (self.name.upper()).find('LGD')              >   0:                                                      # если новый формат ЖР
                 regexp                                      =   g.rexp.is_lgD_file_re                                   # если новый формат ЖР
             while True:
+                if g.debug.on:
+                     t.debug_print("Scanning for log files...", self.name)
                 g.parser.ibases_lpf_files                   =   []
                 local_list                                  =   []
                 for ibase in g.parser.ibases:                                                                           # по всем базам
