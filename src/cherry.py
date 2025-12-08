@@ -314,11 +314,17 @@ class nikita_web(object):
         top_bar                                             +=  '<span class="slider round"></span>'
         top_bar                                             +=  '</label>'
         top_bar                                             +=  '</div>'
-
-        # Log Filter
-        top_bar                                             +=  '<div style="display: flex; align-items: center; margin-right: 20px;" title="Фильтрация строк лога. Поддерживаются регулярные выражения (например: error|fail, ^\[.*\]).">'
+        
+        # Debug Controls (Filter & Limit) - initially hidden
+        top_bar                                             +=  '<div id="debugControls" style="display: none; align-items: center; margin-right: 20px;">'
+        top_bar                                             +=  '<div style="display: flex; align-items: center; margin-right: 15px;" title="Фильтрация строк лога (серверная). Поддерживаются регулярные выражения.">'
         top_bar                                             +=  '<span>🔍 Фильтр:</span>'
         top_bar                                             +=  '<input type="text" id="logFilter" placeholder="Regex..." style="margin-left: 5px; padding: 2px 5px; border: 1px solid #ccc; border-radius: 4px; width: 150px;">'
+        top_bar                                             +=  '</div>'
+        top_bar                                             +=  '<div style="display: flex; align-items: center;" title="Количество последних найденных строк">'
+        top_bar                                             +=  '<span>🔢 Строк:</span>'
+        top_bar                                             +=  '<input type="number" id="logLimit" value="100" min="10" max="10000" style="margin-left: 5px; padding: 2px 5px; border: 1px solid #ccc; border-radius: 4px; width: 60px;">'
+        top_bar                                             +=  '</div>'
         top_bar                                             +=  '</div>'
 
         # Units
@@ -750,41 +756,31 @@ class nikita_web(object):
                         const debugBlock = document.getElementById('debugBlock');
                         const debugMessages = document.getElementById('debugMessages');
                         const logFilter = document.getElementById('logFilter');
+                        const logLimit = document.getElementById('logLimit');
+                        const debugControls = document.getElementById('debugControls');
                         
-                        function applyFilter() {
+                        function updateFilterUI() {
                             const val = logFilter.value;
-                            const rows = debugMessages.querySelectorAll('.log-entry');
-                            let re = null;
                             try {
-                                re = new RegExp(val, 'i');
+                                if (val) new RegExp(val, 'i');
                                 logFilter.style.borderColor = '#ccc';
-                                logFilter.title = "Фильтрация строк лога. Поддерживаются регулярные выражения.";
+                                logFilter.title = "Фильтрация строк лога (серверная).";
                             } catch (e) {
                                 logFilter.style.borderColor = '#ff6b6b';
                                 logFilter.title = "Ошибка в регулярном выражении: " + e.message;
                             }
-                            
-                            rows.forEach(row => {
-                                if (!val) {
-                                    row.style.display = '';
-                                } else if (re) {
-                                     if (re.test(row.textContent)) {
-                                        row.style.display = '';
-                                     } else {
-                                        row.style.display = 'none';
-                                     }
-                                } else {
-                                    // Fallback для невалидного regex - ищем подстроку
-                                    if (row.textContent.toLowerCase().includes(val.toLowerCase())) {
-                                        row.style.display = '';
-                                    } else {
-                                        row.style.display = 'none';
-                                    }
-                                }
-                            });
                         }
 
-                        logFilter.addEventListener('input', applyFilter);
+                        // При изменении фильтра или лимита перезагружаем логи
+                        let filterTimeout;
+                        function debouncedLoad() {
+                            clearTimeout(filterTimeout);
+                            updateFilterUI();
+                            filterTimeout = setTimeout(loadDebugLogs, 500);
+                        }
+
+                        logFilter.addEventListener('input', debouncedLoad);
+                        logLimit.addEventListener('change', loadDebugLogs);
                         
                         // Загружаем состояние с сервера
                         fetch('/set_debug')
@@ -801,6 +797,7 @@ class nikita_web(object):
                                     // Если отладка включена при загрузке, выключаем автообновление
                                     if (data.debug_enabled) {
                                         debugBlock.style.display = 'block';
+                                        debugControls.style.display = 'flex';
                                         if (checkbox.checked) {
                                             checkbox.checked = false;
                                             updateTimer();
@@ -816,6 +813,7 @@ class nikita_web(object):
                         debugToggle.addEventListener('change', function() {
                             const enabled = this.checked;
                             debugBlock.style.display = enabled ? 'block' : 'none';
+                            debugControls.style.display = enabled ? 'flex' : 'none';
                             
                             // Если включаем отладку, выключаем автообновление
                             if (enabled && checkbox.checked) {
@@ -848,7 +846,10 @@ class nikita_web(object):
                         
                         // Функция загрузки логов
                         function loadDebugLogs() {
-                            fetch('/debug_logs')
+                            const filterVal = encodeURIComponent(logFilter.value);
+                            const limitVal = logLimit.value;
+                            
+                            fetch(`/debug_logs?filter_text=${filterVal}&limit=${limitVal}`)
                                 .then(response => {
                                     if (!response.ok) {
                                         throw new Error('Network response was not ok');
@@ -863,9 +864,9 @@ class nikita_web(object):
                                             html += `<div class="log-entry"><span class="log-level ${level}">${level.toUpperCase()}</span>${log}</div>`;
                                         });
                                         debugMessages.innerHTML = html;
-                                        applyFilter();
+                                        // Фильтрация теперь на сервере, клиентская не нужна
                                     } else {
-                                        debugMessages.innerHTML = '<div style="color: #999;">Логов пока нет</div>';
+                                        debugMessages.innerHTML = '<div style="color: #999;">Логов пока нет (или не найдено по фильтру)</div>';
                                     }
                                 })
                                 .catch(err => {
@@ -897,10 +898,18 @@ class nikita_web(object):
         return "Hello World!"
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     @cherrypy.expose
-    def debug_logs(self):
+    def debug_logs(self, filter_text=None, limit=100):
         """API endpoint для получения отладочных логов"""
         try:
             cherrypy.response.headers['Content-Type']           =   'application/json; charset=utf-8'
+            
+            # Параметры запроса
+            try:
+                limit_int                                   =   int(limit)
+                if limit_int < 1: limit_int = 100
+                if limit_int > 10000: limit_int = 10000
+            except:
+                limit_int                                   =   100
             
             debug_logs_list                                     =   []
             
@@ -911,32 +920,72 @@ class nikita_web(object):
             # Пробуем прочитать последние строки из файла отладочного лога
             try:
                 import os
+                import re
                 
-                t.debug_print(f"debug_logs: g.debug.filename = {g.debug.filename}", "cherry")
+                # t.debug_print(f"debug_logs: g.debug.filename = {g.debug.filename}", "cherry")
                 
                 if not g.debug.filename:
                     debug_logs_list.append("⚠ Файл логов не настроен (g.debug.filename пуст)")
-                    t.debug_print("debug_logs: filename is empty", "cherry")
                 elif not os.path.exists(g.debug.filename):
                     debug_logs_list.append(f"⚠ Файл логов не найден: {g.debug.filename}")
-                    t.debug_print(f"debug_logs: file not found {g.debug.filename}", "cherry")
                 else:
-                    t.debug_print(f"debug_logs: reading file {g.debug.filename}", "cherry")
-                    # Читаем последние 100 строк из файла
+                    # Компилируем regex, если передан
+                    filter_re = None
+                    if filter_text:
+                        try:
+                            filter_re = re.compile(filter_text, re.IGNORECASE)
+                        except:
+                            # Если regex невалидный, будем искать как подстроку
+                            pass
+                    
+                    # Читаем файл
+                    # Оптимизация: если фильтра нет, читаем последние limit строк
+                    # Если фильтр есть, читаем больше (до 50000 строк с конца), чтобы найти limit подходящих
+                    
+                    read_limit = limit_int if not filter_text else 50000
+                    
                     with open(g.debug.filename, 'r', encoding='utf-8', errors='ignore') as f:
-                        all_lines                               =   f.readlines()
-                        last_lines                              =   all_lines[-100:] if len(all_lines) > 100 else all_lines
+                        # Читаем все строки. Для очень больших файлов это может быть медленно,
+                        # но в рамках текущей архитектуры (file.readlines) это безопасно.
+                        # Если нужно супер-быстро, надо использовать deque(f, limit) или seek
+                        all_lines = f.readlines()
                         
-                        t.debug_print(f"debug_logs: read {len(last_lines)} lines", "cherry")
+                        # Если фильтра нет - берем последние limit
+                        if not filter_text:
+                             last_lines = all_lines[-limit_int:] if len(all_lines) > limit_int else all_lines
+                             for line in last_lines:
+                                 if line.strip(): debug_logs_list.append(line.strip())
                         
-                        for line in last_lines:
-                            line                                =   line.strip()
-                            if line:
-                                debug_logs_list.append(line)
+                        else:
+                            # Если фильтр есть - идем с конца и ищем совпадения
+                            count = 0
+                            temp_list = []
+                            # Перебираем с конца
+                            for line in reversed(all_lines):
+                                line_clean = line.strip()
+                                if not line_clean: continue
+                                
+                                match = False
+                                if filter_re:
+                                    if filter_re.search(line_clean): match = True
+                                elif filter_text.lower() in line_clean.lower():
+                                    match = True
+                                    
+                                if match:
+                                    temp_list.append(line_clean)
+                                    count += 1
+                                    if count >= limit_int: break
+                                    
+                                # Защита от слишком долгого поиска (если просмотрели 50000 строк и не нашли)
+                                # Для readlines() это уже не важно (все в памяти), но логически верно
+                            
+                            debug_logs_list = list(reversed(temp_list))
                     
                     if not debug_logs_list:
-                        debug_logs_list.append("📝 Файл логов пуст")
-                        t.debug_print("debug_logs: file is empty", "cherry")
+                        if filter_text:
+                            debug_logs_list.append(f"📝 По фильтру '{filter_text}' ничего не найдено (в последних строках)")
+                        else:
+                            debug_logs_list.append("📝 Файл логов пуст")
                         
             except Exception as e:
                 import traceback
