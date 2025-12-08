@@ -51,7 +51,6 @@ class nikita_web(object):
         stats_block                                         +=  '<span class="cell">ClickHouse</span>'
         stats_block                                         +=  '<span class="cell">Solr</span>'
         stats_block                                         +=  '<span class="cell">Redis</span>'
-        stats_block                                         +=  '<span class="cell">Хост</span>'
         stats_block                                         +=  '<span class="cell">БД</span>'
         stats_block                                         +=  '<span class="cell">Записей<br>(с запуска)</span>'
         stats_block                                         +=  '<span class="cell">Ошибок<br>(с запуска)</span>'
@@ -63,7 +62,7 @@ class nikita_web(object):
         # ClickHouse Status
         if g.conf.clickhouse.enabled:
             ch_icon                                         =   "🟢" if g.stats.clickhouse_connection_ok else "🔴"
-            ch_text                                         =   "Подключено" if g.stats.clickhouse_connection_ok else "Ошибка"
+            ch_text                                         =   f"{g.conf.clickhouse.host}:{g.conf.clickhouse.port}" if g.stats.clickhouse_connection_ok else "Ошибка"
             stats_block                                     +=  f'<span class="cell">{ch_icon} {ch_text}</span>'
         else:
             stats_block                                     +=  '<span class="cell disabled">Отключено</span>'
@@ -71,7 +70,7 @@ class nikita_web(object):
         # Solr Status
         if g.conf.solr.enabled:
             solr_icon                                       =   "🟢" if g.stats.solr_connection_ok else "🔴"
-            solr_text                                       =   "Подключено" if g.stats.solr_connection_ok else "Ошибка"
+            solr_text                                       =   f"{g.conf.solr.solr_host}:{g.conf.solr.solr_port}" if g.stats.solr_connection_ok else "Ошибка"
             stats_block                                     +=  f'<span class="cell">{solr_icon} {solr_text}</span>'
         else:
             stats_block                                     +=  '<span class="cell disabled">Отключено</span>'
@@ -79,20 +78,11 @@ class nikita_web(object):
         # Redis Status
         if g.conf.redis.enabled:
             redis_icon                                      =   "🟢" if g.stats.redis_connection_ok else "🔴"
-            redis_text                                      =   "Подключено" if g.stats.redis_connection_ok else "Ошибка"
+            redis_text                                      =   f"{g.conf.redis.host}:{g.conf.redis.port}" if g.stats.redis_connection_ok else "Ошибка"
             stats_block                                     +=  f'<span class="cell">{redis_icon} {redis_text}</span>'
         else:
             stats_block                                     +=  '<span class="cell disabled">Отключено</span>'
         
-        # Хосты (только для включенных сервисов)
-        hosts_list                                          =   []
-        if g.conf.clickhouse.enabled:
-            hosts_list.append(f'{g.conf.clickhouse.host}:{g.conf.clickhouse.port}')
-        if g.conf.solr.enabled:
-            hosts_list.append(f'{g.conf.solr.solr_host}:{g.conf.solr.solr_port}')
-        if g.conf.redis.enabled:
-            hosts_list.append(f'{g.conf.redis.host}:{g.conf.redis.port}')
-        stats_block                                         +=  f'<span class="cell">{("<br>".join(hosts_list)) if hosts_list else "-"}</span>'
         
         # Базы данных (только для включенных сервисов)
         db_list                                             =   []
@@ -406,7 +396,7 @@ class nikita_web(object):
                     }
                     .stats-table .row {
                         display: grid;
-                        grid-template-columns: 1fr 1fr 1fr 2fr 1.5fr 1.5fr 1fr;
+                        grid-template-columns: 1fr 1fr 1fr 1.5fr 1.5fr 1fr;
                         border-bottom: 1px solid #eee;
                     }
                     .stats-table .row.header {
