@@ -766,12 +766,14 @@ class parser(threading.Thread):
                                                                 )                                                       # add 2019.02.15 для https://github.com/WonderMr/Journal2Ct/issues/40
                     file_state['filesizeread']              =   int(file_state['filesizeread']) + \
                                                                 len(self.json_data[self.name])
+                    # сохраняем копию данных для логирования, так как solr_post_json_data очистит список
+                    records_to_log                          =   list(self.json_data[self.name])
                     self.solr_post_json_data(pf_base)
                     state_manager.log_committed_block(
                         pf_name,
                         batch_start_offset,
                         file_state['filesizeread'],
-                        self.json_data[self.name],
+                        records_to_log,
                         pf_base
                     )
                     state_manager.update_file_state(file_state['filename'], file_state['filesize'], file_state['filesizeread'])
@@ -942,12 +944,13 @@ class parser(threading.Thread):
                                         self.name
                                     )
                                     block_commit_start      =   time.time()
+                                records_to_log              =   list(self.json_data[self.name])                         # сохраняем копию перед отправкой
                                 self.solr_post_json_data(pf_base)                                                       # отправляем данные
                                 state_manager.log_committed_block(
                                     pf_name,
                                     batch_start_offset,
                                     file_state['filesizeread'],
-                                    self.json_data[self.name],
+                                    records_to_log,
                                     pf_base
                                 )
                                 state_manager.update_file_state(file_state['filename'], file_state['filesize'], file_state['filesizeread'])
@@ -970,7 +973,9 @@ class parser(threading.Thread):
                                                                                 self.name
                                                                             )                                           # add 2019.02.15 для https://github.com/WonderMr/Journal2Ct/issues/40
                             file_state['filesizeread']      =   pf_size                                                 # закрываем чтение
+                            records_to_log                  =   []
                             if(len(self.json_data[self.name])>  0):                                                     # если есть неотправленные данные
+                                records_to_log              =   list(self.json_data[self.name])                         # сохраняем копию
                                 if block_time_start:
                                     t.debug_print("Block tooked before commit " + str(time.time() - block_commit_start))
                                     block_commit_start      =   time.time()
@@ -983,7 +988,7 @@ class parser(threading.Thread):
                                 pf_name,
                                 batch_start_offset,
                                 file_state['filesizeread'],
-                                self.json_data[self.name],
+                                records_to_log,
                                 pf_base
                             )
                             state_manager.update_file_state(file_state['filename'], file_state['filesize'], file_state['filesizeread'])
