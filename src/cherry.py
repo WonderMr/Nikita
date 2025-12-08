@@ -315,6 +315,12 @@ class nikita_web(object):
         top_bar                                             +=  '</label>'
         top_bar                                             +=  '</div>'
 
+        # Log Filter
+        top_bar                                             +=  '<div style="display: flex; align-items: center; margin-right: 20px;" title="Фильтрация строк лога. Поддерживаются регулярные выражения (например: error|fail, ^\[.*\]).">'
+        top_bar                                             +=  '<span>🔍 Фильтр:</span>'
+        top_bar                                             +=  '<input type="text" id="logFilter" placeholder="Regex..." style="margin-left: 5px; padding: 2px 5px; border: 1px solid #ccc; border-radius: 4px; width: 150px;">'
+        top_bar                                             +=  '</div>'
+
         # Units
         top_bar                                             +=  '<div class="units-controls" style="display: flex; align-items: center;">'
         top_bar                                             +=  '<span style="margin-right: 10px;">Единицы:</span>'
@@ -743,6 +749,42 @@ class nikita_web(object):
                         // --- Отладка ---
                         const debugBlock = document.getElementById('debugBlock');
                         const debugMessages = document.getElementById('debugMessages');
+                        const logFilter = document.getElementById('logFilter');
+                        
+                        function applyFilter() {
+                            const val = logFilter.value;
+                            const rows = debugMessages.querySelectorAll('.log-entry');
+                            let re = null;
+                            try {
+                                re = new RegExp(val, 'i');
+                                logFilter.style.borderColor = '#ccc';
+                                logFilter.title = "Фильтрация строк лога. Поддерживаются регулярные выражения.";
+                            } catch (e) {
+                                logFilter.style.borderColor = '#ff6b6b';
+                                logFilter.title = "Ошибка в регулярном выражении: " + e.message;
+                            }
+                            
+                            rows.forEach(row => {
+                                if (!val) {
+                                    row.style.display = '';
+                                } else if (re) {
+                                     if (re.test(row.textContent)) {
+                                        row.style.display = '';
+                                     } else {
+                                        row.style.display = 'none';
+                                     }
+                                } else {
+                                    // Fallback для невалидного regex - ищем подстроку
+                                    if (row.textContent.toLowerCase().includes(val.toLowerCase())) {
+                                        row.style.display = '';
+                                    } else {
+                                        row.style.display = 'none';
+                                    }
+                                }
+                            });
+                        }
+
+                        logFilter.addEventListener('input', applyFilter);
                         
                         // Загружаем состояние с сервера
                         fetch('/set_debug')
@@ -821,6 +863,7 @@ class nikita_web(object):
                                             html += `<div class="log-entry"><span class="log-level ${level}">${level.toUpperCase()}</span>${log}</div>`;
                                         });
                                         debugMessages.innerHTML = html;
+                                        applyFilter();
                                     } else {
                                         debugMessages.innerHTML = '<div style="color: #999;">Логов пока нет</div>';
                                     }
