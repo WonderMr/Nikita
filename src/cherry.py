@@ -743,10 +743,29 @@ class nikita_web(object):
                         
                         tzSelect.value = currentOffset;
                         
-                        tzSelect.addEventListener('change', function() {
-                            const offset = parseInt(this.value);
-                            localStorage.setItem('nikita_timezone', offset);
+                        // Функция обновления временных меток в логах и статистике
+                        function updateAllTimes() {
+                            const offset = parseInt(currentOffset);
+                            // Обновляем статистику
                             updateTimes(offset);
+                            // Обновляем логи (если есть)
+                            document.querySelectorAll('.log-timestamp').forEach(el => {
+                                const ts = el.getAttribute('data-ts');
+                                if (ts) {
+                                     // Для логов логика та же, если есть атрибут
+                                     // Но логи приходят готовым текстом, нам нужно парсить их
+                                }
+                            });
+                        }
+
+                        tzSelect.addEventListener('change', function() {
+                            currentOffset = parseInt(this.value);
+                            localStorage.setItem('nikita_timezone', currentOffset);
+                            updateTimes(currentOffset);
+                            // Перезагружаем логи, чтобы применился новый пояс (клиентский парсинг сложнее)
+                            if (debugToggle.checked) {
+                                loadDebugLogs();
+                            }
                         });
                         
                         // Инициализация времени
@@ -859,7 +878,59 @@ class nikita_web(object):
                                 .then(data => {
                                     if (data.success && data.logs && data.logs.length > 0) {
                                         let html = '';
+                                        const offset = parseInt(localStorage.getItem('nikita_timezone') || "3");
+                                        
                                         data.logs.forEach(log => {
+                                            // Пытаемся распарсить дату из строки лога: [YYYY-MM-DD HH:MM:SS.mmm]
+                                            let displayLog = log;
+                                            const match = log.match(/^\[(\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}\.\d{3})\](.*)/);
+                                            
+                                            if (match) {
+                                                const timeStr = match[1];
+                                                const content = match[2];
+                                                
+                                                // Считаем время в логе как локальное время сервера
+                                                // Но так как у нас нет инфы о таймзоне сервера, считаем, что это "Server Time"
+                                                // И просто сдвигаем его, если пользователь хочет видеть "Server Time + Offset"
+                                                // Или более правильно: парсим как UTC (добавляем Z) и сдвигаем на Offset
+                                                
+                                                try {
+                                                    // Предполагаем, что логи пишутся в UTC или мы просто хотим сдвинуть отображаемое время
+                                                    // Самый простой вариант: парсим, добавляем смещение и форматируем обратно
+                                                    
+                                                    // Заменяем пробел на T для ISO
+                                                    const isoStr = timeStr.replace(' ', 'T') + 'Z'; 
+                                                    const date = new Date(isoStr);
+                                                    
+                                                    if (!isNaN(date.getTime())) {
+                                                        const targetTime = new Date(date.getTime() + (offset * 3600000));
+                                                        
+                                                        const y = targetTime.getUTCFullYear();
+                                                        const m = (targetTime.getUTCMonth() + 1).toString().padStart(2, '0');
+                                                        const d = targetTime.getUTCDate().toString().padStart(2, '0');
+                                                        const h = targetTime.getUTCHours().toString().padStart(2, '0');
+                                                        const min = targetTime.getUTCMinutes().toString().padStart(2, '0');
+                                                        const s = targetTime.getUTCSeconds().toString().padStart(2, '0');
+                                                        const ms = targetTime.getUTCMilliseconds().toString().padStart(3, '0');
+                                                        
+                                                        const newTimeStr = `${y}-${m}-${d} ${h}:${min}:${s}.${ms}`;
+                                                        
+                                                        // Формируем новую строку
+                                                        // Мы не меняем исходный текст лога, а рендерим его части
+                                                        const level = log.includes('✓') ? 'info' : (log.includes('✗') || log.includes('Ошибка') ? 'error' : 'info');
+                                                        html += `<div class="log-entry">
+                                                                    <span class="log-timestamp" style="color:#666; margin-right:5px;">[${newTimeStr}]</span>
+                                                                    <span class="log-level ${level}">${level.toUpperCase()}</span>
+                                                                    ${content}
+                                                                 </div>`;
+                                                        return; // переходим к следующей итерации
+                                                    }
+                                                } catch(e) {
+                                                    console.error("Date parse error", e);
+                                                }
+                                            }
+                                            
+                                            // Fallback если не удалось распарсить
                                             const level = log.includes('✓') ? 'info' : (log.includes('✗') || log.includes('Ошибка') ? 'error' : 'info');
                                             html += `<div class="log-entry"><span class="log-level ${level}">${level.toUpperCase()}</span>${log}</div>`;
                                         });
