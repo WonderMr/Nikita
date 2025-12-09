@@ -95,14 +95,17 @@ class solr_thread(threading.Thread):
         args                                                =   shlex.split(ss_command)
         t.debug_print("starting "+ss_command,self.name)
         # эти каталоги нужно создать, если их нету ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        if not os.path.exists(g.conf.solr.dir+"\\server\\logs"):
-            os.mkdir(g.conf.solr.dir+"\\server\\logs")
-        if not os.path.exists(g.conf.solr.dir+"\\server\\tmp"):
-            os.mkdir(g.conf.solr.dir+"\\server\\tmp")
+        solr_logs_dir                                       =   os.path.join(g.conf.solr.dir, "server", "logs")
+        solr_tmp_dir                                        =   os.path.join(g.conf.solr.dir, "server", "tmp")
+        
+        if not os.path.exists(solr_logs_dir):
+            os.makedirs(solr_logs_dir)
+        if not os.path.exists(solr_tmp_dir):
+            os.makedirs(solr_tmp_dir)
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         g.execution.solr.pid                                =   subprocess.Popen(
                                                                     args,
-                                                                    cwd=g.conf.solr.dir+"\\server"
+                                                                    cwd=os.path.join(g.conf.solr.dir, "server")
                                                                 ).pid
         # запускаю solr и получаю его pid
         solr_wakes                                          =   False
@@ -125,14 +128,14 @@ class solr_thread(threading.Thread):
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     def base_create(self, bc_name):
         try:
-            bc_dir_data                                     =   g.conf.solr.dir+"\\server\\solr\\"+bc_name+"\\conf"
+            bc_dir_data                                     =   os.path.join(g.conf.solr.dir, "server", "solr", bc_name, "conf")
             if(not os.path.exists(bc_dir_data)):
                 t.debug_print("creating "+bc_dir_data,self.name)
                 os.makedirs(bc_dir_data)
-            schema                                          =   open(bc_dir_data+"\\schema.xml",'w',encoding="UTF8")
+            schema                                          =   open(os.path.join(bc_dir_data, "schema.xml"),'w',encoding="UTF8")
             schema.write(g.conf.solr.schema)
             schema.close()
-            solrconfig                                      =   open(bc_dir_data+"\\solrconfig.xml",'w',encoding="UTF8")
+            solrconfig                                      =   open(os.path.join(bc_dir_data, "solrconfig.xml"),'w',encoding="UTF8")
             solrconfig.write(g.conf.solr.config)
             solrconfig.close()
         except Exception as e:

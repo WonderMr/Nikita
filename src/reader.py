@@ -83,13 +83,11 @@ class reader():
                         ids                                 =   []                                                      # здесь будет жить список rowID
                         fpr_exp                             =   "reversed(fpr_json) 1"
                         for each                            in  reversed(fpr_json['response']['docs']):
-                            fname                           =   each.get('id')
+                            fname                           =   each.get('file_name')
                             ids.append(each.get('pos'))
                         fpr_exp                             =   "read_lgd_data"
                         data                                =   reader.read_lgd_data(
-                                                                                    t.get_file_by_id(
-                                                                                                    fname
-                                                                                    )
+                                                                                    fname
                                                                                     ,ids)                               # здесь мы выбираем все rowID
                     else:
                         fpr_exp                             =   "reversed(fpr_json) 2"
@@ -120,7 +118,10 @@ class reader():
     # ------------------------------------------------------------------------------------------------------------------
     def read_lgd_data(rld_file,items):
         # чтение и декодирование записи ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        parsed                                             =   t.sqlite3_exec(rld_file,'''Select                                       
+        # Генерируем плейсхолдеры для безопасного запроса: ?, ?, ?
+        placeholders                                       =   ','.join('?' for _ in items)
+        
+        query                                              =   f'''Select                                       
                                                                     date,
                                                                     transactionStatus, 
                                                                     transactionDate,
@@ -140,8 +141,9 @@ class reader():
                                                                     secondaryPortCode,
                                                                     session
                                                                     from    EventLog
-                                                                    Where RowID in ''' + \
-                                                                    str(items).replace('[','(').replace(']',')'))       # выбираю сразу всю пачку
+                                                                    Where RowID in ({placeholders})'''
+                                                                    
+        parsed                                             =   t.sqlite3_exec(rld_file, query, tuple(items))       # выбираю сразу всю пачку с параметрами
         ret                                                 =   []
         if not parsed:
             return
@@ -158,7 +160,7 @@ class reader():
             data[8]                                         =   str(elem[8])
             data[9]                                         =   reader.rec_descr(d.severity[str(elem[9])])
             data[10]                                        =   str(elem[10])
-            data[11]                                        =   str(elem[11])
+            data[11]                                        =   str(elem[11]) if str(elem[11]).isdigit() else '0'
             try:
                 data12                                      =   g.rexp.del_quotes.sub('',str(elem[12]))                 #-кавычки в начале и конце
                 data12                                      =   reader.force_decode(data12)
@@ -192,9 +194,7 @@ class reader():
             # чтение и декодирование записи ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             rld_excp                                        =   "open"
             f                                               =   open(
-                                                                    t.get_file_by_id(
-                                                                                    rld_rec.get('id')
-                                                                                    )
+                                                                    rld_rec.get('file_name')
                                                                     ,'rb')
             rld_excp                                        =   "seek"
             f.seek(rld_rec.get('pos'))
@@ -204,16 +204,10 @@ class reader():
             rld_excp                                        =   "parse"
             parsed                                          =   g.rexp.my_sel_re.findall(raw)
             rld_excp                                        =   "data"
-            data[0]                                         =   parsed[0][0]                                            # записываю статус транзакции строкой
-            rld_excp                                        =   "tran_fix"
-            if(parsed[0][8]                                 in  g.execution.c1_dicts.tran_fix_list[
-                                                                t.normalize_ib_name(rld_base)
-                                                                ]):                                                     # и операция нужнается в корректировке типа транзакции
-                rld_excp                                    =   "tran_descr 1"
-                data[1]                                     =   reader.trans_descr(parsed[0][1], fix=True)              # записываю статус с поправкой
-            else:
-                rld_excp                                    =   "tran_descr 2"
-                data[1]                                     =   reader.trans_descr(parsed[0][1])                        # записываю статус транзакции строкой без поправки
+            data[0]                                         =   parsed[0][0]                                            # записываю дату
+            rld_excp                                        =   "tran_descr"
+            # Статусы в LGP записаны ПРАВИЛЬНО - fix НЕ нужен!
+            data[1]                                         =   reader.trans_descr(parsed[0][1])                        # записываю статус БЕЗ инверсии
             rld_excp                                        =   "time conversion"
             data[2]                                         =   reader.hex_1c_time_to_human_string(parsed[0][2]) + \
                                                                                 " ("+str(int(parsed[0][3],16))+")"
@@ -433,22 +427,24 @@ class reader():
             rr_ret                                          =   ""
         return rr_ret
     # ------------------------------------------------------------------------------------------------------------------
-    # возвращает описания типа транзакции по её букве
+    # возвращает код транзакции по её описанию (обратное преобразование)
+    # Исправлено в соответствии с документацией 1С и коммитом 8b80921:
+    # R=Rollback (Отменена), U=Unfinished (Не завершена), C=Commit (Зафиксирована), N=No transaction (Нет транзакции)
     # ------------------------------------------------------------------------------------------------------------------
     def trans_id(td_descr):
         td_str                                              =   ''
         td_descr                                            =   td_descr.upper()
         if td_descr                                         ==  'НЕТ ТРАНЗАКЦИИ': td_str =  'N'
-        if td_descr                                         ==  'ЗАФИКСИРОВАНА' : td_str =  'U'
-        if td_descr                                         ==  'НЕ ЗАВЕРШЕНА'  : td_str =  'R'
-        if td_descr                                         ==  'ОТМЕНЕНА'      : td_str =  'C'
+        if td_descr                                         ==  'ЗАФИКСИРОВАНА' : td_str =  'C'                          # Commit
+        if td_descr                                         ==  'НЕ ЗАВЕРШЕНА'  : td_str =  'U'                          # Unfinished
+        if td_descr                                         ==  'ОТМЕНЕНА'      : td_str =  'R'                          # Rollback
         return td_str
     # ------------------------------------------------------------------------------------------------------------------
     # возвращает описания типа транзакции по её букве
     # ------------------------------------------------------------------------------------------------------------------
     def trans_descr(td_lttr,fix=False):
-        td_str                                              =   ''
         td_lttr                                             =   td_lttr.replace("'","")
+        # Параметр fix применяет старую логику переназначения (для обратной совместимости)
         if fix:
             if td_lttr                                      ==  'C':
                 td_lttr                                     =   'U'
@@ -456,32 +452,25 @@ class reader():
                 td_lttr                                     =   'C'
             elif td_lttr                                    ==  'U':
                 td_lttr                                     =   'R'
-        if td_lttr                                          ==  'N': td_str =   'Нет Транзакции'                        # регистр
-        if td_lttr                                          ==  'C': td_str =   'Отменена'                              # имеет
-        if td_lttr                                          ==  'R': td_str =   'Не Завершена'                          # важное
-        if td_lttr                                          ==  'U': td_str =   'Зафиксирована'                         # значение
-        return td_str
+        # Используем централизованный словарь из dictionaries.py
+        return d.trans_state_full.get(td_lttr, td_lttr)
     # ------------------------------------------------------------------------------------------------------------------
     # возвращает ID типа записи по описанию
     # ------------------------------------------------------------------------------------------------------------------
     def rec_descr_id(rd_descr):
-        rd_str                                              =   ''
         rd_descr                                            =   rd_descr.upper()
-        if rd_descr                                         ==  'ИНФОРМАЦИЯ'    : rd_str =  'I'
-        if rd_descr                                         ==  'ПРЕДУПРЕЖДЕНИЕ': rd_str =  'W'
-        if rd_descr                                         ==  'ОШИБКА'        : rd_str =  'E'
-        if rd_descr                                         ==  'ПРИМЕЧАНИЕ'    : rd_str =  'N'
-        return rd_str
+        # Используем словарь для обратного поиска
+        for key, value in d.severity_full.items():
+            if value.upper()                                ==  rd_descr:
+                # Возвращаем букву-код (N, I, W, E)
+                if key in ['N', 'I', 'W', 'E']:
+                    return key
+        return ''
     # ------------------------------------------------------------------------------------------------------------------
     # возвращает описания типа записи
     # ------------------------------------------------------------------------------------------------------------------
     def rec_descr(rd_lttr):
-        rd_str                                              =   ''
-        if rd_lttr                                          ==  'I': rd_str =   'Информация'
-        if rd_lttr                                          ==  'E': rd_str =   'Ошибка'
-        if rd_lttr                                          ==  'W': rd_str =   'Предупреждение'
-        if rd_lttr                                          ==  'N': rd_str =   'Примечание'
-        return rd_str
+        return d.severity_full.get(rd_lttr, '')
     # ------------------------------------------------------------------------------------------------------------------
     # функция конвертации даты из последовательности в форматированную строку
     # ------------------------------------------------------------------------------------------------------------------
@@ -837,21 +826,28 @@ class reader():
     # ------------------------------------------------------------------------------------------------------------------
     def is_ib_is_lgd(iiil):
         ret                                                 =   False
-        for ib                                              in  g.parser.ibases:
-            if ib.get('ibase_name')                         ==  iiil:
-                ret                                         =   ib.get('ibase_jr_format') ==  'lgd'
+        # Безопасное чтение g.parser.ibases с блокировкой
+        with g.ibases_lock:
+            for ib                                          in  g.parser.ibases:
+                if ib.get('ibase_name')                     ==  iiil:
+                    ret                                     =   ib.get('ibase_jr_format') ==  'lgd'
+                    break
         return ret
     #-------------------------------------------------------------------------------------------------------------------
-    # возвращаю количество данных для базы
+    # возвращаю количество данных для базы (с блокировкой для thread-safety)
     # -------------------------------------------------------------------------------------------------------------------
     def get_total_size(base):
-        for each in g.parser.ibases:
-            if each[g.nms.ib.name]                          ==  base:
-                return each[g.nms.ib.total_size]
+        with g.ibases_lock:
+            for each in g.parser.ibases:
+                if each[g.nms.ib.name]                      ==  base:
+                    return each[g.nms.ib.total_size]
+        return 0
     #-------------------------------------------------------------------------------------------------------------------
-    # возвращаю количество распарсенных данных для базы
+    # возвращаю количество распарсенных данных для базы (с блокировкой для thread-safety)
     # -------------------------------------------------------------------------------------------------------------------
     def get_parsed_size(base):
-        for each in g.parser.ibases:
-            if each[g.nms.ib.name]                          ==  base:
-                return each[g.nms.ib.parsed_size]
+        with g.ibases_lock:
+            for each in g.parser.ibases:
+                if each[g.nms.ib.name]                      ==  base:
+                    return each[g.nms.ib.parsed_size]
+        return 0

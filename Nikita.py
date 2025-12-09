@@ -356,7 +356,7 @@ class conf:
             t.debug_print(f"clstr_dir={str(clstr_dir)}")
             clstr_file                                      =   os.path.join(clstr_dir, g.conf.c1.cluster_file)
             clstr_file_o                                    =   os.path.join(clstr_dir, g.conf.c1.cluster_file_o)
-            clstr_file_o                                    =   clstr_file_o if os._exists(clstr_file_o) \
+            clstr_file_o                                    =   clstr_file_o if os.path.exists(clstr_file_o) \
                                                                 else clstr_file                                         # сегодня (2020.05.22) столкнулся с отсутствием c cluster_file_o
             clstr_file_size                                 =   os.stat(clstr_file).st_size \
                                                                 if os.path.exists(clstr_file) \
@@ -398,32 +398,35 @@ class conf:
                             'parsed_size'                   :   0
                         }                                                                                               # формирую dictionary с информацией о базе
                         
-                        # Проверяем, есть ли уже такая база в списке
+                        # Проверяем, есть ли уже такая база в списке (с блокировкой для thread-safety)
                         base_found                          =   False
-                        for base in g.parser.ibases:
-                            if base[g.nms.ib.name]          ==  ibase_info[g.nms.ib.name]:
-                                base_found                  =   True
-                                break
-                        
-                        # Добавляем базу если её ещё нет
-                        if not base_found:
-                            t.debug_print(f"Обнаружена новая ИБ: {ibase_info[g.nms.ib.name]} → {ibase_info[g.nms.ib.jr_dir]}")
-                            g.parser.ibases.append(ibase_info)
+                        with g.ibases_lock:
+                            for base in g.parser.ibases:
+                                if base[g.nms.ib.name]      ==  ibase_info[g.nms.ib.name]:
+                                    base_found              =   True
+                                    break
+                            
+                            # Добавляем базу если её ещё нет
+                            if not base_found:
+                                t.debug_print(f"Обнаружена новая ИБ: {ibase_info[g.nms.ib.name]} → {ibase_info[g.nms.ib.jr_dir]}")
+                                g.parser.ibases.append(ibase_info)
                         
                         # Для отслеживания удалённых баз (только при периодическом обновлении)
                         if not initial2:
                             local_bases_array.append(ibase_info)
 
         if not initial2:                                                                                                # проверяю базы на удалённые
-            bases_copy                                      =   g.parser.ibases.copy()                                  # из этой копии будем удалять базы
-            for each_base in local_bases_array:                                                                         # по всем базам из файла
-                for each_each_base in bases_copy:                                                                       # по всем из копии конфы
-                    if each_base[g.nms.ib.name]             ==  each_each_base[g.nms.ib.name]:                          # если есть, то убираем из копии. Уйти должны все существующие
-                        bases_copy.remove(each_each_base)
-            for each_base in bases_copy:                                                                                # а вот оставшиеся - это удалённые
-                if(str(each_base[g.nms.ib.jr_dir]).find(d2_srvinfo))>0:                                                 # удаляем только базы этого кластера
-                    t.debug_print(f"База {each_base[g.nms.ib.name]} удалена из кластера")
-                    g.parser.ibases.remove(each_base)
+            # Работа с g.parser.ibases защищена блокировкой для thread-safety
+            with g.ibases_lock:
+                bases_copy                                  =   g.parser.ibases.copy()                                  # из этой копии будем удалять базы
+                for each_base in local_bases_array:                                                                     # по всем базам из файла
+                    for each_each_base in bases_copy:                                                                   # по всем из копии конфы
+                        if each_base[g.nms.ib.name]         ==  each_each_base[g.nms.ib.name]:                          # если есть, то убираем из копии. Уйти должны все существующие
+                            bases_copy.remove(each_each_base)
+                for each_base in bases_copy:                                                                            # а вот оставшиеся - это удалённые
+                    if d2_srvinfo in str(each_base[g.nms.ib.jr_dir]):                                                   # удаляем только базы этого кластера
+                        t.debug_print(f"База {each_base[g.nms.ib.name]} удалена из кластера")
+                        g.parser.ibases.remove(each_base)
         # ~~~~~~~ установка параметров solr по умолчанию для первого детекта ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         if initial2:
             g.conf.solr.mem_min                             =   "2g"
@@ -467,7 +470,6 @@ def init_vars():
     g.debug.filename                                        =   os.path.join(g.debug.dir, g_debug_filename)
 
     #g.parser.state_file                                     =   os.path.join(g.execution.self_dir, "parser.state")     # здесь в json хранятся статусы парсинга файлов
-    g.parser.solr_id_file                                   =   os.path.join(g.execution.self_dir, "solr.id.state")    # здесь в json хранятся ID файлов для SOLR
 # ======================================================================================================================
 # дополнительная инициализация после загрузки/определения параметров
 # ======================================================================================================================
@@ -682,19 +684,21 @@ class config_updater(threading.Thread):
             try:
                 time.sleep(g.waits.sleep_on_conf_detection)
                 
-                # Проверяем базы из ENV на существование
-                valid_ibases                                =   []
-                for ibase in g.parser.ibases[:]:  # копия списка
-                    if os.path.exists(ibase[g.nms.ib.jr_dir]):
-                        valid_ibases.append(ibase)
-                    else:
-                        t.debug_print(f"База {ibase[g.nms.ib.name]} удалена (журнал недоступен)", "IB monitor")
+                # Проверяем базы из ENV на существование (с блокировкой)
+                with g.ibases_lock:
+                    valid_ibases                            =   []
+                    for ibase in g.parser.ibases[:]:  # копия списка
+                        if os.path.exists(ibase[g.nms.ib.jr_dir]):
+                            valid_ibases.append(ibase)
+                        else:
+                            t.debug_print(f"База {ibase[g.nms.ib.name]} удалена (журнал недоступен)", "IB monitor")
+                    
+                    g.parser.ibases                         =   valid_ibases
                 
-                g.parser.ibases                             =   valid_ibases
-                
-                # Запускаем автодетект если указан корневой путь
+                # Запускаем автодетект если указан корневой путь (с блокировкой)
                 if g.conf.c1.srvinfo and os.path.exists(g.conf.c1.srvinfo):
-                    conf.detect2(initial2=False, d2_srvinfo=g.conf.c1.srvinfo)
+                    with g.ibases_lock:
+                        conf.detect2(initial2=False, d2_srvinfo=g.conf.c1.srvinfo)
                 
             except Exception as e:
                 t.debug_print(f"Exception on config update. Error is {str(e)}", "IB monitor")

@@ -143,7 +143,11 @@ class parser(threading.Thread):
                      t.debug_print("Scanning for log files...", self.name)
                 g.parser.ibases_lpf_files                   =   []
                 local_list                                  =   []
-                for ibase in g.parser.ibases:                                                                           # по всем базам
+                # Создаем копию списка баз с блокировкой
+                with g.ibases_lock:
+                    ibases_copy                             =   list(g.parser.ibases)
+                
+                for ibase in ibases_copy:                                                                               # по всем базам
                     total_files_or_recs_size                =   0
                     total_parsed                            =   0
                     files                                   =   [
@@ -165,7 +169,7 @@ class parser(threading.Thread):
                             # прибавляю к общему для базы ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
                             total_files_or_recs_size        +=  this_file_size
                             # добавляю файлы в списко для обработки только размер отличается ~~~~~~~~~~~~~~~~~~~~~~~~~~~
-                            _state                          =   state_manager.get_file_state(full_name)
+                            _state                          =   state_manager.get_file_state(full_name, ibase[g.nms.ib.name])
                             get_saved_size                  =   _state['filesizeread'] if _state else 0
                             if this_file_size               !=  get_saved_size:
                                 ibase_file                  =   [
@@ -200,70 +204,85 @@ class parser(threading.Thread):
                 t.debug_print("adding to json "+str(fj_rec),self.name)
             local_json                                      =   {}                                                      # второй - порядок времени для сортировки одинаковых моментов
             cc                                              =   1 
-            local_json['id']                                =   t.get_file_id_by_name(fj_id)                            # третий - имя файла
+            local_json['file_name']                         =   fj_id                                                   # третий - имя файла
             local_json['pos']                               =   fj_pos                                                  # четвёртый - смещение
             local_json['len']                               =   fj_size                                                 # пятый - размер записи
-            local_json['r1']                                =   fj_rec[0]
-            local_json['r1nmb']                             =   fj_dt_sort_add
-            local_json['r2']                                =   fj_rec[1]
-            local_json['r3h']                               =   "0x" + fj_rec[2]
-            local_json['r3']                                =   int(int(fj_rec[2],16)/10000)                            # в десятичном формате
+            local_json['date']                              =   fj_rec[0]
+            local_json['date_idx']                          =   fj_dt_sort_add
+            local_json['t_status']                          =   d.trans_state_full.get(fj_rec[1], fj_rec[1])
+            local_json['t_id_hex']                          =   "0x" + fj_rec[2]
+            local_json['t_id']                              =   int(int(fj_rec[2],16)/10000)                            # в десятичном формате
             cc = 2
-            local_json['r3ah']                              =   "0x" + fj_rec[3]
+            local_json['t_pos_hex']                         =   "0x" + fj_rec[3]
             cc = 3
-            local_json['r3a']                               =   int(fj_rec[3],16)
+            local_json['t_pos']                             =   int(fj_rec[3],16)
             cc = 4
-            local_json['rr4']                               =   g.execution.c1_dicts.users[fj_base][fj_rec[4]] if int(fj_rec[4])>0\
+            local_json['user']                              =   g.execution.c1_dicts.users[fj_base][fj_rec[4]] if int(fj_rec[4])>0\
                                                                 else {"uuid":"","name":""}
             cc = 5
-            local_json['rr5']                               =   g.execution.c1_dicts.computers[fj_base][fj_rec[5]] if int(fj_rec[5])>0\
+            local_json['computer']                          =   g.execution.c1_dicts.computers[fj_base][fj_rec[5]] if int(fj_rec[5])>0\
                                                                 else "0"
             cc = 6
             if fj_rec[6] in g.execution.c1_dicts.applications[fj_base]:
-                local_json['rr6']                           =   g.execution.c1_dicts.applications[fj_base][fj_rec[6]]
+                local_json['app']                           =   g.execution.c1_dicts.applications[fj_base][fj_rec[6]]
             elif g.execution.c1_dicts.actions[fj_base][fj_rec[8]] == '_$User$_.AuthenticationLock':                     # в событии блокировки почему-то нет клиента
-                local_json['rr6']                           =   ""
+                local_json['app']                           =   ""
             else:
                 vocab                                       =   str(g.execution.c1_dicts.applications[fj_base])
-                local_json['rr6']                           =   f"Not Found in Dictionary code = {fj_rec[6]}, vocab = {snd.escape_clickhouse(vocab)}"
+                local_json['app']                           =   f"Not Found in Dictionary code = {fj_rec[6]}, vocab = {snd.escape_clickhouse(vocab)}"
             cc = 7
-            local_json['rr7']                               =   fj_rec[7]
+            local_json['connect']                           =   fj_rec[7]
             cc = 8
-            local_json['rr8']                               =   g.execution.c1_dicts.actions[fj_base][fj_rec[8]]
+            local_json['event']                             =   g.execution.c1_dicts.actions[fj_base][fj_rec[8]]
             cc = 9
-            local_json['rr9']                               =   fj_rec[9]
+            local_json['severity_val']                      =   d.severity_full.get(fj_rec[9], fj_rec[9])
             cc = 10
-            local_json['rr10']                              =   fj_rec[10].replace("'","''").replace('\\','\\\\')
+            local_json['comment']                           =   fj_rec[10].replace("'","''").replace('\\','\\\\')
             cc = 11
-            local_json['rr11']                              =   g.execution.c1_dicts.metadata[fj_base][fj_rec[11]] if not fj_rec[11]=="0"\
+            local_json['metadata']                          =   g.execution.c1_dicts.metadata[fj_base][fj_rec[11]] if not fj_rec[11]=="0"\
                                                                 else {"uuid":"", "name":""}
             cc = 12
-            local_json['rr12']                              =   fj_rec[12].replace("'","''").replace('\\','\\\\')
+            local_json['data']                              =   fj_rec[12].replace("'","''").replace('\\','\\\\')
             cc = 13
-            local_json['rr13']                              =   fj_rec[13].replace("'","''").replace('\\','\\\\')
+            local_json['data_pres']                         =   fj_rec[13].replace("'","''").replace('\\','\\\\')
             cc = 14
-            local_json['rr14']                              =   g.execution.c1_dicts.servers[fj_base][fj_rec[14]] if int(fj_rec[14])>0\
+            local_json['server']                            =   g.execution.c1_dicts.servers[fj_base][fj_rec[14]] if int(fj_rec[14])>0\
                                                                 else ""
             cc = 15
-            local_json['rr15']                              =   g.execution.c1_dicts.ports_main[fj_base][fj_rec[15]] if int(fj_rec[15])>0\
+            local_json['port']                              =   g.execution.c1_dicts.ports_main[fj_base][fj_rec[15]] if int(fj_rec[15])>0\
                                                                 else "0"
             cc = 16
-            local_json['rr16']                              =   g.execution.c1_dicts.ports_add[fj_base][fj_rec[16]] if int(fj_rec[16])>0\
+            local_json['port_sec']                          =   g.execution.c1_dicts.ports_add[fj_base][fj_rec[16]] if int(fj_rec[16])>0\
                                                                 else '0'
             cc = 17
-            local_json['rr17']                              =   fj_rec[17]
-            for l_i in range (4,18):
-                local_json['r'+str(l_i)]                    =   fj_rec[l_i]
+            local_json['session']                           =   fj_rec[17]
+            
+            # Explicit assignments (formerly loop r4..r17)
+            local_json['user_id']                           =   fj_rec[4]
+            local_json['comp_id']                           =   fj_rec[5]
+            local_json['app_id']                            =   fj_rec[6]
+            local_json['conn_id']                           =   fj_rec[7]
+            local_json['event_id']                          =   fj_rec[8]
+            local_json['severity']                          =   fj_rec[9]
+            local_json['comment_raw']                       =   fj_rec[10]
+            local_json['meta_id']                           =   fj_rec[11]
+            local_json['data_raw']                          =   fj_rec[12]
+            local_json['data_pres_raw']                     =   fj_rec[13]
+            local_json['server_id']                         =   fj_rec[14]
+            local_json['port_id']                           =   fj_rec[15]
+            local_json['port_sec_id']                       =   fj_rec[16]
+            local_json['session_id']                        =   fj_rec[17]
+
             if len(fj_rec) - 1                              >   g.rexp.sel_re_ext_nmb:
-                local_json['r18']                           =   d.get_main_area(fj_base, fj_rec[22], fj_rec[23])        # case 2020.05.21
-                local_json['rr18']                          =   local_json['r18']
-                local_json['r19']                           =   d.get_add_area(fj_base, fj_rec[20], fj_rec[21])         # case 2020.05.21
-                local_json['rr19']                          =   local_json['r19']
+                local_json['area_id']                       =   d.get_main_area(fj_base, fj_rec[22], fj_rec[23])        # case 2020.05.21
+                local_json['area']                          =   local_json['area_id']
+                local_json['area_sec_id']                   =   d.get_add_area(fj_base, fj_rec[20], fj_rec[21])         # case 2020.05.21
+                local_json['area_sec']                      =   local_json['area_sec_id']
             else:
-                local_json['r18']                           =   '0'                                                     # case 2020.05.21
-                local_json['rr18']                          =   '0'
-                local_json['r19']                           =   '0'                                                     # case 2020.05.21
-                local_json['rr19']                          =   '0'
+                local_json['area_id']                       =   '0'                                                     # case 2020.05.21
+                local_json['area']                          =   '0'
+                local_json['area_sec_id']                   =   '0'                                                     # case 2020.05.21
+                local_json['area_sec']                      =   '0'
             self.json_data[self.name].append(local_json)
             if(g.debug.on_parser):
                 t.debug_print(json.dumps(local_json, indent=2), self.name)
@@ -349,38 +368,38 @@ class parser(threading.Thread):
                      t.debug_print(f"Проверка существования таблицы {g.conf.clickhouse.database}.{pf_base}", self.name)
                      
                      # Используем ReplacingMergeTree с кодеком ZSTD для максимального сжатия и дедупликации
-                     # ORDER BY (r1, file_id, file_pos) обеспечивает уникальность записи
+                     # ORDER BY (date, file_name, file_pos) обеспечивает уникальность записи
                      create_table_query                      =   f"""
                          CREATE TABLE IF NOT EXISTS {g.conf.clickhouse.database}.`{pf_base}` (
-                             r1 DateTime CODEC(DoubleDelta, ZSTD(3)),
-                             r1a DateTime CODEC(DoubleDelta, ZSTD(3)),
-                             r2 String CODEC(ZSTD(3)),
-                             r3 Int64 CODEC(ZSTD(3)),
-                             r3a Int64 CODEC(ZSTD(3)),
-                             r4name String CODEC(ZSTD(3)),
-                             r4guid String CODEC(ZSTD(3)),
-                             r5 String CODEC(ZSTD(3)),
-                             r6 String CODEC(ZSTD(3)),
-                             r7 Int64 CODEC(ZSTD(3)),
-                             r8 String CODEC(ZSTD(3)),
-                             r9 String CODEC(ZSTD(3)),
-                             r10 String CODEC(ZSTD(3)),
-                             r11name String CODEC(ZSTD(3)),
-                             r11guid String CODEC(ZSTD(3)),
-                             r12 String CODEC(ZSTD(3)),
-                             r13 String CODEC(ZSTD(3)),
-                             r14 String CODEC(ZSTD(3)),
-                             r15 Int32 CODEC(ZSTD(3)),
-                             r16 Int32 CODEC(ZSTD(3)),
-                             r17 Int64 CODEC(ZSTD(3)),
-                             r18 Int32 CODEC(ZSTD(3)),
-                             r19 Int32 CODEC(ZSTD(3)),
-                             file_id UInt32 CODEC(ZSTD(3)),
+                             date DateTime CODEC(DoubleDelta, ZSTD(3)),
+                             date_idx DateTime CODEC(DoubleDelta, ZSTD(3)),
+                             t_status String CODEC(ZSTD(3)),
+                             t_id Int64 CODEC(ZSTD(3)),
+                             t_pos Int64 CODEC(ZSTD(3)),
+                             user_name String CODEC(ZSTD(3)),
+                             user_guid String CODEC(ZSTD(3)),
+                             computer String CODEC(ZSTD(3)),
+                             app String CODEC(ZSTD(3)),
+                             connect Int64 CODEC(ZSTD(3)),
+                             event String CODEC(ZSTD(3)),
+                             severity String CODEC(ZSTD(3)),
+                             comment String CODEC(ZSTD(3)),
+                             meta_name String CODEC(ZSTD(3)),
+                             meta_uuid String CODEC(ZSTD(3)),
+                             data String CODEC(ZSTD(3)),
+                             data_pres String CODEC(ZSTD(3)),
+                             server String CODEC(ZSTD(3)),
+                             port Int32 CODEC(ZSTD(3)),
+                             port_sec Int32 CODEC(ZSTD(3)),
+                             session Int64 CODEC(ZSTD(3)),
+                             area Int32 CODEC(ZSTD(3)),
+                             area_sec Int32 CODEC(ZSTD(3)),
+                             file_name String CODEC(ZSTD(3)),
                              file_pos UInt64 CODEC(ZSTD(3))
                          ) 
                          ENGINE = ReplacingMergeTree()
-                         ORDER BY (r1, file_id, file_pos)
-                         PARTITION BY toYYYYMM(r1)
+                         ORDER BY (date, file_name, file_pos)
+                         PARTITION BY toYYYYMM(date)
                          SETTINGS index_granularity = 8192
                          COMMENT 'Журнал регистрации 1С с максимальным сжатием ZSTD (ReplacingMergeTree)'
                      """
@@ -417,7 +436,7 @@ class parser(threading.Thread):
                 t.debug_print(pf_base+":pf_size = " + str(pf_size), self.name)
             file_state['filename']                          =   pf_name                                                 # локальная структура json с именем файла
             file_state['filesize']                          =   pf_size                                                 # локальная структура json с размером файла
-            _state                                          =   state_manager.get_file_state(pf_name)
+            _state                                          =   state_manager.get_file_state(pf_name, pf_base)
             file_state['filesizeread']                      =   _state['filesizeread'] if _state else 0
             batch_start_offset                              =   file_state['filesizeread']
             # сообщим о начале обработки, при необходимости~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -432,6 +451,7 @@ class parser(threading.Thread):
                                                                 if limit_delta>g.parser.lgd_parse_records_limit \
                                                                 else limit_delta                                        # читаю не больше, чем то количество, о котором знаю
                 t.debug_print(pf_base + ":plf_rowID = " + str(plf_rowID), self.name)
+                # Используем параметризированный запрос для защиты от SQL injection
                 plf_query                                   =   '''
                                                                   select 
                                                                     date,
@@ -453,12 +473,11 @@ class parser(threading.Thread):
                                                                     secondaryPortCode,
                                                                     session,                                                                    
                                                                     rowID 
-                                                                    from EventLog where rowID > '''         + \
-                                                                        str(plf_rowID)                      + \
-                                                                " ORDER BY rowID ASC LIMIT "+str(limit_records)
+                                                                    from EventLog where rowID > ?
+                                                                    ORDER BY rowID ASC LIMIT ?'''
                 if g.debug.on_parser:
-                    t.debug_print(pf_base+ ":run Query \n"+plf_query ,self.name)
-                ret                                         =   t.sqlite3_exec(pf_name, plf_query)
+                    t.debug_print(pf_base+ ":run Query params: " + str(plf_rowID) + ", " + str(limit_records), self.name)
+                ret                                         =   t.sqlite3_exec(pf_name, plf_query, (plf_rowID, limit_records))
                 if ret:
                     result                                  =   []
                     rslt                                    =   {}
@@ -481,8 +500,7 @@ class parser(threading.Thread):
                         rslt[11]                            =   rec[11] if str(rec[11]).isdigit() else 0                # 11- номер метаданных
                         rslt[12]                            =   r.reader.force_decode(rec[12])                          # 12- данные - надо привести в нормальный формат
                         for l_i in range (13,18):
-                            self.i_ = rec[l_i]
-                            rslt[l_i]                       = self.i_  # 13- представление данных # 14- номер сервера # 15- номер порта #16- номер доп порта #17- сеанс
+                            rslt[l_i]                       =   rec[l_i]  # 13- представление данных # 14- номер сервера # 15- номер порта #16- номер доп порта #17- сеанс
                         r18_nmb                             =   rec[18]                                                 # сохраняю значение row_id #case 2020.05.21
                         rslt[18]                            =   '0'                                                     # заглушка #case 2020.05.21
                         rslt[19]                            =   '0'                                                     # заглушка #case 2020.05.21
@@ -522,7 +540,7 @@ class parser(threading.Thread):
                         records_to_log,
                         pf_base
                     )
-                    state_manager.update_file_state(file_state['filename'], file_state['filesize'], file_state['filesizeread'])
+                    state_manager.update_file_state(file_state['filename'], file_state['filesize'], file_state['filesizeread'], pf_base)
                     batch_start_offset              =   file_state['filesizeread']
                     parser.set_parsed_size(pf_base,file_state['filesizeread'])                                          # устанавливаю размер на количетво распарсенных данных
                 else:                                                                                                   # в ret ничего не вернулось
@@ -546,7 +564,7 @@ class parser(threading.Thread):
         pf_size                                             =   os.stat(pf_name).st_size                                # текущий размер файла
         file_state['filename']                              =   pf_name                                                 # локальная структура json с именем файла
         file_state['filesize']                              =   pf_size                                                 # локальная структура json с размером файла
-        _state                                              =   state_manager.get_file_state(pf_name)
+        _state                                              =   state_manager.get_file_state(pf_name, pf_base)
         file_state['filesizeread']                          =   _state['filesizeread'] if _state else 0
         batch_start_offset                                  =   file_state['filesizeread']
         # Немного переменных ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -567,7 +585,10 @@ class parser(threading.Thread):
                 if g.debug.on_parser and block_time_start:
                         t.debug_print(f"Block tooked {str(time.time()-block_time_start)}",self.name)
                 block_time_start                            =   time.time()                                             # фиксация времени начала обработки блока
+                # Перечитываем словарь только если файл словаря изменился (оптимизация производительности)
+                # Проверка времени модификации словаря перед перечитыванием
                 d.read_ib_dictionary(pf_base)                                                                           # словарь должен быть уже проинициализирован
+                
                 # определяю размер для чтения ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
                 pf_size_read                                =   g.parser.blocksize * pf_block_mul                       # размер блока для чтения
                 # обработка корявых фрагментов ЖР ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -628,6 +649,7 @@ class parser(threading.Thread):
                     # получаю все записи из строки ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
                     pf_records                              =   g.rexp.my_parse_re.findall(pf_block_as_str)             # вот это все мои записи ЖР
                     if pf_records:                                                                                      # если они есть
+                        last_pos_in_chunk                   =   0
                         for pf_record in pf_records:                                                                    # то пройдёмся по ним
                             #pf_match_no                     +=  1                                                       # номер записи
                             # разбираю каждую запись на составные ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -638,8 +660,20 @@ class parser(threading.Thread):
                             pf_rec_parsed                   =   pf_record[1:]                                           # копирую в такой же элемент, только без первой строки
                             if(g.debug.on_parser):
                                 t.debug_print("processing pf_rec_parsed "+str(pf_rec_parsed),self.name)
-                            pf_rec_offset                   =   file_state['filesizeread'] \
-                                                            +   pf_chunk.find(pf_rec_in_bytes)                          # и нахожу смещение
+                            
+                            # Ищем вхождение с учетом предыдущей позиции, чтобы избежать дубликатов при одинаковых записях
+                            found_pos                       =   pf_chunk.find(pf_rec_in_bytes, last_pos_in_chunk)
+                            if found_pos == -1:
+                                # Если не нашли с текущей позиции (странно, но бывает), ищем с начала
+                                found_pos                   =   pf_chunk.find(pf_rec_in_bytes)
+                            
+                            if found_pos != -1:
+                                last_pos_in_chunk           =   found_pos + 1                                           # сдвигаем курсор
+                                pf_rec_offset               =   file_state['filesizeread'] + found_pos
+                            else:
+                                t.debug_print(f"CRITICAL: Record bytes not found in chunk for {pf_base}", self.name)
+                                continue
+
                             if (prev_r1                     ==  pf_rec_parsed[0][0]):                                   # если дата совпадает
                                 dt_sort_add                 +=  1
                             else:
@@ -699,7 +733,7 @@ class parser(threading.Thread):
                                     records_to_log,
                                     pf_base
                                 )
-                                state_manager.update_file_state(file_state['filename'], file_state['filesize'], file_state['filesizeread'])
+                                state_manager.update_file_state(file_state['filename'], file_state['filesize'], file_state['filesizeread'], pf_base)
                                 batch_start_offset          =   file_state['filesizeread']
                                 # увеличиваю размер на количетво распарсенных данных ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
                                 parser.inc_parsed_size(pf_base, pf_bytes_2_commit)                                      # увеличиваю размер на количетво распарсенных данных
@@ -737,7 +771,7 @@ class parser(threading.Thread):
                                 records_to_log,
                                 pf_base
                             )
-                            state_manager.update_file_state(file_state['filename'], file_state['filesize'], file_state['filesizeread'])
+                            state_manager.update_file_state(file_state['filename'], file_state['filesize'], file_state['filesizeread'], pf_base)
                             batch_start_offset              =   file_state['filesizeread']
                         else:
                             pf_block_mul                    *=  2                                                       # разобрать блок на записи ЖР не получилось, увеличиваю мультипликатор
@@ -764,58 +798,47 @@ class parser(threading.Thread):
     # Функции read_file_state и write_file_state удалены
     # ------------------------------------------------------------------------------------------------------------------
     #-------------------------------------------------------------------------------------------------------------------
-    # увеличиваю размер распарсенных данных для базы
+    # увеличиваю размер распарсенных данных для базы (с блокировкой для thread-safety)
     # ------------------------------------------------------------------------------------------------------------------
     def inc_parsed_size(base,count):
-        for each in g.parser.ibases:
-            if each[g.nms.ib.name]                          ==  base:
-                each[g.nms.ib.parsed_size]                  +=  count
+        with g.ibases_lock:
+            for each in g.parser.ibases:
+                if each[g.nms.ib.name]                      ==  base:
+                    each[g.nms.ib.parsed_size]              +=  count
+                    break
     #-------------------------------------------------------------------------------------------------------------------
-    # устанавливаю размер всего для базы
+    # устанавливаю размер всего для базы (с блокировкой для thread-safety)
     # ------------------------------------------------------------------------------------------------------------------
     def set_total_size(base,sts_size):
-        for each in g.parser.ibases:
-            if each[g.nms.ib.name]                          ==  base:
-                each[g.nms.ib.total_size]                   =   sts_size
+        with g.ibases_lock:
+            for each in g.parser.ibases:
+                if each[g.nms.ib.name]                      ==  base:
+                    each[g.nms.ib.total_size]               =   sts_size
+                    break
     #-------------------------------------------------------------------------------------------------------------------
-    # получаю размер всего для базы
+    # получаю размер всего для базы (с блокировкой для thread-safety)
     # ------------------------------------------------------------------------------------------------------------------
     def get_total_size(base):
-        for each in g.parser.ibases:
-            if each[g.nms.ib.name]                          ==  base:
-                return each[g.nms.ib.total_size]
+        with g.ibases_lock:
+            for each in g.parser.ibases:
+                if each[g.nms.ib.name]                      ==  base:
+                    return each[g.nms.ib.total_size]
+        return 0
     #-------------------------------------------------------------------------------------------------------------------
-    # устанавливаю размер распарсенных данных для базы
+    # устанавливаю размер распарсенных данных для базы (с блокировкой для thread-safety)
     # ------------------------------------------------------------------------------------------------------------------
     def set_parsed_size(base,count):
-        for each in g.parser.ibases:
-            if each[g.nms.ib.name]                          ==  base:
-                each[g.nms.ib.parsed_size]                  =   count
+        with g.ibases_lock:
+            for each in g.parser.ibases:
+                if each[g.nms.ib.name]                      ==  base:
+                    each[g.nms.ib.parsed_size]              =   count
+                    break
     #-------------------------------------------------------------------------------------------------------------------
-    # функция исправления дурацкого статуса транзакции при парсинге
+    # функция исправления статуса транзакции при парсинге (УСТАРЕЛО - больше не используется)
+    # Ранее применялась инверсия C↔U, R↔C для исправления бага в старых версиях 1С
+    # Но оказалось, что статусы в LGP записаны ПРАВИЛЬНО, fix не нужен
     # ------------------------------------------------------------------------------------------------------------------
     def fix_act_tran(self, pf_rec, pf_base):
-        try:
-            pf_ret                                          =   pf_rec
-            if g.execution.c1_dicts.tran_fix_list.get(pf_base):
-                if pf_rec[8]                                in  g.execution.c1_dicts.tran_fix_list[pf_base]:            # в списке бэдовых, исправляю
-                    tpl                                     =   {}
-                    tpl[0]                                  =   pf_rec[0]
-                    if pf_rec[1]                            ==  "C":
-                        tpl[1]                              =   "U"
-                    elif pf_rec[1]                          ==  "R":
-                        tpl[1]                              =   "C"
-                    elif pf_rec[1]                          ==  "U":
-                        tpl[1]                              =   "R"
-                    else:
-                        tpl[1]                              =   "N"
-                    for l_i in range(2,len(pf_rec)):                                                                    #case 2020.05.21
-                        tpl[l_i]                            =   pf_rec[l_i]                                             #case 2020.05.21
-                    pf_ret                                  =   tpl
-                else:
-                    pf_ret                                          =   pf_rec                                                  # возвращаю то же самое, если ничего не менять
-        except Exception as e:
-            t.debug_print("Fix tran got exception "+str(e),self.name)
-        finally:
-            return pf_ret
+        # Просто возвращаем запись как есть, без изменений
+        return pf_rec
 # ======================================================================================================================
