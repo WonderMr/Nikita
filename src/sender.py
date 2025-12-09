@@ -68,13 +68,13 @@ def send_to_clickhouse(chclient, data, base_name, logger_name):
                                                                     int(rec['session']),                                # session
                                                                     int(rec['area']),                                   # area
                                                                     int(rec['area_sec']),                               # area_sec
-                                                                    int(rec['id']),                                     # file_id
+                                                                    str(rec['file_name']),                              # file_name
                                                                     int(rec['pos'])                                     # file_pos
                                                                 )
             rows.append(row)
         
         if rows:
-            query                                           =   f"INSERT INTO {g.conf.clickhouse.database}.`{base_name}` (date, date_idx, t_status, t_id, t_pos, user_name, user_guid, computer, app, connect, event, severity, comment, meta_name, meta_uuid, data, data_pres, server, port, port_sec, session, area, area_sec, file_id, file_pos) VALUES"
+            query                                           =   f"INSERT INTO {g.conf.clickhouse.database}.`{base_name}` (date, date_idx, t_status, t_id, t_pos, user_name, user_guid, computer, app, connect, event, severity, comment, meta_name, meta_uuid, data, data_pres, server, port, port_sec, session, area, area_sec, file_name, file_pos) VALUES"
             exec_result                                     =   chclient.execute(query, rows)
             elapsed_time                                    =   time.time() - start_time
             

@@ -200,7 +200,7 @@ class parser(threading.Thread):
                 t.debug_print("adding to json "+str(fj_rec),self.name)
             local_json                                      =   {}                                                      # второй - порядок времени для сортировки одинаковых моментов
             cc                                              =   1 
-            local_json['id']                                =   t.get_file_id_by_name(fj_id)                            # третий - имя файла
+            local_json['file_name']                         =   fj_id                                                   # третий - имя файла
             local_json['pos']                               =   fj_pos                                                  # четвёртый - смещение
             local_json['len']                               =   fj_size                                                 # пятый - размер записи
             local_json['date']                              =   fj_rec[0]
@@ -364,7 +364,7 @@ class parser(threading.Thread):
                      t.debug_print(f"Проверка существования таблицы {g.conf.clickhouse.database}.{pf_base}", self.name)
                      
                      # Используем ReplacingMergeTree с кодеком ZSTD для максимального сжатия и дедупликации
-                     # ORDER BY (r1, file_id, file_pos) обеспечивает уникальность записи
+                     # ORDER BY (date, file_name, file_pos) обеспечивает уникальность записи
                      create_table_query                      =   f"""
                          CREATE TABLE IF NOT EXISTS {g.conf.clickhouse.database}.`{pf_base}` (
                              date DateTime CODEC(DoubleDelta, ZSTD(3)),
@@ -390,11 +390,11 @@ class parser(threading.Thread):
                              session Int64 CODEC(ZSTD(3)),
                              area Int32 CODEC(ZSTD(3)),
                              area_sec Int32 CODEC(ZSTD(3)),
-                             file_id UInt32 CODEC(ZSTD(3)),
+                             file_name String CODEC(ZSTD(3)),
                              file_pos UInt64 CODEC(ZSTD(3))
                          ) 
                          ENGINE = ReplacingMergeTree()
-                         ORDER BY (date, file_id, file_pos)
+                         ORDER BY (date, file_name, file_pos)
                          PARTITION BY toYYYYMM(date)
                          SETTINGS index_granularity = 8192
                          COMMENT 'Журнал регистрации 1С с максимальным сжатием ZSTD (ReplacingMergeTree)'

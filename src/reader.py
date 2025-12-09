@@ -83,13 +83,11 @@ class reader():
                         ids                                 =   []                                                      # здесь будет жить список rowID
                         fpr_exp                             =   "reversed(fpr_json) 1"
                         for each                            in  reversed(fpr_json['response']['docs']):
-                            fname                           =   each.get('id')
+                            fname                           =   each.get('file_name')
                             ids.append(each.get('pos'))
                         fpr_exp                             =   "read_lgd_data"
                         data                                =   reader.read_lgd_data(
-                                                                                    t.get_file_by_id(
-                                                                                                    fname
-                                                                                    )
+                                                                                    fname
                                                                                     ,ids)                               # здесь мы выбираем все rowID
                     else:
                         fpr_exp                             =   "reversed(fpr_json) 2"
@@ -192,9 +190,7 @@ class reader():
             # чтение и декодирование записи ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             rld_excp                                        =   "open"
             f                                               =   open(
-                                                                    t.get_file_by_id(
-                                                                                    rld_rec.get('id')
-                                                                                    )
+                                                                    rld_rec.get('file_name')
                                                                     ,'rb')
             rld_excp                                        =   "seek"
             f.seek(rld_rec.get('pos'))
