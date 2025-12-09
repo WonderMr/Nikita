@@ -118,7 +118,10 @@ class reader():
     # ------------------------------------------------------------------------------------------------------------------
     def read_lgd_data(rld_file,items):
         # чтение и декодирование записи ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        parsed                                             =   t.sqlite3_exec(rld_file,'''Select                                       
+        # Генерируем плейсхолдеры для безопасного запроса: ?, ?, ?
+        placeholders                                       =   ','.join('?' for _ in items)
+        
+        query                                              =   f'''Select                                       
                                                                     date,
                                                                     transactionStatus, 
                                                                     transactionDate,
@@ -138,8 +141,9 @@ class reader():
                                                                     secondaryPortCode,
                                                                     session
                                                                     from    EventLog
-                                                                    Where RowID in ''' + \
-                                                                    str(items).replace('[','(').replace(']',')'))       # выбираю сразу всю пачку
+                                                                    Where RowID in ({placeholders})'''
+                                                                    
+        parsed                                             =   t.sqlite3_exec(rld_file, query, tuple(items))       # выбираю сразу всю пачку с параметрами
         ret                                                 =   []
         if not parsed:
             return
@@ -156,7 +160,7 @@ class reader():
             data[8]                                         =   str(elem[8])
             data[9]                                         =   reader.rec_descr(d.severity[str(elem[9])])
             data[10]                                        =   str(elem[10])
-            data[11]                                        =   str(elem[11])
+            data[11]                                        =   str(elem[11]) if str(elem[11]).isdigit() else '0'
             try:
                 data12                                      =   g.rexp.del_quotes.sub('',str(elem[12]))                 #-кавычки в начале и конце
                 data12                                      =   reader.force_decode(data12)
@@ -829,21 +833,28 @@ class reader():
     # ------------------------------------------------------------------------------------------------------------------
     def is_ib_is_lgd(iiil):
         ret                                                 =   False
-        for ib                                              in  g.parser.ibases:
-            if ib.get('ibase_name')                         ==  iiil:
-                ret                                         =   ib.get('ibase_jr_format') ==  'lgd'
+        # Безопасное чтение g.parser.ibases с блокировкой
+        with g.ibases_lock:
+            for ib                                          in  g.parser.ibases:
+                if ib.get('ibase_name')                     ==  iiil:
+                    ret                                     =   ib.get('ibase_jr_format') ==  'lgd'
+                    break
         return ret
     #-------------------------------------------------------------------------------------------------------------------
-    # возвращаю количество данных для базы
+    # возвращаю количество данных для базы (с блокировкой для thread-safety)
     # -------------------------------------------------------------------------------------------------------------------
     def get_total_size(base):
-        for each in g.parser.ibases:
-            if each[g.nms.ib.name]                          ==  base:
-                return each[g.nms.ib.total_size]
+        with g.ibases_lock:
+            for each in g.parser.ibases:
+                if each[g.nms.ib.name]                      ==  base:
+                    return each[g.nms.ib.total_size]
+        return 0
     #-------------------------------------------------------------------------------------------------------------------
-    # возвращаю количество распарсенных данных для базы
+    # возвращаю количество распарсенных данных для базы (с блокировкой для thread-safety)
     # -------------------------------------------------------------------------------------------------------------------
     def get_parsed_size(base):
-        for each in g.parser.ibases:
-            if each[g.nms.ib.name]                          ==  base:
-                return each[g.nms.ib.parsed_size]
+        with g.ibases_lock:
+            for each in g.parser.ibases:
+                if each[g.nms.ib.name]                      ==  base:
+                    return each[g.nms.ib.parsed_size]
+        return 0

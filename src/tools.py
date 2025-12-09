@@ -12,6 +12,8 @@ import  sqlite3
 import  json
 import  urllib
 import  time
+import  threading
+from    typing              import  Any, Optional, Tuple, List
 # ======================================================================================================================
 from    src                 import  globals                 as  g
 # ======================================================================================================================
@@ -19,10 +21,11 @@ from    src                 import  globals                 as  g
 # разные используемый функции
 # ----------------------------------------------------------------------------------------------------------------------
 class tools():
+    log_lock                                                =   threading.Lock()
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     # преобразование строки в булево значение
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    def strtobool(val):
+    def strtobool(val: Any) -> bool:
         """Конвертирует строку в булево значение"""
         val                                                 =   str(val).lower()
         if val in ('y', 'yes', 't', 'true', 'on', '1'):
@@ -34,7 +37,7 @@ class tools():
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     # Корректное завершение программы с остановкой всех потоков
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    def graceful_shutdown(exit_code=0):
+    def graceful_shutdown(exit_code: int = 0) -> None:
         """
         Корректное завершение программы:
         1. Останавливает все потоки парсеров
@@ -72,7 +75,7 @@ class tools():
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     # печать системного сообщения (всегда выводится в консоль)
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    def status_print(msg):
+    def status_print(msg: str) -> None:
         if g.execution.running_in_console:
             dt = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             print(f"[{dt}] [STATUS] {msg}", flush=True)
@@ -80,7 +83,7 @@ class tools():
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     # печать отладочного сообщения, работает только на взведённом глобально флаге отладки
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    def debug_print(dp_msg,dp_thread=""):
+    def debug_print(dp_msg: str, dp_thread: str = "") -> None:
         if (g.debug.on):
             dp_dt                                           =   datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
             dp_msg                                          =   dp_dt + ":::" + dp_thread + ":::" + dp_msg
@@ -90,19 +93,20 @@ class tools():
             #else:
             #    servicemanager.LogErrorMsg(dp_msg)
             # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-            if(g.debug.filehandle):                                                                                     # если уже открыт
-                g.debug.filehandle.write(dp_msg + "\n")
-                g.debug.filehandle.flush()
-            else:                                                                                                       # если ещё не открыт
-                if(not os.path.exists(g.debug.dir)):
-                    os.makedirs(g.debug.dir)
-                g.debug.filehandle                          =   open(g.debug.filename, 'a', encoding='UTF8')
-                g.debug.filehandle.write(dp_msg + "\n")
-                g.debug.filehandle.flush()
+            with tools.log_lock:
+                if(g.debug.filehandle):                                                                                 # если уже открыт
+                    g.debug.filehandle.write(dp_msg + "\n")
+                    g.debug.filehandle.flush()
+                else:                                                                                                   # если ещё не открыт
+                    if(not os.path.exists(g.debug.dir)):
+                        os.makedirs(g.debug.dir)
+                    g.debug.filehandle                      =   open(g.debug.filename, 'a', encoding='UTF8')
+                    g.debug.filehandle.write(dp_msg + "\n")
+                    g.debug.filehandle.flush()
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     # чтение файла и возврат содержимого
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    def readfile(r_filename,encoding='UTF8'):
+    def readfile(r_filename: str, encoding: str = 'UTF8') -> str:
         if(os.path.exists(r_filename)):
             rf_handle                                       =   open(r_filename, 'r', encoding=encoding)
             rf_content                                      =   rf_handle.read()
@@ -111,24 +115,30 @@ class tools():
         else:
             return ""
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    # выполняет командру SQlite3 и возвращает результат
+    # выполняет командру SQlite3 и возвращает результат (с поддержкой параметров)
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    def sqlite3_exec(sql3_file,sql3_cmd):
+    def sqlite3_exec(sql3_file: str, sql3_cmd: str, params: Optional[Tuple[Any, ...]] = None) -> Optional[List[Tuple[Any, ...]]]:
         ret                                                 =   None
+        conn                                                =   None
         if(os.path.exists(sql3_file)):
             try:
-                sql                                         =   sqlite3.connect(sql3_file).cursor()
+                conn                                        =   sqlite3.connect(sql3_file)
+                sql                                         =   conn.cursor()
                 sql.execute('''PRAGMA encoding = "UTF-8";''')
-                ret                                         =   sql.execute(sql3_cmd).fetchall()
+                if params:
+                    ret                                     =   sql.execute(sql3_cmd, params).fetchall()
+                else:
+                    ret                                     =   sql.execute(sql3_cmd).fetchall()
             except Exception as e:
                 tools.debug_print("Exception while sqlexec "+sql3_cmd + " on file "+sql3_file + " error is " + str(e))
             finally:
-                sql.close()
+                if conn:
+                    conn.close()
         return ret
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     # смещение часового пояса
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    def get_time_zone(self                                  =   None):
+    def get_time_zone(self: Any = None) -> str:
         d                                                   =   datetime.datetime
         t                                                   =   int(d.timestamp(d.now()))                               # фиксирую время в epoch
         u                                                   =   int(d.utcfromtimestamp(t).timestamp())
@@ -137,20 +147,20 @@ class tools():
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     # 2019.01.11 17:00 всё таки надо имя править
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    def normalize_ib_name(n_ib_name):
+    def normalize_ib_name(n_ib_name: str) -> str:
         n_ib_name                                           =   urllib.parse.quote(n_ib_name)
         n_ib_name                                           =   n_ib_name.replace("%","aAa_")
         return n_ib_name
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     # 2019.01.28 16:30 всё таки надо имя править
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    def denormalize_ib_name(dn_ib_name):
+    def denormalize_ib_name(dn_ib_name: str) -> str:
         dn_ib_name                                          =   dn_ib_name.replace("aAa_","%")
         return urllib.parse.unquote(dn_ib_name)
     # ------------------------------------------------------------------------------------------------------------------
     # получение количества записей lgd-файла
     # ------------------------------------------------------------------------------------------------------------------
-    def get_lgd_evens_count(dlr_name):
+    def get_lgd_evens_count(dlr_name: str) -> List[int]:
         dlr_ret                                             =   [0,0]
         try:
             max_row_q                                       =   tools.sqlite3_exec(
@@ -169,16 +179,17 @@ class tools():
     # ------------------------------------------------------------------------------------------------------------------
     # запись сообщения об ошибке авторизации
     # ------------------------------------------------------------------------------------------------------------------
-    def log_msg(dp_msg):
+    def log_msg(dp_msg: str) -> None:
         g.notify.filename                                   =   os.path.join(g.execution.self_dir, "log_msg.txt")
         dp_dt                                               =   datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
         dp_msg                                              =   dp_dt + ":::" + dp_msg
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        if(g.notify.filehandle):                                                                                        # если уже открыт
-            g.notify.filehandle.write(dp_msg + "\n")
-            g.notify.filehandle.flush()
-        else:                                                                                                           # если ещё не открыт
-            g.notify.filehandle                             =   open(g.notify.filename,'a',encoding='UTF8')
-            g.notify.filehandle.write(dp_msg + "\n")
-            g.notify.filehandle.flush()
+        with tools.log_lock:
+            if(g.notify.filehandle):                                                                                    # если уже открыт
+                g.notify.filehandle.write(dp_msg + "\n")
+                g.notify.filehandle.flush()
+            else:                                                                                                       # если ещё не открыт
+                g.notify.filehandle                         =   open(g.notify.filename,'a',encoding='UTF8')
+                g.notify.filehandle.write(dp_msg + "\n")
+                g.notify.filehandle.flush()
 # ======================================================================================================================

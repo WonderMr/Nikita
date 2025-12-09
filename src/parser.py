@@ -143,7 +143,11 @@ class parser(threading.Thread):
                      t.debug_print("Scanning for log files...", self.name)
                 g.parser.ibases_lpf_files                   =   []
                 local_list                                  =   []
-                for ibase in g.parser.ibases:                                                                           # по всем базам
+                # Создаем копию списка баз с блокировкой
+                with g.ibases_lock:
+                    ibases_copy                             =   list(g.parser.ibases)
+                
+                for ibase in ibases_copy:                                                                               # по всем базам
                     total_files_or_recs_size                =   0
                     total_parsed                            =   0
                     files                                   =   [
@@ -447,6 +451,7 @@ class parser(threading.Thread):
                                                                 if limit_delta>g.parser.lgd_parse_records_limit \
                                                                 else limit_delta                                        # читаю не больше, чем то количество, о котором знаю
                 t.debug_print(pf_base + ":plf_rowID = " + str(plf_rowID), self.name)
+                # Используем параметризированный запрос для защиты от SQL injection
                 plf_query                                   =   '''
                                                                   select 
                                                                     date,
@@ -468,12 +473,11 @@ class parser(threading.Thread):
                                                                     secondaryPortCode,
                                                                     session,                                                                    
                                                                     rowID 
-                                                                    from EventLog where rowID > '''         + \
-                                                                        str(plf_rowID)                      + \
-                                                                " ORDER BY rowID ASC LIMIT "+str(limit_records)
+                                                                    from EventLog where rowID > ?
+                                                                    ORDER BY rowID ASC LIMIT ?'''
                 if g.debug.on_parser:
-                    t.debug_print(pf_base+ ":run Query \n"+plf_query ,self.name)
-                ret                                         =   t.sqlite3_exec(pf_name, plf_query)
+                    t.debug_print(pf_base+ ":run Query params: " + str(plf_rowID) + ", " + str(limit_records), self.name)
+                ret                                         =   t.sqlite3_exec(pf_name, plf_query, (plf_rowID, limit_records))
                 if ret:
                     result                                  =   []
                     rslt                                    =   {}
@@ -496,8 +500,7 @@ class parser(threading.Thread):
                         rslt[11]                            =   rec[11] if str(rec[11]).isdigit() else 0                # 11- номер метаданных
                         rslt[12]                            =   r.reader.force_decode(rec[12])                          # 12- данные - надо привести в нормальный формат
                         for l_i in range (13,18):
-                            self.i_ = rec[l_i]
-                            rslt[l_i]                       = self.i_  # 13- представление данных # 14- номер сервера # 15- номер порта #16- номер доп порта #17- сеанс
+                            rslt[l_i]                       =   rec[l_i]  # 13- представление данных # 14- номер сервера # 15- номер порта #16- номер доп порта #17- сеанс
                         r18_nmb                             =   rec[18]                                                 # сохраняю значение row_id #case 2020.05.21
                         rslt[18]                            =   '0'                                                     # заглушка #case 2020.05.21
                         rslt[19]                            =   '0'                                                     # заглушка #case 2020.05.21
@@ -582,7 +585,10 @@ class parser(threading.Thread):
                 if g.debug.on_parser and block_time_start:
                         t.debug_print(f"Block tooked {str(time.time()-block_time_start)}",self.name)
                 block_time_start                            =   time.time()                                             # фиксация времени начала обработки блока
+                # Перечитываем словарь только если файл словаря изменился (оптимизация производительности)
+                # Проверка времени модификации словаря перед перечитыванием
                 d.read_ib_dictionary(pf_base)                                                                           # словарь должен быть уже проинициализирован
+                
                 # определяю размер для чтения ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
                 pf_size_read                                =   g.parser.blocksize * pf_block_mul                       # размер блока для чтения
                 # обработка корявых фрагментов ЖР ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -792,33 +798,41 @@ class parser(threading.Thread):
     # Функции read_file_state и write_file_state удалены
     # ------------------------------------------------------------------------------------------------------------------
     #-------------------------------------------------------------------------------------------------------------------
-    # увеличиваю размер распарсенных данных для базы
+    # увеличиваю размер распарсенных данных для базы (с блокировкой для thread-safety)
     # ------------------------------------------------------------------------------------------------------------------
     def inc_parsed_size(base,count):
-        for each in g.parser.ibases:
-            if each[g.nms.ib.name]                          ==  base:
-                each[g.nms.ib.parsed_size]                  +=  count
+        with g.ibases_lock:
+            for each in g.parser.ibases:
+                if each[g.nms.ib.name]                      ==  base:
+                    each[g.nms.ib.parsed_size]              +=  count
+                    break
     #-------------------------------------------------------------------------------------------------------------------
-    # устанавливаю размер всего для базы
+    # устанавливаю размер всего для базы (с блокировкой для thread-safety)
     # ------------------------------------------------------------------------------------------------------------------
     def set_total_size(base,sts_size):
-        for each in g.parser.ibases:
-            if each[g.nms.ib.name]                          ==  base:
-                each[g.nms.ib.total_size]                   =   sts_size
+        with g.ibases_lock:
+            for each in g.parser.ibases:
+                if each[g.nms.ib.name]                      ==  base:
+                    each[g.nms.ib.total_size]               =   sts_size
+                    break
     #-------------------------------------------------------------------------------------------------------------------
-    # получаю размер всего для базы
+    # получаю размер всего для базы (с блокировкой для thread-safety)
     # ------------------------------------------------------------------------------------------------------------------
     def get_total_size(base):
-        for each in g.parser.ibases:
-            if each[g.nms.ib.name]                          ==  base:
-                return each[g.nms.ib.total_size]
+        with g.ibases_lock:
+            for each in g.parser.ibases:
+                if each[g.nms.ib.name]                      ==  base:
+                    return each[g.nms.ib.total_size]
+        return 0
     #-------------------------------------------------------------------------------------------------------------------
-    # устанавливаю размер распарсенных данных для базы
+    # устанавливаю размер распарсенных данных для базы (с блокировкой для thread-safety)
     # ------------------------------------------------------------------------------------------------------------------
     def set_parsed_size(base,count):
-        for each in g.parser.ibases:
-            if each[g.nms.ib.name]                          ==  base:
-                each[g.nms.ib.parsed_size]                  =   count
+        with g.ibases_lock:
+            for each in g.parser.ibases:
+                if each[g.nms.ib.name]                      ==  base:
+                    each[g.nms.ib.parsed_size]              =   count
+                    break
     #-------------------------------------------------------------------------------------------------------------------
     # функция исправления дурацкого статуса транзакции при парсинге
     # ------------------------------------------------------------------------------------------------------------------

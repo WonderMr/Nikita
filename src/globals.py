@@ -1,9 +1,13 @@
 # -*- coding: utf-8 -*-
 import  re
 import os
+import threading
 from dotenv import load_dotenv
 
 load_dotenv()
+
+# Глобальная блокировка для безопасного доступа к g.parser.ibases из разных потоков
+ibases_lock = threading.Lock()
 
 # Функция для вывода конфигурации (вызывается после инициализации tools)
 def print_config():
@@ -89,7 +93,7 @@ class conf:
     # ======= настройки ClickHouse =====================================================================================
     class clickhouse:
         section_name                                            =   "ClickHouse settings"                               # имя секции для файла конфигурации
-        enabled                                                 =   os.getenv('CLICKHOUSE_ENABLED', 'True').lower() in ('true', '1', 't', 'y', 'yes')
+        enabled                                                 =   os.getenv('CLICKHOUSE_ENABLED', 'False').lower() in ('true', '1', 't', 'y', 'yes')
         host                                                    =   os.getenv('CLICKHOUSE_HOST', 'localhost')
         port                                                    =   int(os.getenv('CLICKHOUSE_PORT', 9000))
         user                                                    =   os.getenv('CLICKHOUSE_USER', 'default')

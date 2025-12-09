@@ -4,6 +4,7 @@ import  time
 import  requests
 import  datetime
 import  traceback
+from    typing              import  List, Dict, Any
 from    clickhouse_driver   import  Client                  as  ch
 
 from    src.tools           import  tools                   as  t
@@ -29,11 +30,18 @@ def escape_clickhouse(s: str) -> str:
 # ----------------------------------------------------------------------------------------------------------------------
 # Отправка пакета данных в ClickHouse
 # ----------------------------------------------------------------------------------------------------------------------
-def send_to_clickhouse(chclient, data, base_name, logger_name):
+def send_to_clickhouse(chclient: Any, data: List[Dict[str, Any]], base_name: str, logger_name: str) -> bool:
     if not chclient:
         t.debug_print(f"ClickHouse не настроен, пропускаем отправку {len(data)} записей для базы {base_name}", logger_name)
         return True                                                                                                     # Если CH не настроен, считаем отправку успешной
     
+    # Валидация имени базы (таблицы) для защиты от инъекций в F-строке
+    # Разрешаем только латиницу, кириллицу, цифры и подчеркивание
+    import re
+    if not re.match(r'^[a-zA-Z0-9_а-яА-ЯёЁ]+$', base_name):
+        t.debug_print(f"✗ CLICKHOUSE: Недопустимое имя базы/таблицы: '{base_name}'. Пропуск отправки.", logger_name)
+        return False
+
     start_time                                              =   time.time()
     
     try:
@@ -113,7 +121,7 @@ def send_to_clickhouse(chclient, data, base_name, logger_name):
 # ----------------------------------------------------------------------------------------------------------------------
 # Отправка пакета данных в Solr
 # ----------------------------------------------------------------------------------------------------------------------
-def send_to_solr(url, data, logger_name):
+def send_to_solr(url: str, data: List[Dict[str, Any]], logger_name: str) -> int:
     start_time                                              =   time.time()
     
     try:

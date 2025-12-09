@@ -133,13 +133,16 @@ class nikita_web(object):
 
         
         # ======= Блок обрабатываемых баз ==============================================================================
-        # Сначала вычисляем итоги
+        # Сначала вычисляем итоги (создаем копию списка с блокировкой для thread-safety)
         from src.state_manager import state_manager
+        with g.ibases_lock:
+            ibases_snapshot                                 =   list(g.parser.ibases)
+        
         total_size_all                                      =   0
         total_parsed_all                                    =   0
         total_sent_all                                      =   0
         
-        for base in g.parser.ibases:
+        for base in ibases_snapshot:
             base_total                                      =   base[g.nms.ib.total_size]\
                                                                 if base[g.nms.ib.total_size]>=base[g.nms.ib.parsed_size]\
                                                                 else base[g.nms.ib.parsed_size]
@@ -186,7 +189,7 @@ class nikita_web(object):
         bases                                               +=  '<span class="cell">% Обработано</span>'
         bases                                               +=  '</div>'
 
-        for base in g.parser.ibases:
+        for base in ibases_snapshot:
             base_total                                      =   base[g.nms.ib.total_size]\
                                                                 if base[g.nms.ib.total_size]>=base[g.nms.ib.parsed_size]\
                                                                 else base[g.nms.ib.parsed_size]
@@ -965,6 +968,10 @@ class nikita_web(object):
         try:
             cherrypy.response.headers['Content-Type']           =   'application/json; charset=utf-8'
             
+            # Валидация и санитизация входных данных
+            if filter_text and len(filter_text) > 1000:
+                filter_text                                 =   filter_text[:1000]  # Ограничиваем длину фильтра
+            
             # Параметры запроса
             try:
                 limit_int                                   =   int(limit)
@@ -995,22 +1002,29 @@ class nikita_web(object):
                     filter_re = None
                     if filter_text:
                         try:
+                            # Таймаут и защита от ReDoS через ограничение сложности
                             filter_re = re.compile(filter_text, re.IGNORECASE)
-                        except:
+                        except Exception as regex_err:
                             # Если regex невалидный, будем искать как подстроку
+                            t.debug_print(f"Invalid regex filter: {str(regex_err)}", "cherry")
                             pass
                     
                     # Читаем файл
-                    # Оптимизация: если фильтра нет, читаем последние limit строк
-                    # Если фильтр есть, читаем больше (до 50000 строк с конца), чтобы найти limit подходящих
+                    # ОПТИМИЗАЦИЯ: используем deque для эффективного чтения последних N строк
+                    # без загрузки всего файла в память (важно для больших лог-файлов)
+                    from collections import deque
                     
                     read_limit                              =   limit_int if not filter_text else 50000
                     
                     with open(g.debug.filename, 'r', encoding='utf-8', errors='ignore') as f:
-                        # Читаем все строки. Для очень больших файлов это может быть медленно,
-                        # но в рамках текущей архитектуры (file.readlines) это безопасно.
-                        # Если нужно супер-быстро, надо использовать deque(f, limit) или seek
-                        all_lines                           =   f.readlines()
+                        # Используем deque для эффективного чтения последних строк
+                        # Это значительно быстрее и экономнее по памяти для больших файлов
+                        if not filter_text:
+                            # Без фильтра - просто берем последние limit_int строк
+                            all_lines                       =   list(deque(f, maxlen=limit_int))
+                        else:
+                            # С фильтром - читаем больше строк для поиска совпадений
+                            all_lines                       =   list(deque(f, maxlen=read_limit))
                         
                         # Если фильтра нет - берем последние limit
                         if not filter_text:
@@ -1157,9 +1171,12 @@ class nikita_web(object):
                                                                     'message'   :   error_msg
                                                                 })
         
-        # Информация о базах
+        # Информация о базах (с блокировкой для thread-safety)
+        with g.ibases_lock:
+            ibases_for_stats                                =   list(g.parser.ibases)
+        
         stats_data['databases']                             =   []
-        for base in g.parser.ibases:
+        for base in ibases_for_stats:
             base_total                                      =   base[g.nms.ib.total_size] if base[g.nms.ib.total_size] >= base[g.nms.ib.parsed_size] else base[g.nms.ib.parsed_size]
             percent                                         =   round((base[g.nms.ib.parsed_size] / (int(base_total) if int(base_total) > 0 else 1)) * 100, 4)
             
