@@ -11,15 +11,19 @@ cd /opt/Nikita
 sudo python3 -m venv venv
 sudo venv/bin/pip install -r requirments.lin
 
-# 3. Копирование и настройка конфигурации
+# 3. Настройка прав доступа (ВАЖНО!)
+# Передаем владение папкой пользователю 1С (обычно usr1cv8:grp1cv8)
+sudo chown -R usr1cv8:grp1cv8 /opt/Nikita
+
+# 4. Копирование и настройка конфигурации
 sudo cp env.example .env
 sudo nano .env  # Отредактируйте: укажите пути к базам 1С, настройки ClickHouse
 
-# 4. Установка systemd service через симлинк
+# 5. Установка systemd service через симлинк
 sudo ln -s /opt/Nikita/Nikita.service /etc/systemd/system/Nikita.service
 sudo systemctl daemon-reload
 
-# 5. Запуск службы
+# 6. Запуск службы
 sudo systemctl enable Nikita
 sudo systemctl start Nikita
 ```
@@ -55,16 +59,14 @@ sudo journalctl -u Nikita -n 100
 
 ## Важные замечания
 
-1. **Пользователь usr1cv8**: Служба запускается от пользователя `usr1cv8`. Если у вас другой пользователь, отредактируйте `Nikita.service` перед созданием симлинка:
-   ```bash
-   sudo nano /opt/Nikita/Nikita.service
-   # Измените строки User= и Group=
-   ```
+1. **Пользователь и Группа**:
+   - Служба по умолчанию настроена на запуск от пользователя `usr1cv8` и группы `grp1cv8` (стандарт для 1С).
+   - Если у вас другой пользователь, отредактируйте `/opt/Nikita/Nikita.service` перед запуском.
 
-2. **Права доступа**: Пользователь службы должен иметь доступ к каталогам журналов 1С:
-   ```bash
-   sudo usermod -a -G usr1cv8 nikita-user
-   ```
+2. **Права доступа (Exit Code 77)**:
+   - Если служба падает сразу после старта, посмотрите статус: `sudo systemctl status Nikita`.
+   - Если видите `code=exited, status=77`, значит у сервиса нет прав на запись в `/opt/Nikita` или `/opt/Nikita/debug`.
+   - Решение: `sudo chown -R usr1cv8:grp1cv8 /opt/Nikita`
 
 3. **ClickHouse**: Убедитесь, что ClickHouse запущен:
    ```bash

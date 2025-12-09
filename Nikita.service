@@ -29,7 +29,9 @@ After=network.target clickhouse-server.service
 [Service]
 Type=simple
 User=usr1cv8
-Group=usr1cv8
+Group=grp1cv8
+# Примечание: Если нужно явно указать группу, в 1С это обычно grp1cv8.
+# Оставьте закомментированным, чтобы использовать группу по умолчанию для user'а.
 WorkingDirectory=/opt/Nikita
 ExecStart=/opt/Nikita/venv/bin/python /opt/Nikita/Nikita.py console
 EnvironmentFile=/opt/Nikita/.env
