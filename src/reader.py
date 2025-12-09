@@ -204,16 +204,10 @@ class reader():
             rld_excp                                        =   "parse"
             parsed                                          =   g.rexp.my_sel_re.findall(raw)
             rld_excp                                        =   "data"
-            data[0]                                         =   parsed[0][0]                                            # записываю статус транзакции строкой
-            rld_excp                                        =   "tran_fix"
-            if(parsed[0][8]                                 in  g.execution.c1_dicts.tran_fix_list[
-                                                                t.normalize_ib_name(rld_base)
-                                                                ]):                                                     # и операция нужнается в корректировке типа транзакции
-                rld_excp                                    =   "tran_descr 1"
-                data[1]                                     =   reader.trans_descr(parsed[0][1], fix=True)              # записываю статус с поправкой
-            else:
-                rld_excp                                    =   "tran_descr 2"
-                data[1]                                     =   reader.trans_descr(parsed[0][1])                        # записываю статус транзакции строкой без поправки
+            data[0]                                         =   parsed[0][0]                                            # записываю дату
+            rld_excp                                        =   "tran_descr"
+            # Статусы в LGP записаны ПРАВИЛЬНО - fix НЕ нужен!
+            data[1]                                         =   reader.trans_descr(parsed[0][1])                        # записываю статус БЕЗ инверсии
             rld_excp                                        =   "time conversion"
             data[2]                                         =   reader.hex_1c_time_to_human_string(parsed[0][2]) + \
                                                                                 " ("+str(int(parsed[0][3],16))+")"

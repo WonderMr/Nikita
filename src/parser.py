@@ -834,31 +834,11 @@ class parser(threading.Thread):
                     each[g.nms.ib.parsed_size]              =   count
                     break
     #-------------------------------------------------------------------------------------------------------------------
-    # функция исправления дурацкого статуса транзакции при парсинге
-    # Применяет ту же логику fix, что и reader.trans_descr(fix=True) для обратной совместимости
+    # функция исправления статуса транзакции при парсинге (УСТАРЕЛО - больше не используется)
+    # Ранее применялась инверсия C↔U, R↔C для исправления бага в старых версиях 1С
+    # Но оказалось, что статусы в LGP записаны ПРАВИЛЬНО, fix не нужен
     # ------------------------------------------------------------------------------------------------------------------
     def fix_act_tran(self, pf_rec, pf_base):
-        try:
-            pf_ret                                          =   pf_rec
-            if g.execution.c1_dicts.tran_fix_list.get(pf_base):
-                if pf_rec[8]                                in  g.execution.c1_dicts.tran_fix_list[pf_base]:            # в списке бэдовых, исправляю
-                    tpl                                     =   {}
-                    tpl[0]                                  =   pf_rec[0]
-                    if pf_rec[1]                            ==  "C":
-                        tpl[1]                              =   "U"
-                    elif pf_rec[1]                          ==  "R":
-                        tpl[1]                              =   "C"
-                    elif pf_rec[1]                          ==  "U":
-                        tpl[1]                              =   "R"
-                    else:
-                        tpl[1]                              =   "N"
-                    for l_i in range(2,len(pf_rec)):                                                                    #case 2020.05.21
-                        tpl[l_i]                            =   pf_rec[l_i]                                             #case 2020.05.21
-                    pf_ret                                  =   tpl
-                else:
-                    pf_ret                                          =   pf_rec                                                  # возвращаю то же самое, если ничего не менять
-        except Exception as e:
-            t.debug_print("Fix tran got exception "+str(e),self.name)
-        finally:
-            return pf_ret
+        # Просто возвращаем запись как есть, без изменений
+        return pf_rec
 # ======================================================================================================================
