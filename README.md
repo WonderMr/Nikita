@@ -4,10 +4,11 @@
 
 ## 🚀 Быстрый старт
 
-**Linux (5 команд для установки):**
+**Linux (6 команд для установки):**
 ```bash
 sudo git clone https://github.com/your-repo/Nikita.git /opt/Nikita
 cd /opt/Nikita && sudo python3 -m venv venv && sudo venv/bin/pip install -r requirments.lin
+sudo chown -R usr1cv8:grp1cv8 /opt/Nikita
 sudo cp env.example .env && sudo nano .env
 sudo ln -s /opt/Nikita/Nikita.service /etc/systemd/system/Nikita.service && sudo systemctl daemon-reload
 sudo systemctl enable Nikita && sudo systemctl start Nikita

@@ -782,6 +782,58 @@ def stop_all():
 # ======================================================================================================================
 def main():
     init_vars()
+    # ==================================================================================================================
+    # Проверка прав доступа (Linux)
+    # ==================================================================================================================
+    if not is_windows:
+        try:
+            # Проверяем запись в директорию
+            test_dir                                        =   g.execution.self_dir
+            if os.path.exists(g.debug.dir):
+                test_dir                                    =   g.debug.dir
+            
+            if not os.access(test_dir, os.W_OK):
+                import pwd, grp
+                current_uid                                 =   os.getuid()
+                try:
+                    current_user                            =   pwd.getpwuid(current_uid).pw_name
+                except:
+                    current_user                            =   str(current_uid)
+                
+                # Пытаемся определить правильную группу (grp1cv8 или текущая)
+                target_group                                =   "grp1cv8"
+                try:
+                    grp.getgrnam(target_group)
+                except KeyError:
+                    # Если группы grp1cv8 нет, предлагаем группу пользователя
+                    try:
+                        target_group                        =   grp.getgrgid(os.getgid()).gr_name
+                    except:
+                        target_group                        =   current_user
+
+                print("="*80)
+                print(f"!!! ОШИБКА ДОСТУПА (PERMISSION DENIED) !!!")
+                print(f"Сервис не может писать в каталог: {test_dir}")
+                print(f"Запущен от пользователя:          {current_user} (uid={current_uid})")
+                try:
+                    stat_info                               =   os.stat(test_dir)
+                    print(f"Владелец каталога:                {stat_info.st_uid}:{stat_info.st_gid}")
+                    print(f"Права на каталог:                 {oct(stat_info.st_mode)[-3:]}")
+                except:
+                    pass
+                print("-" * 80)
+                print("ЧТОБЫ ИСПРАВИТЬ, ВЫПОЛНИТЕ КОМАНДУ:")
+                print(f"sudo chown -R {current_user}:{target_group} {g.execution.self_dir}")
+                print("="*80)
+                sys.exit(77)                                                                                            # EX_NOPERM
+        except ImportError:
+            pass
+        except SystemExit:
+            raise
+        except Exception as e:
+            print(f"Ошибка при проверке прав: {e}")
+    # ==================================================================================================================
+    
     if ('console' in sys.argv):
         g.execution.running_in_console                  =   True
         print(f"Запуск в консольном режиме. Debug enabled: {g.debug.on}")
