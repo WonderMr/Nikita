@@ -38,3 +38,4 @@ assets/
 Nikita.parser.state.db*
 parser.state
 redis_data/
+/__pycache__/*
