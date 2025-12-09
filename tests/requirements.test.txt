@@ -1,0 +1,8 @@
+psutil
+requests
+clickhouse_driver
+cherrypy
+redis
+python-dotenv
+Cython
+pysolr
