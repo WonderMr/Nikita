@@ -41,40 +41,40 @@ def send_to_clickhouse(chclient, data, base_name, logger_name):
         
         rows                                                =   []
         for rec in data:
-            date_str                                        =   f"{rec['r1'][0:4]}-{rec['r1'][4:6]}-{rec['r1'][6:8]} {rec['r1'][8:10]}:{rec['r1'][10:12]}:{rec['r1'][12:14]}"
+            date_str                                        =   f"{rec['date'][0:4]}-{rec['date'][4:6]}-{rec['date'][6:8]} {rec['date'][8:10]}:{rec['date'][10:12]}:{rec['date'][12:14]}"
             dt                                              =   datetime.datetime.fromisoformat(date_str)
             
             row                                             =   (
-                                                                    dt,                                                 # r1 DateTime
-                                                                    dt,                                                 # r1a DateTime (дублируем, как в оригинале)
-                                                                    rec['r2'],                                          # r2
-                                                                    rec['r3'],                                          # r3
-                                                                    rec['r3a'],                                         # r3a
-                                                                    rec['rr4']['name'],                                 # r4name
-                                                                    rec['rr4']['uuid'],                                 # r4guid
-                                                                    rec['rr5'],                                         # r5
-                                                                    rec['rr6'],                                         # r6
-                                                                    int(rec['rr7']),                                    # r7 (теперь Int64)
-                                                                    rec['rr8'],                                         # r8
-                                                                    rec['rr9'],                                         # r9
-                                                                    rec['rr10'],                                        # r10
-                                                                    rec['rr11']['name'],                                # r11name
-                                                                    rec['rr11']['uuid'],                                # r11guid
-                                                                    str(rec['rr12']),                                   # r12
-                                                                    str(rec['rr13']),                                   # r13
-                                                                    str(rec['rr14']),                                   # r14
-                                                                    int(rec['rr15']),                                   # r15
-                                                                    int(rec['rr16']),                                   # r16
-                                                                    int(rec['rr17']),                                   # r17
-                                                                    int(rec['rr18']),                                   # r18
-                                                                    int(rec['rr19']),                                   # r19
+                                                                    dt,                                                 # date DateTime
+                                                                    dt,                                                 # date_idx DateTime (дублируем, как в оригинале)
+                                                                    rec['t_status'],                                    # t_status
+                                                                    rec['t_id'],                                        # t_id
+                                                                    rec['t_pos'],                                       # t_pos
+                                                                    rec['user']['name'],                                # user_name
+                                                                    rec['user']['uuid'],                                # user_guid
+                                                                    rec['computer'],                                    # computer
+                                                                    rec['app'],                                         # app
+                                                                    int(rec['connect']),                                # connect (теперь Int64)
+                                                                    rec['event'],                                       # event
+                                                                    rec['severity_val'],                                # severity
+                                                                    rec['comment'],                                     # comment
+                                                                    rec['metadata']['name'],                            # meta_name
+                                                                    rec['metadata']['uuid'],                            # meta_uuid
+                                                                    str(rec['data']),                                   # data
+                                                                    str(rec['data_pres']),                              # data_pres
+                                                                    str(rec['server']),                                 # server
+                                                                    int(rec['port']),                                   # port
+                                                                    int(rec['port_sec']),                               # port_sec
+                                                                    int(rec['session']),                                # session
+                                                                    int(rec['area']),                                   # area
+                                                                    int(rec['area_sec']),                               # area_sec
                                                                     int(rec['id']),                                     # file_id
                                                                     int(rec['pos'])                                     # file_pos
                                                                 )
             rows.append(row)
         
         if rows:
-            query                                           =   f"INSERT INTO {g.conf.clickhouse.database}.`{base_name}` (r1, r1a, r2, r3, r3a, r4name, r4guid, r5, r6, r7, r8, r9, r10, r11name, r11guid, r12, r13, r14, r15, r16, r17, r18, r19, file_id, file_pos) VALUES"
+            query                                           =   f"INSERT INTO {g.conf.clickhouse.database}.`{base_name}` (date, date_idx, t_status, t_id, t_pos, user_name, user_guid, computer, app, connect, event, severity, comment, meta_name, meta_uuid, data, data_pres, server, port, port_sec, session, area, area_sec, file_id, file_pos) VALUES"
             exec_result                                     =   chclient.execute(query, rows)
             elapsed_time                                    =   time.time() - start_time
             

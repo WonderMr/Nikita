@@ -5,32 +5,32 @@ GRANT ALL PRIVILEGES ON zhr1c.* TO zhr1c_user;
 
  CREATE TABLE logs
 (
-    r1  UInt64,   -- соответствует \{(\d{14})
-    r1a DateTime, -- для наглядности
-    r2  String,   -- соответствует ,(\w)
-    r3  String,   -- соответствует ,\r*\n\{([0-9a-f]+)
-    r3a String,
-    r4  String,   -- соответствует ,([0-9a-f]+)\}
-    r4name String,
-    r4guid String,
-    r5  String,   -- соответствует ,(\d+)
-    r6  String,   -- соответствует ,(\d+)
-    r7  UInt64,   -- соответствует ,(\d+)
-    r8  String,   -- соответствует ,(\d+)
-    r9  String,   -- соответствует ,(\d+)
-    r10 String,   -- соответствует ,(\w)
-    r11uuid String,   -- соответствует ,"([^ꡏ]*?)(?=",\d+,\r*\n)"
-    r11name String,   -- соответствует ,"([^ꡏ]*?)(?=",\d+,\r*\n)"
-    r12 String,   -- соответствует ,(\d+)
-    r13 String,   -- соответствует ,\r*\n\{([^ꡏ]*?)(?=\},")
-    r14 String,   -- соответствует \},"([^ꡏ]*?)(?=",\d+)"
-    r15 UInt64,   -- соответствует ,(\d+)
-    r16 UInt64,   -- соответствует ,(\d+)
-    r17 UInt64,   -- соответствует ,(\d+)
-    r18 UInt64,   -- соответствует ,(\d+)
-    r19 UInt64,    -- соответствует ,(\d+)
+    date  UInt64,   -- соответствует \{(\d{14})
+    date_idx DateTime, -- для наглядности
+    t_status  String,   -- соответствует ,(\w)
+    t_id  String,   -- соответствует ,\r*\n\{([0-9a-f]+)
+    t_pos String,
+    user_id  String,   -- соответствует ,([0-9a-f]+)\}
+    user_name String,
+    user_guid String,
+    comp_id  String,   -- соответствует ,(\d+)
+    app_id  String,   -- соответствует ,(\d+)
+    conn_id  UInt64,   -- соответствует ,(\d+)
+    event_id  String,   -- соответствует ,(\d+)
+    severity  String,   -- соответствует ,(\d+)
+    comment String,   -- соответствует ,(\w)
+    meta_uuid String,   -- соответствует ,"([^ꡏ]*?)(?=",\d+,\r*\n)"
+    meta_name String,   -- соответствует ,"([^ꡏ]*?)(?=",\d+,\r*\n)"
+    data String,   -- соответствует ,(\d+)
+    data_pres String,   -- соответствует ,\r*\n\{([^ꡏ]*?)(?=\},")
+    server_id String,   -- соответствует \},"([^ꡏ]*?)(?=",\d+)"
+    port_id UInt64,   -- соответствует ,(\d+)
+    port_sec_id UInt64,   -- соответствует ,(\d+)
+    session_id UInt64,   -- соответствует ,(\d+)
+    area_id UInt64,   -- соответствует ,(\d+)
+    area_sec_id UInt64,    -- соответствует ,(\d+)
     sign Int8 DEFAULT 1
 )
 ENGINE = CollapsingMergeTree(sign)
-ORDER BY (r1, r2, r3, r3a, r4, r4name, r4guid, r5, r6, r7, r8, r9, r10, r11uuid, r11name, r12, r13, r14, r15, r16, r17, r18,  r19)
+ORDER BY (date, t_status, t_id, t_pos, user_id, user_name, user_guid, comp_id, app_id, conn_id, event_id, severity, comment, meta_uuid, meta_name, data, data_pres, server_id, port_id, port_sec_id, session_id, area_id,  area_sec_id)
 SETTINGS index_granularity = 8192;
