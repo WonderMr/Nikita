@@ -628,6 +628,7 @@ class parser(threading.Thread):
                     # получаю все записи из строки ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
                     pf_records                              =   g.rexp.my_parse_re.findall(pf_block_as_str)             # вот это все мои записи ЖР
                     if pf_records:                                                                                      # если они есть
+                        last_pos_in_chunk                   =   0
                         for pf_record in pf_records:                                                                    # то пройдёмся по ним
                             #pf_match_no                     +=  1                                                       # номер записи
                             # разбираю каждую запись на составные ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -638,8 +639,20 @@ class parser(threading.Thread):
                             pf_rec_parsed                   =   pf_record[1:]                                           # копирую в такой же элемент, только без первой строки
                             if(g.debug.on_parser):
                                 t.debug_print("processing pf_rec_parsed "+str(pf_rec_parsed),self.name)
-                            pf_rec_offset                   =   file_state['filesizeread'] \
-                                                            +   pf_chunk.find(pf_rec_in_bytes)                          # и нахожу смещение
+                            
+                            # Ищем вхождение с учетом предыдущей позиции, чтобы избежать дубликатов при одинаковых записях
+                            found_pos                       =   pf_chunk.find(pf_rec_in_bytes, last_pos_in_chunk)
+                            if found_pos == -1:
+                                # Если не нашли с текущей позиции (странно, но бывает), ищем с начала
+                                found_pos                   =   pf_chunk.find(pf_rec_in_bytes)
+                            
+                            if found_pos != -1:
+                                last_pos_in_chunk           =   found_pos + 1                                           # сдвигаем курсор
+                                pf_rec_offset               =   file_state['filesizeread'] + found_pos
+                            else:
+                                t.debug_print(f"CRITICAL: Record bytes not found in chunk for {pf_base}", self.name)
+                                continue
+
                             if (prev_r1                     ==  pf_rec_parsed[0][0]):                                   # если дата совпадает
                                 dt_sort_add                 +=  1
                             else:
