@@ -169,7 +169,7 @@ class parser(threading.Thread):
                             # прибавляю к общему для базы ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
                             total_files_or_recs_size        +=  this_file_size
                             # добавляю файлы в списко для обработки только размер отличается ~~~~~~~~~~~~~~~~~~~~~~~~~~~
-                            _state                          =   state_manager.get_file_state(full_name)
+                            _state                          =   state_manager.get_file_state(full_name, ibase[g.nms.ib.name])
                             get_saved_size                  =   _state['filesizeread'] if _state else 0
                             if this_file_size               !=  get_saved_size:
                                 ibase_file                  =   [
@@ -436,7 +436,7 @@ class parser(threading.Thread):
                 t.debug_print(pf_base+":pf_size = " + str(pf_size), self.name)
             file_state['filename']                          =   pf_name                                                 # локальная структура json с именем файла
             file_state['filesize']                          =   pf_size                                                 # локальная структура json с размером файла
-            _state                                          =   state_manager.get_file_state(pf_name)
+            _state                                          =   state_manager.get_file_state(pf_name, pf_base)
             file_state['filesizeread']                      =   _state['filesizeread'] if _state else 0
             batch_start_offset                              =   file_state['filesizeread']
             # сообщим о начале обработки, при необходимости~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -540,7 +540,7 @@ class parser(threading.Thread):
                         records_to_log,
                         pf_base
                     )
-                    state_manager.update_file_state(file_state['filename'], file_state['filesize'], file_state['filesizeread'])
+                    state_manager.update_file_state(file_state['filename'], file_state['filesize'], file_state['filesizeread'], pf_base)
                     batch_start_offset              =   file_state['filesizeread']
                     parser.set_parsed_size(pf_base,file_state['filesizeread'])                                          # устанавливаю размер на количетво распарсенных данных
                 else:                                                                                                   # в ret ничего не вернулось
@@ -564,7 +564,7 @@ class parser(threading.Thread):
         pf_size                                             =   os.stat(pf_name).st_size                                # текущий размер файла
         file_state['filename']                              =   pf_name                                                 # локальная структура json с именем файла
         file_state['filesize']                              =   pf_size                                                 # локальная структура json с размером файла
-        _state                                              =   state_manager.get_file_state(pf_name)
+        _state                                              =   state_manager.get_file_state(pf_name, pf_base)
         file_state['filesizeread']                          =   _state['filesizeread'] if _state else 0
         batch_start_offset                                  =   file_state['filesizeread']
         # Немного переменных ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -733,7 +733,7 @@ class parser(threading.Thread):
                                     records_to_log,
                                     pf_base
                                 )
-                                state_manager.update_file_state(file_state['filename'], file_state['filesize'], file_state['filesizeread'])
+                                state_manager.update_file_state(file_state['filename'], file_state['filesize'], file_state['filesizeread'], pf_base)
                                 batch_start_offset          =   file_state['filesizeread']
                                 # увеличиваю размер на количетво распарсенных данных ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
                                 parser.inc_parsed_size(pf_base, pf_bytes_2_commit)                                      # увеличиваю размер на количетво распарсенных данных
@@ -771,7 +771,7 @@ class parser(threading.Thread):
                                 records_to_log,
                                 pf_base
                             )
-                            state_manager.update_file_state(file_state['filename'], file_state['filesize'], file_state['filesizeread'])
+                            state_manager.update_file_state(file_state['filename'], file_state['filesize'], file_state['filesizeread'], pf_base)
                             batch_start_offset              =   file_state['filesizeread']
                         else:
                             pf_block_mul                    *=  2                                                       # разобрать блок на записи ЖР не получилось, увеличиваю мультипликатор
