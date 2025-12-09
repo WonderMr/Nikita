@@ -38,3 +38,16 @@ assets/
 Nikita.parser.state.db*
 parser.state
 redis_data/
+/__pycache__/*
+tests/__pycache__/
+
+src/globals.cpython-311-x86_64-linux-gnu.so
+
+src/solr.cpython-311-x86_64-linux-gnu.so
+
+src/tools.cpython-311-x86_64-linux-gnu.so
+
+src/dictionaries.cpython-311-x86_64-linux-gnu.so
+
+src/parser.cpython-311-x86_64-linux-gnu.so
+tests/__pycache__/
