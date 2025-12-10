@@ -1,8 +1,6 @@
 psutil
 requests
-servicemanager
 clickhouse_driver
 cherrypy
-subprocess
 redis
 python-dotenv
