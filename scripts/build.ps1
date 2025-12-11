@@ -137,36 +137,14 @@ try {
     Write-Info "Очистка предыдущих сборок..."
     if (Test-Path "dist") { Remove-Item "dist" -Recurse -Force }
     if (Test-Path "build") { Remove-Item "build" -Recurse -Force }
-
-    # Переименование .yp обратно в .py для сборки (если они есть)
-    Write-Info "Подготовка исходников (переименование .yp → .py)..."
-    $ypFiles                                                =   Get-ChildItem "src\*.yp" -ErrorAction SilentlyContinue | 
-                                                                Where-Object { $_.Name -ne "__init__.yp" }
-    if ($ypFiles) {
-        foreach ($file in $ypFiles) {
-            $newName                                        =   $file.Name -replace '\.yp$', '.py'
-            $newPath                                        =   Join-Path $file.DirectoryName $newName
-            # Если уже есть .py файл — удаляем .yp
-            if (Test-Path $newPath) {
-                Remove-Item $file.FullName -Force
-                Write-Info "  Удалён дубликат: $($file.Name) (есть $newName)"
-            } else {
-                Rename-Item $file.FullName $newName -ErrorAction Stop
-                Write-Info "  Переименован: $($file.Name) → $newName"
-            }
-        }
-    }
     
-    # Специальная обработка __init__.yp (если существует)
-    if (Test-Path "src\__init__.yp") {
-        if (Test-Path "src\__init__.py") {
-            Remove-Item "src\__init__.yp" -Force
-            Write-Info "  Удалён дубликат: __init__.yp (есть __init__.py)"
-        } else {
-            # Для __init__ используем копирование + удаление вместо переименования
-            Copy-Item "src\__init__.yp" "src\__init__.py" -Force
-            Remove-Item "src\__init__.yp" -Force
-            Write-Info "  Конвертирован: __init__.yp → __init__.py (copy+delete)"
+    # Очистка старых .yp файлов (если остались после предыдущих сборок)
+    $ypFiles                                                =   Get-ChildItem "src\*.yp" -ErrorAction SilentlyContinue
+    if ($ypFiles) {
+        Write-Info "Очистка старых .yp файлов..."
+        foreach ($file in $ypFiles) {
+            Remove-Item $file.FullName -Force
+            Write-Info "  Удалён: $($file.Name)"
         }
     }
 
@@ -231,66 +209,11 @@ try {
         }
     }
 
-    # Возврат .py обратно в .yp для защиты исходников
-    Write-Info "Защита исходников (переименование .py → .yp)..."
-    $pyFiles                                                =   Get-ChildItem "src\*.py" -ErrorAction SilentlyContinue | 
-                                                                Where-Object { $_.Name -ne "cherry.py" -and $_.Name -ne "__init__.py" }
-    if ($pyFiles) {
-        foreach ($file in $pyFiles) {
-            $newName                                        =   $file.Name -replace '\.py$', '.yp'
-            $newPath                                        =   Join-Path $file.DirectoryName $newName
-            # Удаляем старый .yp если существует
-            if (Test-Path $newPath) {
-                Remove-Item $newPath -Force
-            }
-            Rename-Item $file.FullName $newName
-            Write-Info "  Переименован: $($file.Name) → $newName"
-        }
-    }
-    
-    # Специальная обработка __init__.py после сборки
-    if (Test-Path "src\__init__.py") {
-        if (Test-Path "src\__init__.yp") {
-            # Если уже есть .yp версия, удаляем .py
-            Remove-Item "src\__init__.py" -Force
-            Write-Info "  Удалён временный: __init__.py (восстановлен __init__.yp)"
-        } else {
-            # Если нет .yp, конвертируем обратно
-            Copy-Item "src\__init__.py" "src\__init__.yp" -Force
-            Remove-Item "src\__init__.py" -Force
-            Write-Info "  Конвертирован: __init__.py → __init__.yp (copy+delete)"
-        }
-    }
-
     Write-Success "Сборка завершена успешно!"
     Write-Info "Результат: $(Resolve-Path "dist\$OutputName")"
 
 } catch {
     Write-Error "Ошибка сборки: $($_.Exception.Message)"
-    
-    # Даже при ошибке возвращаем файлы обратно в .yp
-    Write-Info "Откат: возврат .py → .yp..."
-    $pyFiles                                                =   Get-ChildItem "src\*.py" -ErrorAction SilentlyContinue | 
-                                                                Where-Object { $_.Name -ne "cherry.py" -and $_.Name -ne "__init__.py" }
-    if ($pyFiles) {
-        foreach ($file in $pyFiles) {
-            $newName                                        =   $file.Name -replace '\.py$', '.yp'
-            $newPath                                        =   Join-Path $file.DirectoryName $newName
-            if (Test-Path $newPath) {
-                Remove-Item $newPath -Force -ErrorAction SilentlyContinue
-            }
-            Rename-Item $file.FullName $newName -ErrorAction SilentlyContinue
-        }
-    }
-    
-    # Специальная обработка __init__.py при откате (если он был создан временно)
-    if (Test-Path "src\__init__.py") {
-        if (!(Test-Path "src\__init__.yp")) {
-            Copy-Item "src\__init__.py" "src\__init__.yp" -Force -ErrorAction SilentlyContinue
-            Remove-Item "src\__init__.py" -Force -ErrorAction SilentlyContinue
-        }
-    }
-    
     exit 1
 } finally {
     Pop-Location
