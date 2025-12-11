@@ -4,6 +4,7 @@
 param(
     [switch]$Optimize,
     [switch]$NoTest,
+    [switch]$SkipSolr,
     [string]$OutputName = "Nikita"
 )
 
@@ -21,6 +22,117 @@ try {
     # Переход в корень проекта
     Push-Location (Split-Path -Parent $PSScriptRoot)
 
+    # ======================================================================================================================
+    # ЭТАП 1: ПОДГОТОВКА ЗАВИСИМОСТЕЙ
+    # ======================================================================================================================
+    
+    Write-Header "Этап 1/3: Подготовка зависимостей"
+    
+    # Загрузка Java (если отсутствует)
+    $javaPath                                               =   $null
+    
+    # Проверяем наличие Java (папка должна существовать И не быть пустой)
+    $javaExists                                             =   $false
+    if (Test-Path "java") {
+        $javaContent                                        =   Get-ChildItem "java" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($javaContent) {
+            $javaExists                                     =   $true
+        } else {
+            Write-Warning "Папка java существует, но пустая - будет удалена"
+            Remove-Item "java" -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+    
+    if (!$javaExists) {
+        Write-Info "Java не найдена, загрузка..."
+        try {
+            $javaPath                                       =   Download-Java
+            Write-Success "Java загружена успешно: $javaPath"
+        } catch {
+            Write-Warning "Не удалось загрузить Java: $($_.Exception.Message)"
+            Write-Warning "Сборка продолжится без Java"
+        }
+    } else {
+        $javaPath                                           =   Resolve-Path "java"
+        Write-Success "Java уже установлена: $javaPath"
+    }
+
+    # Загрузка Solr (если отсутствует)
+    $solrPath                                               =   $null
+    
+    # Проверяем наличие Solr (папка должна существовать И не быть пустой)
+    $solrExists                                             =   $false
+    if (Test-Path "solr") {
+        $solrContent                                        =   Get-ChildItem "solr" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($solrContent) {
+            $solrExists                                     =   $true
+        } else {
+            Write-Warning "Папка solr существует, но пустая - будет удалена"
+            Remove-Item "solr" -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+    
+    if ($SkipSolr) {
+        Write-Warning "Пропуск загрузки Solr (параметр -SkipSolr)"
+    } elseif (!$solrExists) {
+        Write-Info "Solr не найдена, загрузка..."
+        try {
+            $solrPath                                       =   Download-Solr
+            Write-Success "Solr загружена успешно: $solrPath"
+        } catch {
+            Write-Error "Не удалось загрузить Solr: $($_.Exception.Message)"
+            Write-Host ""
+            Write-Host "============================================================" -ForegroundColor Red
+            Write-Host "  ⛔ ТРЕБУЕТСЯ РУЧНАЯ УСТАНОВКА SOLR" -ForegroundColor Yellow
+            Write-Host "============================================================" -ForegroundColor Red
+            Write-Host ""
+            Write-Host "❌ Автоматическая загрузка не удалась (404 Not Found)" -ForegroundColor Yellow
+            Write-Host ""
+            Write-Host "📋 ДВА ВАРИАНТА РЕШЕНИЯ:" -ForegroundColor Cyan
+            Write-Host ""
+            Write-Host "ВАРИАНТ 1: Установить Solr вручную" -ForegroundColor Green
+            Write-Host "  ────────────────────────────────────" -ForegroundColor Gray
+            Write-Host "  1. Откройте браузер и перейдите:" -ForegroundColor White
+            Write-Host "     https://solr.apache.org/downloads.html" -ForegroundColor Cyan
+            Write-Host ""
+            Write-Host "  2. Скачайте Solr (любая версия 8.x или 9.x):" -ForegroundColor White
+            Write-Host "     • Рекомендуется: 9.6.1, 9.5.0, 8.11.3" -ForegroundColor Gray
+            Write-Host "     • Файл: solr-X.X.X.zip (~250 MB)" -ForegroundColor Gray
+            Write-Host ""
+            Write-Host "  3. Распакуйте архив в папку проекта:" -ForegroundColor White
+            Write-Host "     $((Get-Location).Path)\solr\" -ForegroundColor Yellow
+            Write-Host ""
+            Write-Host "  4. Итоговая структура:" -ForegroundColor White
+            Write-Host "     solr\" -ForegroundColor Gray
+            Write-Host "       └── solr-X.X.X\" -ForegroundColor Gray
+            Write-Host "           ├── bin\solr.cmd" -ForegroundColor Gray
+            Write-Host "           ├── server\" -ForegroundColor Gray
+            Write-Host "           └── ..." -ForegroundColor Gray
+            Write-Host ""
+            Write-Host "  5. Запустите сборку снова:" -ForegroundColor White
+            Write-Host "     .\scripts\!c.build.win.distr.cmd" -ForegroundColor Green
+            Write-Host ""
+            Write-Host "ВАРИАНТ 2: Собрать без Solr (если не нужен)" -ForegroundColor Green
+            Write-Host "  ────────────────────────────────────" -ForegroundColor Gray
+            Write-Host "  Запустите сборку с параметром -SkipSolr:" -ForegroundColor White
+            Write-Host "  .\scripts\build.ps1 -Optimize -NoTest -SkipSolr" -ForegroundColor Yellow
+            Write-Host ""
+            Write-Host "============================================================" -ForegroundColor Red
+            throw "Сборка остановлена: Solr не установлена"
+        }
+    } else {
+        $solrPath                                           =   Resolve-Path "solr"
+        Write-Success "Solr уже установлена: $solrPath"
+    }
+    
+    Write-Success "Все зависимости подготовлены!"
+    
+    # ======================================================================================================================
+    # ЭТАП 2: СБОРКА ПРИЛОЖЕНИЯ
+    # ======================================================================================================================
+    
+    Write-Header "Этап 2/3: Сборка приложения"
+
     # Очистка предыдущих сборок
     Write-Info "Очистка предыдущих сборок..."
     if (Test-Path "dist") { Remove-Item "dist" -Recurse -Force }
@@ -28,7 +140,8 @@ try {
 
     # Переименование .yp обратно в .py для сборки (если они есть)
     Write-Info "Подготовка исходников (переименование .yp → .py)..."
-    $ypFiles                                                =   Get-ChildItem "src\*.yp" -ErrorAction SilentlyContinue
+    $ypFiles                                                =   Get-ChildItem "src\*.yp" -ErrorAction SilentlyContinue | 
+                                                                Where-Object { $_.Name -ne "__init__.yp" }
     if ($ypFiles) {
         foreach ($file in $ypFiles) {
             $newName                                        =   $file.Name -replace '\.yp$', '.py'
@@ -38,35 +151,35 @@ try {
                 Remove-Item $file.FullName -Force
                 Write-Info "  Удалён дубликат: $($file.Name) (есть $newName)"
             } else {
-                Rename-Item $file.FullName $newName
+                Rename-Item $file.FullName $newName -ErrorAction Stop
                 Write-Info "  Переименован: $($file.Name) → $newName"
             }
         }
     }
+    
+    # Специальная обработка __init__.yp (если существует)
+    if (Test-Path "src\__init__.yp") {
+        if (Test-Path "src\__init__.py") {
+            Remove-Item "src\__init__.yp" -Force
+            Write-Info "  Удалён дубликат: __init__.yp (есть __init__.py)"
+        } else {
+            # Для __init__ используем копирование + удаление вместо переименования
+            Copy-Item "src\__init__.yp" "src\__init__.py" -Force
+            Remove-Item "src\__init__.yp" -Force
+            Write-Info "  Конвертирован: __init__.yp → __init__.py (copy+delete)"
+        }
+    }
 
     # Компиляция Python модулей в .pyd (опционально)
+    # ПРИМЕЧАНИЕ: Компиляция Cython временно отключена, так как:
+    # 1. Требуется наличие .py файлов для компиляции
+    # 2. Результаты (.pyd) всё равно удаляются после сборки
+    # 3. PyInstaller корректно работает с .py файлами
+    # Если нужна реальная компиляция в .pyd, эту секцию нужно переделать
     if ($Optimize) {
-        Write-Info "Компиляция .pyd файлов..."
+        Write-Info "Очистка старых .pyd файлов (если есть)..."
         if (Test-Path "src\*.pyd") { Remove-Item "src\*.pyd" -Force }
-
-        # Переименование .py в .yp для защиты
-        Get-ChildItem "src\*.py" | Where-Object { $_.Name -ne "cherry.py" } | ForEach-Object {
-            $newName = $_.Name -replace '\.py$', '.yp'
-            Rename-Item $_.FullName $newName
-        }
-        Rename-Item "src\cherry.py" "src\cherry.p"
-
-        # Запуск компиляции Cython
-        python "scripts\b.compiles2pyd.py" build_ext --inplace
-
-        # Восстановление имен файлов
-        Rename-Item "src\cherry.p" "src\cherry.py"
-        Get-ChildItem "src\*.yp" | ForEach-Object {
-            $newName = $_.Name -replace '\.yp$', '.py'
-            Rename-Item $_.FullName $newName
-        }
-
-        Remove-Item "src\*.pyd" -Force
+        Write-Info "Компиляция Cython пропущена (файлы будут упакованы PyInstaller)"
     }
 
     # Сборка с PyInstaller
@@ -76,41 +189,38 @@ try {
     }
 
     Invoke-PyInstaller -Optimize:$Optimize -ExtraHiddenImports $extraImports -OutputName $OutputName
+    
+    # Проверка успешности PyInstaller
+    if ($LASTEXITCODE -ne 0) {
+        throw "PyInstaller завершился с ошибкой (код: $LASTEXITCODE)"
+    }
+    
+    if (!(Test-Path "dist\$OutputName\$OutputName.exe")) {
+        throw "Исполняемый файл не создан: dist\$OutputName\$OutputName.exe"
+    }
 
     # Копирование DLL файлов
     Copy-Dlls
-
-    # Загрузка и копирование Java/Solr если отсутствуют
-    $javaPath = $null
-    $solrPath = $null
-
-    if (!(Test-Path "java")) {
-        Write-Info "Java не найдена, загрузка..."
-        try {
-            $javaPath = Download-Java
-        } catch {
-            Write-Warning "Не удалось загрузить Java, сборка продолжится без неё: $($_.Exception.Message)"
-        }
-    } else {
-        $javaPath = Resolve-Path "java"
-        Write-Info "Использование существующей Java: $javaPath"
+    
+    if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne $null) {
+        throw "Ошибка копирования DLL файлов"
     }
+    
+    # ======================================================================================================================
+    # ЭТАП 3: КОПИРОВАНИЕ ЗАВИСИМОСТЕЙ В ДИСТРИБУТИВ
+    # ======================================================================================================================
+    
+    Write-Header "Этап 3/3: Копирование зависимостей"
 
-    if (!(Test-Path "solr")) {
-        Write-Info "Solr не найдена, загрузка..."
-        try {
-            $solrPath = Download-Solr
-        } catch {
-            Write-Warning "Не удалось загрузить Solr, сборка продолжится без неё: $($_.Exception.Message)"
-        }
-    } else {
-        $solrPath = Resolve-Path "solr"
-        Write-Info "Использование существующей Solr: $solrPath"
-    }
-
-    # Копирование Java и Solr в дистрибутив (если они загрузились)
+    # Копирование Java и Solr в дистрибутив (если они были загружены)
     if ($javaPath -or $solrPath) {
         Copy-JavaSolr -JavaPath $javaPath -SolrPath $solrPath
+        
+        if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne $null) {
+            throw "Ошибка копирования Java/Solr"
+        }
+    } else {
+        Write-Warning "Java и Solr отсутствуют, пропускаем копирование"
     }
 
     # Тестирование собранного приложения
@@ -137,6 +247,20 @@ try {
             Write-Info "  Переименован: $($file.Name) → $newName"
         }
     }
+    
+    # Специальная обработка __init__.py после сборки
+    if (Test-Path "src\__init__.py") {
+        if (Test-Path "src\__init__.yp") {
+            # Если уже есть .yp версия, удаляем .py
+            Remove-Item "src\__init__.py" -Force
+            Write-Info "  Удалён временный: __init__.py (восстановлен __init__.yp)"
+        } else {
+            # Если нет .yp, конвертируем обратно
+            Copy-Item "src\__init__.py" "src\__init__.yp" -Force
+            Remove-Item "src\__init__.py" -Force
+            Write-Info "  Конвертирован: __init__.py → __init__.yp (copy+delete)"
+        }
+    }
 
     Write-Success "Сборка завершена успешно!"
     Write-Info "Результат: $(Resolve-Path "dist\$OutputName")"
@@ -156,6 +280,14 @@ try {
                 Remove-Item $newPath -Force -ErrorAction SilentlyContinue
             }
             Rename-Item $file.FullName $newName -ErrorAction SilentlyContinue
+        }
+    }
+    
+    # Специальная обработка __init__.py при откате (если он был создан временно)
+    if (Test-Path "src\__init__.py") {
+        if (!(Test-Path "src\__init__.yp")) {
+            Copy-Item "src\__init__.py" "src\__init__.yp" -Force -ErrorAction SilentlyContinue
+            Remove-Item "src\__init__.py" -Force -ErrorAction SilentlyContinue
         }
     }
     

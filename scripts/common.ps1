@@ -1,9 +1,10 @@
 # common.ps1 - Общие функции для сборки Nikita
 # Использование: Import-Module $PSScriptRoot\common.ps1
 
-$Script:JavaVersion = "17"
-$Script:SolrVersion = "9.4.1"
-$Script:ProjectRoot = Split-Path -Parent $PSScriptRoot
+$Script:JavaVersion                                 =   "17"
+$Script:SolrVersion                                 =   "9.10.0"
+$Script:NSISVersion                                 =   "3.10"
+$Script:ProjectRoot                                 =   Split-Path -Parent $PSScriptRoot
 
 function Write-Header {
     param([string]$Message)
@@ -223,8 +224,7 @@ function Download-Java {
 
 function Download-Solr {
     param(
-        [string]$TargetPath = "$ProjectRoot\solr",
-        [string]$SolrUrl = "https://archive.apache.org/dist/solr/solr/$SolrVersion/solr-$SolrVersion.zip"
+        [string]$TargetPath = "$ProjectRoot\solr"
     )
 
     Write-Info "Загрузка Apache Solr $SolrVersion..."
@@ -234,30 +234,149 @@ function Download-Solr {
         return $TargetPath
     }
 
-    $tempFile = "$env:TEMP\solr_$SolrVersion.zip"
+    # Официальный зеркальный URL для Solr
+    $solrUrls                                       =   @(
+        "https://www.apache.org/dyn/closer.lua/solr/solr/$SolrVersion/solr-$SolrVersion.tgz?action=download",
+        "https://archive.apache.org/dist/solr/solr/$SolrVersion/solr-$SolrVersion.tgz",
+        "https://dlcdn.apache.org/solr/solr/$SolrVersion/solr-$SolrVersion.tgz"
+    )
+
+    $tempFile                                       =   "$env:TEMP\solr_$SolrVersion.tgz"
+    $downloadSuccess                                =   $false
+
+    foreach ($solrUrl in $solrUrls) {
+        try {
+            Write-Info "Попытка загрузки с $solrUrl..."
+            Invoke-WebRequest -Uri $solrUrl -OutFile $tempFile -UseBasicParsing -TimeoutSec 120 -MaximumRedirection 10
+            $downloadSuccess                        =   $true
+            Write-Success "Загрузка успешна!"
+            break
+        } catch {
+            Write-Warning "Не удалось загрузить с $solrUrl : $($_.Exception.Message)"
+            continue
+        }
+    }
+
+    if (!$downloadSuccess) {
+        throw "Не удалось загрузить Solr ни с одного зеркала"
+    }
 
     try {
-        Write-Info "Загрузка с $SolrUrl..."
-        Invoke-WebRequest -Uri $SolrUrl -OutFile $tempFile -UseBasicParsing
+        Write-Info "Распаковка Solr (это может занять минуту)..."
+        
+        # Проверяем наличие tar (встроен в Windows 10+)
+        if (Get-Command tar -ErrorAction SilentlyContinue) {
+            Write-Info "Использование встроенного tar для распаковки..."
+            New-Item -ItemType Directory -Path "$ProjectRoot\temp_solr" -Force | Out-Null
+            
+            # tar -xzf распаковывает .tgz
+            & tar -xzf $tempFile -C "$ProjectRoot\temp_solr"
+            
+            if ($LASTEXITCODE -ne 0) {
+                throw "Ошибка распаковки через tar (код: $LASTEXITCODE)"
+            }
+        } else {
+            throw "Команда tar не найдена. Требуется Windows 10+ или установка tar/7-Zip"
+        }
 
-        Write-Info "Распаковка в $TargetPath..."
-        Expand-Archive -Path $tempFile -DestinationPath $TargetPath -Force
-
-        # Найти папку с Solr
-        $solrFolder = Get-ChildItem $TargetPath | Where-Object { $_.PSIsContainer -and $_.Name -like "solr-*" } | Select-Object -First 1
+        # Найти папку с Solr и переместить её
+        $solrFolder                                 =   Get-ChildItem "$ProjectRoot\temp_solr" | 
+                                                        Where-Object { $_.PSIsContainer -and $_.Name -like "solr-*" } | 
+                                                        Select-Object -First 1
+        
         if ($solrFolder) {
-            $solrPath = Join-Path $TargetPath $solrFolder.Name
-            Write-Success "Solr установлен в $solrPath"
-            return $solrPath
+            Move-Item $solrFolder.FullName $TargetPath -Force
+            Remove-Item "$ProjectRoot\temp_solr" -Recurse -Force -ErrorAction SilentlyContinue
+            Write-Success "Solr установлен в $TargetPath"
+            return $TargetPath
         } else {
             throw "Не удалось найти Solr папку после распаковки"
         }
     } catch {
-        Write-Error "Ошибка при загрузке Solr: $($_.Exception.Message)"
+        Write-Error "Ошибка при установке Solr: $($_.Exception.Message)"
         throw
     } finally {
         if (Test-Path $tempFile) {
             Remove-Item $tempFile -Force
+        }
+        if (Test-Path "$ProjectRoot\temp_solr") {
+            Remove-Item "$ProjectRoot\temp_solr" -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+
+function Download-NSIS {
+    param(
+        [string]$TargetPath = "$ProjectRoot\nsis"
+    )
+
+    Write-Info "Поиск NSIS $NSISVersion..."
+
+    # Проверяем установленный NSIS в стандартных местах
+    $nsisLocations                                  =   @(
+        "$env:PROGRAMFILES\NSIS\makensis.exe",
+        "${env:PROGRAMFILES(X86)}\NSIS\makensis.exe",
+        "$TargetPath\makensis.exe"
+    )
+
+    foreach ($location in $nsisLocations) {
+        if (Test-Path $location) {
+            Write-Success "NSIS найден: $location"
+            return (Split-Path -Parent $location)
+        }
+    }
+
+    Write-Info "NSIS не найден, установка..."
+
+    # Пробуем использовать Chocolatey (если установлен)
+    if (Get-Command choco -ErrorAction SilentlyContinue) {
+        try {
+            Write-Info "Установка NSIS через Chocolatey..."
+            & choco install nsis -y --no-progress
+            
+            # Проверяем повторно
+            foreach ($location in $nsisLocations) {
+                if (Test-Path $location) {
+                    Write-Success "NSIS установлен: $location"
+                    return (Split-Path -Parent $location)
+                }
+            }
+        } catch {
+            Write-Warning "Не удалось установить через Chocolatey: $($_.Exception.Message)"
+        }
+    }
+
+    # Если Chocolatey недоступен, загружаем установщик напрямую
+    Write-Info "Загрузка NSIS установщика..."
+    $nsisUrl                                        =   "https://downloads.sourceforge.net/project/nsis/NSIS%203/$NSISVersion/nsis-$NSISVersion-setup.exe"
+    $tempInstaller                                  =   "$env:TEMP\nsis-setup.exe"
+
+    try {
+        Write-Info "Загрузка с SourceForge..."
+        # Используем альтернативный URL с прямой ссылкой
+        Invoke-WebRequest -Uri $nsisUrl -OutFile $tempInstaller -UseBasicParsing -UserAgent "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" -TimeoutSec 120 -MaximumRedirection 5
+
+        Write-Info "Установка NSIS в $TargetPath..."
+        # Установка в локальную папку проекта без требования админ-прав
+        New-Item -ItemType Directory -Path $TargetPath -Force | Out-Null
+        
+        # Запускаем установщик в тихом режиме с указанием пути
+        $installArgs                                =   "/S /D=$TargetPath"
+        $process                                    =   Start-Process -FilePath $tempInstaller -ArgumentList $installArgs -Wait -PassThru -NoNewWindow
+
+        if ($process.ExitCode -eq 0 -and (Test-Path "$TargetPath\makensis.exe")) {
+            Write-Success "NSIS установлен в $TargetPath"
+            return $TargetPath
+        } else {
+            throw "Установка не удалась (код: $($process.ExitCode))"
+        }
+    } catch {
+        Write-Error "Ошибка при установке NSIS: $($_.Exception.Message)"
+        Write-Warning "Попробуйте установить NSIS вручную с https://nsis.sourceforge.io/"
+        throw
+    } finally {
+        if (Test-Path $tempInstaller) {
+            Remove-Item $tempInstaller -Force -ErrorAction SilentlyContinue
         }
     }
 }

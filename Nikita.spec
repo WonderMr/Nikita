@@ -6,20 +6,20 @@ a = Analysis(
     pathex=[],
     binaries=[],
     datas=[],
-    hiddenimports=['subprocess', 'cherrypy', 'urllib', 'threading', 'requests', 're', 'time', 'operator', 'json', 'psutil', 'shlex', 'platform', 'socket', 'sqlite3', 'src.parser', 'src.reader', 'src.dictionaries', 'src.messenger', 'src.globals', 'src.tools', 'src.solr', 'src.sender', 'src.redis_manager', 'src.state_manager', 'src.parser_state', 'src.cherry'],
+    hiddenimports=['subprocess', 'cherrypy', 'urllib', 'threading', 'requests', 're', 'time', 'operator', 'json', 'psutil', 'shlex', 'platform', 'socket', 'sqlite3', 'src.parser', 'src.reader', 'src.dictionaries', 'src.messenger', 'src.globals', 'src.tools', 'src.solr', 'src.sender', 'src.redis_manager', 'src.state_manager', 'src.parser_state', 'src.cherry', 'clickhouse_driver', 'win32timezone', 'clickhouse_driver', 'win32timezone'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=['numpy', 'cryptography', 'lib2to3', 'win32com'],
+    excludes=['numpy', 'cryptography', 'lib2to3', 'win32com', 'gevent', 'matplotlib', '__PyInstaller_hooks_0_pandas_io_formats_style'],
     noarchive=False,
-    optimize=0,
+    optimize=1,
 )
 pyz = PYZ(a.pure)
 
 exe = EXE(
     pyz,
     a.scripts,
-    [],
+    [('O', None, 'OPTION')],
     exclude_binaries=True,
     name='Nikita',
     debug=False,

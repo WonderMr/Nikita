@@ -49,7 +49,7 @@ ShowInstDetails show
 ShowUnInstDetails show
 
 Section "MainSection" SEC01
-  ;�� ������ ��� allusers!!!!
+  ; Installation context for all users
   SetShellVarContext all
   
   ExecWait '"$SYSDIR\sc.exe" stop Nikita'
@@ -64,36 +64,37 @@ Section "MainSection" SEC01
   File /r ..\dist\Nikita\*.* 
   
   CreateDirectory   "$SMPROGRAMS\Nikita"
-  ;CreateShortCut    "$SMPROGRAMS\Nikita\������������ ���������.lnk"     "$INSTDIR\pcnsl.exe"
-  CreateShortCut    "$SMPROGRAMS\Nikita\������� ��������� ��.lnk"       "$INSTDIR\Nikita.epf"
-  WriteINIStr       "$SMPROGRAMS\Nikita\������ ����������.url"          "InternetShortcut"  "URL"  "http://localhost:8984"
+  ; Create shortcuts with English names to avoid encoding issues
+  ; CreateShortCut    "$SMPROGRAMS\Nikita\Configuration.lnk"     "$INSTDIR\pcnsl.exe"
+  CreateShortCut    "$SMPROGRAMS\Nikita\Open EPF.lnk"       "$INSTDIR\Nikita.epf"
+  WriteINIStr       "$SMPROGRAMS\Nikita\Web Interface.url"          "InternetShortcut"  "URL"  "http://localhost:8984"
 
-  !define           shortcut_install_svc        "$SMPROGRAMS\Nikita\���������� ������.lnk"
+  !define           shortcut_install_svc        "$SMPROGRAMS\Nikita\Install Service.lnk"
   CreateShortCut    "${shortcut_install_svc}"   "$INSTDIR\Nikita.exe"       "install"
-  ShellLink::SetRunAsAdministrator              "${shortcut_install_svc}"
+  ; ShellLink::SetRunAsAdministrator              "${shortcut_install_svc}"
 
-  !define           shortcut_run_svc            "$SMPROGRAMS\Nikita\��������� ������.lnk"
+  !define           shortcut_run_svc            "$SMPROGRAMS\Nikita\Start Service.lnk"
   CreateShortCut    "${shortcut_run_svc}"       "$SYSDIR\sc.exe"                "start Nikita"  "$INSTDIR\Nikita.exe"
-  ShellLink::SetRunAsAdministrator              "${shortcut_run_svc}"
+  ; ShellLink::SetRunAsAdministrator              "${shortcut_run_svc}"
 
-  !define           shortcut_stop_svc           "$SMPROGRAMS\Nikita\���������� ������.lnk"
+  !define           shortcut_stop_svc           "$SMPROGRAMS\Nikita\Stop Service.lnk"
   CreateShortCut    "${shortcut_stop_svc}"      "$SYSDIR\sc.exe"                "stop Nikita"   "$INSTDIR\Nikita.exe"
-  ShellLink::SetRunAsAdministrator              "${shortcut_stop_svc}"
+  ; ShellLink::SetRunAsAdministrator              "${shortcut_stop_svc}"
 
-  !define           shortcut_del_svc            "$SMPROGRAMS\Nikita\������� ������.lnk"
+  !define           shortcut_del_svc            "$SMPROGRAMS\Nikita\Remove Service.lnk"
   CreateShortCut    "${shortcut_del_svc}"       "$SYSDIR\sc.exe"                "delete Nikita" "$INSTDIR\Nikita.exe"
-  ShellLink::SetRunAsAdministrator              "${shortcut_del_svc}"
+  ; ShellLink::SetRunAsAdministrator              "${shortcut_del_svc}"
 
-  !define           shortcut_run_console        "$SMPROGRAMS\Nikita\��������� � �������.lnk"
+  !define           shortcut_run_console        "$SMPROGRAMS\Nikita\Run Console.lnk"
   CreateShortCut    "${shortcut_run_console}"   "$INSTDIR\Nikita.exe"       "console"
-  ShellLink::SetRunAsAdministrator              "${shortcut_run_console}"
+  ; ShellLink::SetRunAsAdministrator              "${shortcut_run_console}"
 SectionEnd
 
 Section -AdditionalIcons
-  ;�� ������ ��� allusers!!!!
+  ; Installation context for all users
   SetShellVarContext all
 
-  CreateShortCut "$SMPROGRAMS\Nikita\�������.lnk" "$INSTDIR\uninst.exe"
+  CreateShortCut "$SMPROGRAMS\Nikita\Uninstall.lnk" "$INSTDIR\uninst.exe"
 SectionEnd
 
 Section -Post
@@ -110,16 +111,16 @@ SectionEnd
 
 Function un.onUninstSuccess
   HideWindow
-  MessageBox MB_ICONINFORMATION|MB_OK "�������� ��������� $(^Name) ���� ������� ���������."
+  MessageBox MB_ICONINFORMATION|MB_OK "Application $(^Name) was successfully removed from your computer."
 FunctionEnd
 
 Function un.onInit
-  MessageBox MB_ICONQUESTION|MB_YESNO|MB_DEFBUTTON2 "�� ������� � ���, ��� ������� ������� $(^Name) � ��� ����������� ������� ���������?" IDYES +2
+  MessageBox MB_ICONQUESTION|MB_YESNO|MB_DEFBUTTON2 "Are you sure you want to completely remove $(^Name) and all of its components?" IDYES +2
   Abort
 FunctionEnd
 
 Section Uninstall
-  ;�� ������ ��� allusers!!!!
+  ; Installation context for all users
   SetShellVarContext all
 
   ExecWait '"$SYSDIR\sc.exe" stop Nikita'

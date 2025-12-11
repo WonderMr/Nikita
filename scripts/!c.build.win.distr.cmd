@@ -14,33 +14,39 @@ if exist ".\dist\Nikita\Nikita.exe" (
 
 echo.
 echo Building application with PowerShell...
+echo ==================================================
 powershell -ExecutionPolicy Bypass -File "scripts\build.ps1" -Optimize -NoTest
 
 if %errorlevel% neq 0 (
     echo.
-    echo Build failed!
+    echo ==================================================
+    echo ERROR: Build failed with exit code %errorlevel%!
+    echo ==================================================
+    echo The build process encountered an error and cannot continue.
+    echo Please check the error messages above.
+    echo.
     pause
     exit /b %errorlevel%
 )
 
 echo.
+echo ==================================================
+echo Build completed successfully!
+echo ==================================================
+
+echo.
 echo Creating Windows installer...
-if exist "%PROGRAMFILES(X86)%\NSIS\makensis.exe" (
-    "%PROGRAMFILES(X86)%\NSIS\makensis.exe" "%CD%\scripts\c.installer.nsi"
-) else if exist "%PROGRAMFILES%\NSIS\makensis.exe" (
-    "%PROGRAMFILES%\NSIS\makensis.exe" "%CD%\scripts\c.installer.nsi"
-) else (
-    echo.
-    echo ERROR: NSIS not found!
-    echo Please install NSIS from https://nsis.sourceforge.io/
-    echo.
-    pause
-    exit /b 1
-)
+echo ==================================================
+powershell -ExecutionPolicy Bypass -File "scripts\create-installer.ps1"
 
 if %errorlevel% neq 0 (
     echo.
-    echo Installer creation failed!
+    echo ==================================================
+    echo ERROR: Installer creation failed with exit code %errorlevel%!
+    echo ==================================================
+    echo The installer creation process encountered an error.
+    echo Please check the error messages above.
+    echo.
     pause
     exit /b %errorlevel%
 )
@@ -50,6 +56,4 @@ echo ==================================================
 echo SUCCESS: Windows distribution created!
 echo ==================================================
 echo.
-echo Installer: Nikita.setup.%date%.exe
-echo.
-pause"
+pause
