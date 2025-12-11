@@ -5,7 +5,7 @@ a = Analysis(
     ['C:\\Users\\Administrator\\Documents\\Nikita\\Nikita.py'],
     pathex=[],
     binaries=[],
-    datas=[],
+    datas=[('LICENSE', '.')],
     hiddenimports=['subprocess', 'cherrypy', 'urllib', 'threading', 'requests', 're', 'time', 'operator', 'json', 'psutil', 'shlex', 'platform', 'socket', 'sqlite3', 'src.parser', 'src.reader', 'src.dictionaries', 'src.messenger', 'src.globals', 'src.tools', 'src.solr', 'src.sender', 'src.redis_manager', 'src.state_manager', 'src.parser_state', 'src.cherry', 'clickhouse_driver', 'win32timezone', 'clickhouse_driver', 'win32timezone'],
     hookspath=[],
     hooksconfig={},
