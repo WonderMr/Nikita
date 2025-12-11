@@ -23,8 +23,8 @@ RequestExecutionLevel admin
 !insertmacro MUI_PAGE_LICENSE "..\licenses\installer.java.license.rtf"
 ; License Solr page
 !insertmacro MUI_PAGE_LICENSE "..\licenses\installer.solr.LICENSE.txt"
-; License Solr page
-;!insertmacro MUI_PAGE_LICENSE "installer.my.LICENSE.txt"
+; License GPLv3 page
+!insertmacro MUI_PAGE_LICENSE "..\LICENSE"
 ; Directory page
 !insertmacro MUI_PAGE_DIRECTORY
 ; Instfiles page

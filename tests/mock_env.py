@@ -9,3 +9,5 @@ def setup_mocks():
         sys.modules['win32event'] = unittest.mock.MagicMock()
         sys.modules['win32service'] = unittest.mock.MagicMock()
         sys.modules['win32serviceutil'] = unittest.mock.MagicMock()
+
+

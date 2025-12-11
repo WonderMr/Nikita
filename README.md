@@ -6,7 +6,7 @@
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-lightgrey.svg)](https://github.com/)
-[![License](https://img.shields.io/badge/License-See%20licenses%2F-green.svg)](licenses/)
+[![License](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 
 ---
 
@@ -107,7 +107,7 @@ python Nikita.py start
 
 ## Лицензия
 
-Смотрите файлы в каталоге [`licenses/`](licenses/)
+Этот проект лицензируется на условиях GNU GPLv3. Подробнее см. в файле [LICENSE](LICENSE).
 
 ---
 
