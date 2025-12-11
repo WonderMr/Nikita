@@ -1,30 +1,25 @@
 # -*- mode: python ; coding: utf-8 -*-
 
 
-block_cipher = None
-
-
 a = Analysis(
-    ['Nikita.py'],
+    ['C:\\Users\\Administrator\\Documents\\Nikita\\Nikita.py'],
     pathex=[],
     binaries=[],
     datas=[],
-    hiddenimports=['subprocess', 'clickhouse_driver', 'cherrypy', 'urllib', 'threading', 'requests', 're', 'time', 'operator', 'json', 'psutil', 'subprocess', 'shlex', 'platform', 'socket', 'sqlite3', 'src.parser', 'src.reader', 'win32timezone', 'src.dictionaries', 'src.messenger'],
+    hiddenimports=['subprocess', 'cherrypy', 'urllib', 'threading', 'requests', 're', 'time', 'operator', 'json', 'psutil', 'shlex', 'platform', 'socket', 'sqlite3', 'src.parser', 'src.reader', 'src.dictionaries', 'src.messenger', 'src.globals', 'src.tools', 'src.solr', 'src.sender', 'src.redis_manager', 'src.state_manager', 'src.parser_state', 'src.cherry', 'clickhouse_driver', 'win32timezone', 'clickhouse_driver', 'win32timezone'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=['numpy', 'cryptography', 'lib2to3', 'win32com', 'gevent', 'matplotlib', 'matplotlib.backend', '__PyInstaller_hooks_0_pandas_io_formats_style'],
-    win_no_prefer_redirects=False,
-    win_private_assemblies=False,
-    cipher=block_cipher,
+    excludes=['numpy', 'cryptography', 'lib2to3', 'win32com', 'gevent', 'matplotlib', '__PyInstaller_hooks_0_pandas_io_formats_style'],
     noarchive=False,
+    optimize=1,
 )
-pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+pyz = PYZ(a.pure)
 
 exe = EXE(
     pyz,
     a.scripts,
-    [],
+    [('O', None, 'OPTION')],
     exclude_binaries=True,
     name='Nikita',
     debug=False,
@@ -41,7 +36,6 @@ exe = EXE(
 coll = COLLECT(
     exe,
     a.binaries,
-    a.zipfiles,
     a.datas,
     strip=False,
     upx=True,

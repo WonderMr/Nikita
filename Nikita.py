@@ -855,6 +855,9 @@ def main():
             # Now ask the service manager to fire things up for us...
             servicemanager.StartServiceCtrlDispatcher()
             print("service done!")
+        elif "--version" in sys.argv:
+            print("Nikita Service 1.0.0")
+            sys.exit(0)
         else:
             win32serviceutil.HandleCommandLine(nikita_service)
     else:

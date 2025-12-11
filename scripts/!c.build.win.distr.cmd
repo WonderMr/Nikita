@@ -1,66 +1,59 @@
+@echo off
 cd /d "%~dp0\.."
 cls
-.\dist\Nikita\Nikita.exe stop
-.\dist\Nikita\Nikita.exe remove
 
-del .\src\*.pyd
-python b.compiles2pyd.py build_ext --inplace
-if %errorlevel% neq 0 exit /b %errorlevel%
+echo ==================================================
+echo Nikita Windows Distribution Builder
+echo ==================================================
 
-ren .\src\cherry.py cherry.p
-ren .\src\*.py *.yp
-ren .\src\cherry.p cherry.py
+echo Stopping and removing existing service...
+if exist ".\dist\Nikita\Nikita.exe" (
+    .\dist\Nikita\Nikita.exe stop 2>nul
+    .\dist\Nikita\Nikita.exe remove 2>nul
+)
 
-rmdir /S /Q .\dist\
-rmdir /S /Q .\build\
+echo.
+echo Building application with PowerShell...
+echo ==================================================
+powershell -ExecutionPolicy Bypass -File "scripts\build.ps1" -Optimize -NoTest
 
-set PYTHONOPTIMIZE=1 && ^
-pyinstaller .\Nikita.py ^
---onedir ^
---console ^
---clean ^
---exclude-module numpy ^
---exclude-module cryptography ^
---exclude-module lib2to3 ^
---exclude-module win32com ^
---exclude-module gevent ^
---exclude-module matplotlib ^
---exclude-module matplotlib.backend ^
---exclude-module __PyInstaller_hooks_0_pandas_io_formats_style ^
---hidden-import subprocess ^
---hidden-import clickhouse_driver ^
---hidden-import cherrypy ^
---hidden-import urllib ^
---hidden-import threading ^
---hidden-import requests ^
---hidden-import re ^
---hidden-import time ^
---hidden-import operator ^
---hidden-import json ^
---hidden-import psutil ^
---hidden-import subprocess ^
---hidden-import shlex ^
---hidden-import platform ^
---hidden-import socket ^
---hidden-import sqlite3 ^
---hidden-import src.parser ^
---hidden-import src.reader ^
---hidden-import win32timezone ^
---hidden-import src.dictionaries ^
---hidden-import src.messenger ^
---log-level DEBUG ^
---name=Nikita 
+if %errorlevel% neq 0 (
+    echo.
+    echo ==================================================
+    echo ERROR: Build failed with exit code %errorlevel%!
+    echo ==================================================
+    echo The build process encountered an error and cannot continue.
+    echo Please check the error messages above.
+    echo.
+    pause
+    exit /b %errorlevel%
+)
 
-copy .\dlls\*.dll .\dist\Nikita\
+echo.
+echo ==================================================
+echo Build completed successfully!
+echo ==================================================
 
-ren .\src\*.yp *.py
-del .\src\*.pyd
+echo.
+echo Creating Windows installer...
+echo ==================================================
+powershell -ExecutionPolicy Bypass -File "scripts\create-installer.ps1"
 
+if %errorlevel% neq 0 (
+    echo.
+    echo ==================================================
+    echo ERROR: Installer creation failed with exit code %errorlevel%!
+    echo ==================================================
+    echo The installer creation process encountered an error.
+    echo Please check the error messages above.
+    echo.
+    pause
+    exit /b %errorlevel%
+)
 
-mkdir .\dist\Nikita\java
-mkdir .\dist\Nikita\solr
-xcopy .\java .\dist\Nikita\java /s/h/e/k/f/c
-xcopy .\solr-src .\dist\Nikita\solr /s/h/e/k/f/c
-
-.\dist\Nikita\Nikita.exe remove
-"C:\Program Files (x86)\NSIS\makensisw.exe" %CD%\c.installer.nsi"
+echo.
+echo ==================================================
+echo SUCCESS: Windows distribution created!
+echo ==================================================
+echo.
+pause

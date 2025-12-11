@@ -2,9 +2,13 @@
 import  re
 import os
 import threading
+import platform
 from dotenv import load_dotenv
 
 load_dotenv()
+
+# Определение платформы
+is_windows = platform.system() == "Windows"
 
 # Глобальная блокировка для безопасного доступа к g.parser.ibases из разных потоков
 ibases_lock = threading.Lock()
@@ -16,13 +20,14 @@ def print_config():
     t.debug_print("=" * 80)
     t.debug_print("ЗАГРУЗКА КОНФИГУРАЦИИ NIKITA")
     t.debug_print("=" * 80)
-    t.debug_print(f"CLICKHOUSE_ENABLED: {os.getenv('CLICKHOUSE_ENABLED', 'False')}")
-    t.debug_print(f"CLICKHOUSE_HOST: {os.getenv('CLICKHOUSE_HOST', 'localhost')}")
-    t.debug_print(f"CLICKHOUSE_PORT: {os.getenv('CLICKHOUSE_PORT', '9000')}")
-    t.debug_print(f"CLICKHOUSE_DATABASE: {os.getenv('CLICKHOUSE_DATABASE', 'zhr1c')}")
-    t.debug_print(f"CLICKHOUSE_USER: {os.getenv('CLICKHOUSE_USER', 'default')}")
-    t.debug_print(f"REDIS_ENABLED: {os.getenv('REDIS_ENABLED', 'False')}")
-    t.debug_print(f"SOLR_ENABLED: {os.getenv('SOLR_ENABLED', 'False')}")
+    # Показываем реальные значения после применения логики
+    t.debug_print(f"CLICKHOUSE_ENABLED: {conf.clickhouse.enabled}")
+    t.debug_print(f"CLICKHOUSE_HOST: {conf.clickhouse.host}")
+    t.debug_print(f"CLICKHOUSE_PORT: {conf.clickhouse.port}")
+    t.debug_print(f"CLICKHOUSE_DATABASE: {conf.clickhouse.database}")
+    t.debug_print(f"CLICKHOUSE_USER: {conf.clickhouse.user}")
+    t.debug_print(f"REDIS_ENABLED: {conf.redis.enabled}")
+    t.debug_print(f"SOLR_ENABLED: {conf.solr.enabled}")
     t.debug_print(f"DEBUG_ENABLED: {os.getenv('DEBUG_ENABLED', 'True')}")
     t.debug_print("=" * 80)
 
@@ -93,7 +98,8 @@ class conf:
     # ======= настройки ClickHouse =====================================================================================
     class clickhouse:
         section_name                                            =   "ClickHouse settings"                               # имя секции для файла конфигурации
-        enabled                                                 =   os.getenv('CLICKHOUSE_ENABLED', 'False').lower() in ('true', '1', 't', 'y', 'yes')
+        # Под Windows отключаем ClickHouse, включаем только Solr
+        enabled                                                 =   os.getenv('CLICKHOUSE_ENABLED', 'False').lower() in ('true', '1', 't', 'y', 'yes') and not is_windows
         host                                                    =   os.getenv('CLICKHOUSE_HOST', 'localhost')
         port                                                    =   int(os.getenv('CLICKHOUSE_PORT', 9000))
         user                                                    =   os.getenv('CLICKHOUSE_USER', 'default')
@@ -103,7 +109,8 @@ class conf:
     # ======= настройки Redis ==========================================================================================
     class redis:
         section_name                                            =   "Redis settings"
-        enabled                                                 =   os.getenv('REDIS_ENABLED', 'False').lower() in ('true', '1', 't', 'y', 'yes')
+        # Под Windows отключаем Redis, включаем только Solr
+        enabled                                                 =   os.getenv('REDIS_ENABLED', 'False').lower() in ('true', '1', 't', 'y', 'yes') and not is_windows
         server_path                                             =   ""                                                  # путь к redis-server (если нужно запускать)
         host                                                    =   os.getenv('REDIS_HOST', '127.0.0.1')
         port                                                    =   int(os.getenv('REDIS_PORT', 6379))
@@ -113,7 +120,8 @@ class conf:
     # ======= настройки solr ===========================================================================================
     class solr:
         section_name                                            =   "Solr settings"                                     # имя секции для файла конфигурации
-        enabled                                                 =   os.getenv('SOLR_ENABLED', 'False').lower() in ('true', '1', 't', 'y', 'yes')
+        # Под Windows автоматически включаем Solr
+        enabled                                                 =   os.getenv('SOLR_ENABLED', 'True' if is_windows else 'False').lower() in ('true', '1', 't', 'y', 'yes')
         mem_min                                                 =   os.getenv('SOLR_MEM_MIN', '2g')
         mem_max                                                 =   os.getenv('SOLR_MEM_MAX', '32g')
         dir                                                     =   os.getenv('SOLR_DIR', '')
