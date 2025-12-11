@@ -1,8 +1,12 @@
-# Сборка Nikita Windows Distribution
+# Сборка дистрибутива Nikita
+
+Этот документ описывает процесс создания Windows-дистрибутива и инсталлятора для проекта Nikita.
+
+---
 
 ## Быстрый старт
 
-### Автоматическая сборка дистрибутива и инсталлятора
+### Автоматическая сборка дистрибутива и инсталлятора (Windows)
 
 ```cmd
 .\scripts\!c.build.win.distr.cmd
@@ -286,7 +290,32 @@ pip install pyinstaller
 
 ---
 
-**Автор:** Nikita Build System  
-**Версия:** 2025-12-11  
-**Поддержка:** Python 3.8-3.14, Windows 10/11/Server
+---
+
+## Linux-сборка
+
+Для Linux не требуется сборка дистрибутива. Используйте установку из исходников:
+
+```bash
+# Клонирование репозитория
+git clone https://github.com/your-org/Nikita.git /opt/Nikita
+cd /opt/Nikita
+
+# Установка зависимостей
+python3 -m venv venv
+venv/bin/pip install -r requirements.lin
+
+# Установка службы
+sudo ln -s /opt/Nikita/Nikita.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable Nikita
+```
+
+Подробнее см. [QUICKSTART.md](QUICKSTART.md)
+
+---
+
+**Документ обновлён:** 2025-12-11  
+**Версия:** 2.0.0  
+**Поддержка:** Python 3.10+, Windows 10/11/Server 2016+
 
