@@ -1,19 +1,4 @@
 # _*_ coding: UTF-8 _*_
-# Copyright (C) 2025 Nikita Development Team
-#
-# This program is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program.  If not, see <https://www.gnu.org/licenses/>.
-
 import platform
 is_windows                                               = platform.system() == "Windows"
 import  sys, os, configparser
@@ -789,6 +774,22 @@ def stop_all():
             t.debug_print("Останавливаем Warming Cache...")
             g.threads.warming_cache.stop()
             
+        # Дожидаемся завершения потоков (важно для сохранения state)
+        join_timeout                                        =   15
+        join_list                                           =   []
+        for th_name in ['parser', 'sender', 'config_updater', 'warming_cache', 'cherry', 'redis', 'solr']:
+            if hasattr(g.threads, th_name):
+                th                                          =   getattr(g.threads, th_name)
+                if th:
+                    join_list.append((th_name, th))
+        for th_name, th in join_list:
+            try:
+                if hasattr(th, 'join'):
+                    t.debug_print(f"Ожидаем завершения потока {th_name}...", "stop_all")
+                    th.join(timeout=join_timeout)
+            except Exception as e:
+                t.debug_print(f"⚠ Не удалось join() для {th_name}: {str(e)}", "stop_all")
+
         t.debug_print("✓ Все потоки остановлены")
     except Exception as e:
         t.debug_print(f"⚠ Исключение при остановке потоков: {str(e)}")

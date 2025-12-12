@@ -1,19 +1,4 @@
 # -*- coding: utf-8 -*-
-# Copyright (C) 2025 Nikita Development Team
-#
-# This program is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program.  If not, see <https://www.gnu.org/licenses/>.
-
 import  threading                                                                                                       # Stubs for threading
 #import  pysolr                                                                                                          # my favorite nonSQL db tool
 import  psutil                                                                                                                # psutil is a cross-platform library for retrieving information on running processes and system utilization (CPU, memory, disks, network,sensors) in Python.
@@ -60,7 +45,10 @@ class solr_thread(threading.Thread):
         g.execution.solr.started                            =   True
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     def stop(self):
-        psutil.Process(g.execution.solr.pid).kill()
+        try:
+            psutil.Process(g.execution.solr.pid).kill()
+        except Exception as e:
+            t.debug_print(f"Exception while stopping Solr: {str(e)}", self.name)
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     # запускает Apahe Solr
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -129,7 +117,7 @@ class solr_thread(threading.Thread):
         while(not solr_wakes and solr_times<solr_times_max):
             time.sleep(g.conf.solr.wait_after_start)                                                                    # чуть подождём
             try:
-                solr_wakes                                  =   requests.get(g.execution.solr.url_main)
+                solr_wakes                                  =   requests.get(g.execution.solr.url_main, timeout=5)
             except:
                 pass
             solr_times                                      +=  1
@@ -160,7 +148,7 @@ class solr_thread(threading.Thread):
                                                             +   "/admin/cores?action=CREATE&name="+bc_name\
                                                             +   "&instanceDir="+bc_name\
                                                             +   "&config=solrconfig.xml&dataDir=data"
-            bc_ret                                          =   requests.get(bc_url).status_code
+            bc_ret                                          =   requests.get(bc_url, timeout=10).status_code
         t.debug_print("core "+bc_name+" created with code "+str(bc_ret),self.name)
         return bc_ret                                       ==  200
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -172,7 +160,7 @@ class solr_thread(threading.Thread):
             be_ret                                          =   requests.get(
                                                                     g.execution.solr.url_main \
                                                                     +"/"+be_name+g.conf.solr.ping
-                                                                ).status_code
+                                                                ,timeout=5).status_code
             t.debug_print("core " + be_name + " responds " + str(be_ret), self.name)
         except Exception as e:
             t.debug_print("Solr return "+str(e),self.name)
@@ -183,7 +171,7 @@ class solr_thread(threading.Thread):
                 be_ret                                      =   requests.get(
                                                                     g.execution.solr.url_main
                                                                     +"/"+be_name+g.conf.solr.ping
-                                                                ).status_code
+                                                                ,timeout=5).status_code
                 t.debug_print("core " + be_name + " responds " + str(be_ret), self.name)
             except Exception as e:
                 t.debug_print("Solr return " + str(e), self.name)
