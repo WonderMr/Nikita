@@ -1,19 +1,4 @@
 # -*- coding: utf-8 -*-
-# Copyright (C) 2025 Nikita Development Team
-#
-# This program is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program.  If not, see <https://www.gnu.org/licenses/>.
-
 import sys
 import  threading
 import  os
@@ -30,10 +15,15 @@ from    src.dictionaries    import  dictionary              as  d
 from    src                 import  reader                  as  r
 from    src.redis_manager   import  queue
 from    src.state_manager   import  state_manager
-from    clickhouse_driver   import  Client                  as  ch
 from    datetime            import  datetime
 import  src.messenger                                       as  m
 from    src                 import  sender                  as  snd
+
+# ClickHouse драйвер может отсутствовать в окружениях, где ClickHouse выключен (например Windows).
+try:
+    from    clickhouse_driver   import  Client              as  ch
+except Exception:
+    ch                                                      =   None
 # ======================================================================================================================
 # класс, умеющий разбирать записи ЖР 1с и отправлять их в Solr
 # ======================================================================================================================
@@ -60,6 +50,11 @@ class parser(threading.Thread):
         
         if g.conf.clickhouse.enabled:
             try:
+                if ch is None:
+                    t.debug_print("ClickHouse драйвер (clickhouse_driver) не доступен. ClickHouse будет выключен.", self.name)
+                    self.chclient                           =   None
+                    g.conf.clickhouse.enabled               =   False
+                    # продолжаем работу парсера (например, Solr/Redis могут быть включены в другом окружении)
                 t.debug_print(f"Подключение к ClickHouse: {g.conf.clickhouse.host}:{g.conf.clickhouse.port}, БД: {g.conf.clickhouse.database}", self.name)
                 
                 # Подключаемся без указания базы данных для её создания
@@ -116,15 +111,14 @@ class parser(threading.Thread):
         if self.files_list_updater is None: return
 
         while True and not self.stopMe:
-            list                                            =   self.files_list_updater.ibases_files                    # сокращаем
             try:
                 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
                 while (g.parser.ibases)                     ==  None:                                                   # ждём инициализации
                     time.sleep(g.waits.in_cycle_we_trust)
                 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-                if(len(list)                                >   0):                                                     # если есть над чем работать
-                    self.parse_file(list[0][1] + list[0][2],list[0][0])                                                 # обрабатываем очередной файл
-                    del list[0]                                                                                         # и убираем из очереди
+                next_item                                   =   self.files_list_updater.pop_next_file()
+                if next_item:                                                                                           # если есть над чем работать
+                    self.parse_file(next_item[1] + next_item[2], next_item[0])                                          # обрабатываем очередной файл
                 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
                 time.sleep(g.waits.in_cycle_we_trust)
                 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -134,8 +128,13 @@ class parser(threading.Thread):
     # Остановка класса
     # ------------------------------------------------------------------------------------------------------------------
     def stop(self):
-        #self.file_list_updater.stop()                                                                                   # останавливаю поток субкласса обновления файлов
         self.stopMe                                         =   True
+        try:
+            if self.files_list_updater:
+                self.files_list_updater.stop()
+                self.files_list_updater.join(timeout=10)
+        except Exception as e:
+            t.debug_print(f"Exception while stopping filelist updater: {str(e)}", self.name)
     # ------------------------------------------------------------------------------------------------------------------
     # вложенный класс/поток для обновления имен файлов - это происходит асинхронно
     # ------------------------------------------------------------------------------------------------------------------
@@ -146,14 +145,30 @@ class parser(threading.Thread):
         def __init__(self, name):
             threading.Thread.__init__(self)
             self.name                                       =   name
+            self._stop_event                                =   threading.Event()
+            self._lock                                      =   threading.Lock()
+            self._queue                                     =   []
             t.debug_print("Thread initialized", self.name)
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        def stop(self):
+            self._stop_event.set()
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        def pop_next_file(self):
+            """
+            Потокобезопасно извлекает следующий файл для обработки.
+            Возвращает элемент вида [ibase_name, jr_dir + '/', filename] или None.
+            """
+            with self._lock:
+                if self._queue and len(self._queue) > 0:
+                    return self._queue.pop(0)
+            return None
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         def run(self):                                                                                                  # обновляет глобальный список обрабатываемых файлов
             if (self.name.upper()).find('LGP')              >   0:                                                      # если старый формат ЖР
                 regexp                                      =   g.rexp.is_lgP_file_re                                   # если старый формат ЖР
             if (self.name.upper()).find('LGD')              >   0:                                                      # если новый формат ЖР
                 regexp                                      =   g.rexp.is_lgD_file_re                                   # если новый формат ЖР
-            while True:
+            while not self._stop_event.is_set():
                 if g.debug.on:
                      t.debug_print("Scanning for log files...", self.name)
                 g.parser.ibases_lpf_files                   =   []
@@ -205,7 +220,8 @@ class parser(threading.Thread):
                     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
                 if local_list:                                                                                          # для многопоточности
                     local_list.sort(key=operator.itemgetter(2), reverse=True)                                           # сортирую по убыванию
-                    self.ibases_files                       =   local_list                                              # чтобы сразу готовый результат был
+                    with self._lock:
+                        self._queue                         =   local_list                                              # готовая очередь
                 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Безусловное ожидание для https://github.com/WonderMr/Journal2Ct/issues/48
                 time.sleep(g.waits.parser_sleep_on_update_filelist)
 
@@ -313,7 +329,10 @@ class parser(threading.Thread):
     def solr_post_json_data(self, spjd_base):
         start_time                                          =   time.time()
         spjd_sended                                         =   False
-        while not spjd_sended:
+        attempts                                            =   0
+        max_attempts                                        =   int(getattr(g.waits, 'solr_cycles', 10))
+        max_attempts                                        =   max_attempts if max_attempts > 0 else 10
+        while not spjd_sended and not self.stopMe:
             try:
                 #while not g.execution.solr.started:                                                                     # ждём, пока Solr проснётся
                 #    t.debug_print("waiting for solr to start",self.name)
@@ -329,7 +348,7 @@ class parser(threading.Thread):
                                                                     logger_name = self.name
                                                                 )
                 # шлём, пока не пройдёт --------------------------------------------------------------------------------
-                while spjd_ret_code                         !=  200:                                                    # http://localhost:8983/solr/PER/update?wt=json
+                while spjd_ret_code                         !=  200 and not self.stopMe:                                 # http://localhost:8983/solr/PER/update?wt=json
                     t.debug_print(f"Post data returned {str(spjd_ret_code)}, retrying")
                     time.sleep(g.waits.solr_on_bad_send_to)
                     spjd_ret_code                           =   snd.post_query(
@@ -358,6 +377,14 @@ class parser(threading.Thread):
                 error_message                               =   f"Ошибка при отправке в SOLR: {str(ee)}"
                 t.debug_print(error_message, self.name)
                 time.sleep(g.waits.solr_on_bad_send_to)
+            finally:
+                attempts                                    +=  1
+                if attempts                                 >=  max_attempts and not spjd_sended:
+                    t.debug_print(
+                        f"Post/commit не удались за {attempts} попыток. Данные НЕ будут удалены, повторим позже.",
+                        self.name
+                    )
+                    break
         t.debug_print("Post took "+str(time.time()-start_time),self.name)
     # ------------------------------------------------------------------------------------------------------------------
     # проверка корректности записи через её чтение и разбор
@@ -428,8 +455,10 @@ class parser(threading.Thread):
             if g.rexp.is_lgP_file_re.findall(pf_name):                                                                  # или старый формат ЖР
                 self.parse_lgp_file(pf_name, pf_base)
         except Exception as e:
-            t.debug_print("got parsefile exception on "+pf_base+" - "+pf_name+". Error is:"+str(e))
-            sys.exit(-1)
+            import traceback
+            t.debug_print("got parsefile exception on "+pf_base+" - "+pf_name+". Error is:"+str(e), self.name)
+            t.debug_print("Traceback:\n"+traceback.format_exc(), self.name)
+            return
     # ------------------------------------------------------------------------------------------------------------------
     # разбор и индексирование одного файла нового формата
     # ------------------------------------------------------------------------------------------------------------------
@@ -799,14 +828,13 @@ class parser(threading.Thread):
     # read part of file - читаю кусочек файла по смещению
     # ------------------------------------------------------------------------------------------------------------------
     def read_block(self,rb_name,rb_offset,rb_size):
+        rb_chunk                                            =   b""
         try:
-            rb_fh                                               =   open(rb_name, 'rb')                                 # открываю файл
-            rb_fh.seek(rb_offset)                                                                                       # иду к смещению
-            rb_chunk                                            =   rb_fh.read(rb_size)                                 # читаю его
+            with open(rb_name, 'rb') as rb_fh:                                                                        # открываю файл
+                rb_fh.seek(rb_offset)                                                                               # иду к смещению
+                rb_chunk                                    =   rb_fh.read(rb_size)                                   # читаю его
         except Exception as e:
-            t.debug_print("Exception11 while read file "+rb_name,self.name)
-        finally:
-            rb_fh.close()
+            t.debug_print("Exception11 while read file "+rb_name+" error="+str(e), self.name)
         return rb_chunk
     # ------------------------------------------------------------------------------------------------------------------
     # Механизм сохранения состояния перенесён в src/state_manager.py
