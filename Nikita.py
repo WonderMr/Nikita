@@ -427,20 +427,20 @@ class conf:
                     if d2_srvinfo in str(each_base[g.nms.ib.jr_dir]):                                                   # удаляем только базы этого кластера
                         t.debug_print(f"База {each_base[g.nms.ib.name]} удалена из кластера")
                         g.parser.ibases.remove(each_base)
-        # ~~~~~~~ установка параметров solr по умолчанию для первого детекта ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+            # ~~~~~~~ установка параметров solr по умолчанию для первого детекта ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         if initial2:
-            g.conf.solr.mem_min                             =   "2g"
-            g.conf.solr.mem_max                             =   "32g"
-            g.conf.solr.dir                                 =   os.path.join(g.execution.self_dir, "solr")
-            g.conf.solr.listen_interface                    =   "127.0.0.1"
-            g.conf.solr.listen_port                         =   "8983"
-            g.conf.solr.solr_host                           =   "127.0.0.1"                                             # socket.gethostbyaddr(g.conf.solr.listen_interface)
-            g.conf.solr.solr_port                           =   "8983"
-            g.conf.solr.java_home                           =   os.path.join(g.execution.self_dir, "java")
-            g.conf.solr.threads                             =   str(multiprocessing.cpu_count() // 2)                   # половину ядер на solr
+            g.conf.solr.mem_min                             =   os.getenv('SOLR_MEM_MIN', '2g')
+            g.conf.solr.mem_max                             =   os.getenv('SOLR_MEM_MAX', '32g')
+            g.conf.solr.dir                                 =   os.getenv('SOLR_DIR', os.path.join(g.execution.self_dir, "solr"))
+            g.conf.solr.listen_interface                    =   os.getenv('SOLR_LISTEN_INTERFACE', '127.0.0.1')
+            g.conf.solr.listen_port                         =   os.getenv('SOLR_LISTEN_PORT', '8983')
+            g.conf.solr.solr_host                           =   os.getenv('SOLR_HOST', '127.0.0.1')                     # socket.gethostbyaddr(g.conf.solr.listen_interface)
+            g.conf.solr.solr_port                           =   os.getenv('SOLR_PORT', '8983')
+            g.conf.solr.java_home                           =   os.getenv('SOLR_JAVA_HOME', os.path.join(g.execution.self_dir, "java"))
+            g.conf.solr.threads                             =   os.getenv('SOLR_THREADS', str(multiprocessing.cpu_count() // 2)) # половину ядер на solr
             # ~~~~~~~ установка параметров http по умолчанию ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-            g.conf.http.listen_port                         =   "8984"
-            g.conf.http.listen_interface                    =   "0.0.0.0"
+            g.conf.http.listen_port                         =   os.getenv('HTTP_LISTEN_PORT', '8984')
+            g.conf.http.listen_interface                    =   os.getenv('HTTP_LISTEN_INTERFACE', '0.0.0.0')
             # ~~~~~~~ установка парсинга по умолчанию ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             use_cores                                       =   multiprocessing.cpu_count() // 2                        # используем только половину ядер по умолчанию
             i_count_bases                                   =   len(g.parser.ibases)                                    # сколько у нас есть баз
