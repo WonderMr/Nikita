@@ -20,13 +20,16 @@ import threading
 import platform
 from dotenv import load_dotenv
 
-load_dotenv()
+# ======================================================================================================================
+# инициализация окружения и платформы
+# ======================================================================================================================
+# Явная загрузка .env из корня проекта (на уровень выше src), чтобы не зависеть от CWD
+project_root                                            =   os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+env_path                                                =   os.path.join(project_root, '.env')
+load_dotenv(env_path)
 
-# Определение платформы
-is_windows = platform.system() == "Windows"
-
-# Глобальная блокировка для безопасного доступа к g.parser.ibases из разных потоков
-ibases_lock = threading.Lock()
+is_windows                                              =   platform.system() == "Windows"      # Определение платформы
+ibases_lock                                             =   threading.Lock()                    # Глобальная блокировка для безопасного доступа к g.parser.ibases
 
 # Функция для вывода конфигурации (вызывается после инициализации tools)
 def print_config():
@@ -43,6 +46,8 @@ def print_config():
     t.debug_print(f"CLICKHOUSE_USER: {conf.clickhouse.user}")
     t.debug_print(f"REDIS_ENABLED: {conf.redis.enabled}")
     t.debug_print(f"SOLR_ENABLED: {conf.solr.enabled}")
+    t.debug_print(f"HTTP_INTERFACE: {conf.http.listen_interface}")
+    t.debug_print(f"HTTP_PORT: {conf.http.listen_port}")
     t.debug_print(f"DEBUG_ENABLED: {os.getenv('DEBUG_ENABLED', 'True')}")
     t.debug_print("=" * 80)
 
@@ -224,7 +229,7 @@ class rexp:
         ref_re                                                  =   re.compile(r'ref=(.+?)(?=&)')                       # имя информационной базы
         date_start                                              =   re.compile(r'ДатаНачала=(.+)')                      # date начало периода отбора
         date_end                                                =   re.compile(r'ДатаОкончания=(.+)')                   # date конец периода отбора
-        trans_status_re                                         =   re.compile(r'СтатусТранзакции=(.+)')                # t_status отбор по статусу транзации
+        trans_status_re                                         =   re.compile(r'СтатусТранзакции=(.+)')                # t_status отбор по статусу транзакции
         user_re                                                 =   re.compile(r'Пользователь=(.+)')                    # user_id имя пользователя информационной базы
         user_guid_re                                            =   re.compile(r'ПользовательGUID=(.+)')                # user_guid
         computer_re                                             =   re.compile(r'Компьютер=(.+)')                       # comp_id имя компьютера пользователя информационной базы
