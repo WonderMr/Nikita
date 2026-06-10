@@ -66,7 +66,7 @@ TEST_UT11     | 20251211.lgp    | 5242880   | 2621440
 
 ### Таблица `committed_blocks`
 
-История отправленных блоков данных.
+История отправленных блоков данных и идемпотентный барьер перед повторной отправкой.
 
 ```sql
 CREATE TABLE committed_blocks (
@@ -75,21 +75,26 @@ CREATE TABLE committed_blocks (
     file_basename TEXT NOT NULL,
     offset_start INTEGER,
     offset_end INTEGER,
-    data_records INTEGER,
-    committed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    data_hash TEXT,
+    record_count INTEGER,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE UNIQUE INDEX idx_blocks_unique
+ON committed_blocks(database_name, file_basename, offset_start, offset_end, data_hash);
 ```
 
 **Пример данных:**
 ```
-id | database_name | file_basename | offset_start | offset_end | data_records | committed_at
----|---------------|---------------|--------------|------------|--------------|---------------------
-1  | PROD_ZUP      | 20251211.lgp  | 0            | 1048576    | 200          | 2025-12-11 14:23:45
-2  | PROD_ZUP      | 20251211.lgp  | 1048576      | 2097152    | 200          | 2025-12-11 14:24:10
+id | database_name | file_basename | offset_start | offset_end | data_hash | record_count | timestamp
+---|---------------|---------------|--------------|------------|-----------|--------------|---------------------
+1  | PROD_ZUP      | 20251211.lgp  | 0            | 1048576    | a1b2...   | 200          | 2025-12-11 14:23:45
+2  | PROD_ZUP      | 20251211.lgp  | 1048576      | 2097152    | c3d4...   | 200          | 2025-12-11 14:24:10
 ```
 
 **Назначение:**
 - Аудит отправленных данных
+- Проверка уже отправленного блока перед повторной отправкой
 - Подсчёт общего количества записей по базе
 - Отладка (можно увидеть, когда и что было отправлено)
 
@@ -195,13 +200,13 @@ state_manager.log_committed_block(
 )
 ```
 
-**Записывается в таблицу `committed_blocks`** для истории.
+**Записывается в таблицу `committed_blocks`** для истории и последующей проверки `is_block_committed(...)`.
 
 ### Получение общего количества отправленных записей
 
 ```python
 total = state_manager.get_total_records_sent("PROD_ZUP")
-# Вернёт: 15432 (сумма data_records для database_name='PROD_ZUP')
+# Вернёт: 15432 (сумма record_count для database_name='PROD_ZUP')
 ```
 
 ---

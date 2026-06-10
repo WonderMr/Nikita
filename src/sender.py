@@ -11,6 +11,36 @@ from    src.tools           import  tools                   as  t
 from    src                 import  globals                 as  g
 from    src.redis_manager   import  queue
 
+COLUMN_NAMES                                                 =   (
+                                                                    "date",
+                                                                    "date_idx",
+                                                                    "t_status",
+                                                                    "t_id",
+                                                                    "t_pos",
+                                                                    "user_name",
+                                                                    "user_guid",
+                                                                    "computer",
+                                                                    "app",
+                                                                    "connect",
+                                                                    "event",
+                                                                    "severity",
+                                                                    "comment",
+                                                                    "meta_name",
+                                                                    "meta_uuid",
+                                                                    "data",
+                                                                    "data_pres",
+                                                                    "server",
+                                                                    "port",
+                                                                    "port_sec",
+                                                                    "session",
+                                                                    "area",
+                                                                    "area_sec",
+                                                                    "file_name",
+                                                                    "file_pos",
+                                                                )
+FILE_NAME_INDEX                                             =   COLUMN_NAMES.index("file_name")
+FILE_POS_INDEX                                              =   COLUMN_NAMES.index("file_pos")
+
 # ======================================================================================================================
 # Утилиты для отправки данных
 # ======================================================================================================================
@@ -26,6 +56,37 @@ def escape_clickhouse(s: str) -> str:
         .replace("\n", r"\n")     # переход строки
         .replace("\r", r"\r")     # возврат каретки
     )
+
+def row_identity(row):
+    return (str(row[FILE_NAME_INDEX]), int(row[FILE_POS_INDEX]))
+
+def chunked(values, size):
+    for pos in range(0, len(values), size):
+        yield values[pos:pos + size]
+
+def get_existing_clickhouse_keys(chclient: Any, rows: List[tuple], base_name: str) -> set:
+    keys                                                    =   []
+    seen                                                    =   set()
+    for row in rows:
+        key                                                 =   row_identity(row)
+        if key not in seen:
+            keys.append(key)
+            seen.add(key)
+
+    existing                                                =   set()
+    for key_chunk in chunked(keys, 500):
+        key_literals                                        =   ",".join(
+                                                                    f"('{escape_clickhouse(file_name)}', {file_pos})"
+                                                                    for file_name, file_pos in key_chunk
+                                                                )
+        query                                               =   f"""
+            SELECT file_name, file_pos
+            FROM {g.conf.clickhouse.database}.`{base_name}`
+            WHERE (file_name, file_pos) IN ({key_literals})
+        """
+        for file_name, file_pos in chclient.execute(query):
+            existing.add((str(file_name), int(file_pos)))
+    return existing
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Отправка пакета данных в ClickHouse
@@ -82,17 +143,42 @@ def send_to_clickhouse(chclient: Any, data: List[Dict[str, Any]], base_name: str
             rows.append(row)
         
         if rows:
-            query                                           =   f"INSERT INTO {g.conf.clickhouse.database}.`{base_name}` (date, date_idx, t_status, t_id, t_pos, user_name, user_guid, computer, app, connect, event, severity, comment, meta_name, meta_uuid, data, data_pres, server, port, port_sec, session, area, area_sec, file_name, file_pos) VALUES"
-            exec_result                                     =   chclient.execute(query, rows)
+            unique_rows                                     =   []
+            seen_in_batch                                   =   set()
+            for row in rows:
+                key                                         =   row_identity(row)
+                if key in seen_in_batch:
+                    continue
+                unique_rows.append(row)
+                seen_in_batch.add(key)
+
+            existing_keys                                   =   get_existing_clickhouse_keys(chclient, unique_rows, base_name)
+            rows_to_insert                                  =   [
+                                                                    row
+                                                                    for row in unique_rows
+                                                                    if row_identity(row) not in existing_keys
+                                                                ]
+            skipped_count                                   =   len(rows) - len(rows_to_insert)
+            if skipped_count:
+                t.debug_print(f"CLICKHOUSE: Пропущено {skipped_count} уже отправленных записей для {base_name}", logger_name)
+
+            if rows_to_insert:
+                column_list                                 =   ", ".join(COLUMN_NAMES)
+                query                                       =   f"INSERT INTO {g.conf.clickhouse.database}.`{base_name}` ({column_list}) VALUES"
+                chclient.execute(query, rows_to_insert)
+            else:
+                t.debug_print(f"CLICKHOUSE: Новых записей для {base_name} нет", logger_name)
+
             elapsed_time                                    =   time.time() - start_time
             
             # Обновляем статистику успешной отправки
-            g.stats.clickhouse_total_sent                   +=  len(rows)
+            g.stats.clickhouse_total_sent                   +=  len(rows_to_insert)
             g.stats.clickhouse_last_success_time            =   datetime.datetime.now()
             g.stats.clickhouse_connection_ok                =   True
             
-            t.debug_print(f"✓ CLICKHOUSE: Успешно отправлено {len(rows)} записей в таблицу {g.conf.clickhouse.database}.{base_name}", logger_name)
-            t.debug_print(f"✓ CLICKHOUSE: Время выполнения: {elapsed_time:.3f} сек ({len(rows)/elapsed_time:.1f} записей/сек)", logger_name)
+            rate                                            =   len(rows_to_insert) / elapsed_time if elapsed_time else 0
+            t.debug_print(f"✓ CLICKHOUSE: Успешно отправлено {len(rows_to_insert)} записей в таблицу {g.conf.clickhouse.database}.{base_name}", logger_name)
+            t.debug_print(f"✓ CLICKHOUSE: Время выполнения: {elapsed_time:.3f} сек ({rate:.1f} записей/сек)", logger_name)
             t.debug_print(f"✓ CLICKHOUSE: Всего отправлено за сессию: {g.stats.clickhouse_total_sent} записей", logger_name)
         return True
 
@@ -291,9 +377,10 @@ class sender_thread(threading.Thread):
                 time.sleep(5)
                 continue
 
+            payload                                             =   None
             try:
                 # Читаем из очереди
-                base_name, data                             =   queue.pop(timeout=2)
+                base_name, data, payload                     =   queue.pop(timeout=2)
                 
                 if base_name and data:
                     t.debug_print(f"Got {len(data)} records for {base_name} from Redis", self.name)
@@ -311,9 +398,14 @@ class sender_thread(threading.Thread):
                     
                     if ret_code                             !=  200:
                         t.debug_print(f"Failed to send data (code {ret_code}).", self.name)
+                        queue.requeue(payload)
                         time.sleep(1)
+                    else:
+                        queue.ack(payload)
             except Exception as e:
                 t.debug_print(f"Sender loop exception: {str(e)}", self.name)
+                if payload:
+                    queue.requeue(payload)
                 time.sleep(1)
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

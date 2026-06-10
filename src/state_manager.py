@@ -187,11 +187,27 @@ class StateManager:
                     cursor.execute('DROP TABLE committed_blocks_old')
                     t.debug_print("✓ Миграция committed_blocks завершена", "StateManager")
                 
+                cursor.execute("UPDATE committed_blocks SET database_name = 'unknown' WHERE database_name IS NULL")
+                cursor.execute("UPDATE committed_blocks SET file_basename = 'unknown' WHERE file_basename IS NULL")
+                cursor.execute("UPDATE committed_blocks SET data_hash = 'empty' WHERE data_hash IS NULL")
+                cursor.execute('''
+                    DELETE FROM committed_blocks
+                    WHERE id NOT IN (
+                        SELECT MIN(id)
+                        FROM committed_blocks
+                        GROUP BY database_name, file_basename, offset_start, offset_end, data_hash
+                    )
+                ''')
+
                 # Индексы для быстрого поиска
                 cursor.execute('CREATE INDEX IF NOT EXISTS idx_file_states_db ON file_states(database_name)')
                 cursor.execute('CREATE INDEX IF NOT EXISTS idx_blocks_database ON committed_blocks(database_name)')
                 cursor.execute('CREATE INDEX IF NOT EXISTS idx_blocks_file ON committed_blocks(file_basename)')
                 cursor.execute('CREATE INDEX IF NOT EXISTS idx_blocks_db_file ON committed_blocks(database_name, file_basename)')
+                cursor.execute('''
+                    CREATE UNIQUE INDEX IF NOT EXISTS idx_blocks_unique
+                    ON committed_blocks(database_name, file_basename, offset_start, offset_end, data_hash)
+                ''')
                 
                 conn.commit()
                 conn.close()
@@ -261,6 +277,37 @@ class StateManager:
         except Exception as e:
             t.debug_print(f"Ошибка update_file_state: {e}")
 
+    def _data_hash(self, data_records: List[Any]) -> str:
+        if data_records:
+            data_str                                            =   json.dumps(data_records, sort_keys=True, default=str)
+            return hashlib.sha256(data_str.encode('utf-8')).hexdigest()
+        return "empty"
+
+    def is_block_committed(self, filename: str, offset_start: int, offset_end: int, data_records: List[Any], database_name: str = 'unknown') -> bool:
+        try:
+            file_basename                                       =   os.path.basename(filename)
+            data_hash                                           =   self._data_hash(data_records)
+
+            with self.conn_lock:
+                conn                                            =   sqlite3.connect(self.db_path, check_same_thread=False)
+                cursor                                          =   conn.cursor()
+                cursor.execute('''
+                    SELECT 1
+                    FROM committed_blocks
+                    WHERE database_name = ?
+                      AND file_basename = ?
+                      AND offset_start = ?
+                      AND offset_end = ?
+                      AND data_hash = ?
+                    LIMIT 1
+                ''', (database_name, file_basename, offset_start, offset_end, data_hash))
+                row                                             =   cursor.fetchone()
+                conn.close()
+                return row is not None
+        except Exception as e:
+            t.debug_print(f"Ошибка is_block_committed: {e}", "StateManager")
+            return False
+
     def log_committed_block(self, filename: str, offset_start: int, offset_end: int, data_records: List[Any], database_name: str = 'unknown') -> None:
         """
         Логирует закоммиченный блок с его хешем.
@@ -282,21 +329,14 @@ class StateManager:
                 if isinstance(first_record, dict) and 'ibase' in first_record:
                     database_name                               =   first_record['ibase']
             
-            # Вычисляем хеш отправляемых данных
-            # Используем json dumps с sort_keys для стабильности
-            if data_records:
-                data_str                                        =   json.dumps(data_records, sort_keys=True, default=str)
-                data_hash                                       =   hashlib.sha256(data_str.encode('utf-8')).hexdigest()
-                record_count                                    =   len(data_records)
-            else:
-                data_hash                                       =   "empty"
-                record_count                                    =   0
+            data_hash                                           =   self._data_hash(data_records)
+            record_count                                        =   len(data_records) if data_records else 0
 
             with self.conn_lock:
                 conn                                            =   sqlite3.connect(self.db_path, check_same_thread=False)
                 cursor                                          =   conn.cursor()
                 cursor.execute('''
-                    INSERT INTO committed_blocks (database_name, file_basename, offset_start, offset_end, data_hash, record_count)
+                    INSERT OR IGNORE INTO committed_blocks (database_name, file_basename, offset_start, offset_end, data_hash, record_count)
                     VALUES (?, ?, ?, ?, ?, ?)
                 ''', (database_name, file_basename, offset_start, offset_end, data_hash, record_count))
                 conn.commit()

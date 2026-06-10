@@ -6,6 +6,7 @@ import  time
 import  operator
 import  requests
 import  json
+import  hashlib
 from    dotenv              import load_dotenv 
 load_dotenv() 
 # ======================================================================================================================
@@ -235,6 +236,7 @@ class parser(threading.Thread):
                 t.debug_print("adding to json "+str(fj_rec),self.name)
             local_json                                      =   {}                                                      # второй - порядок времени для сортировки одинаковых моментов
             cc                                              =   1 
+            local_json['id']                                =   hashlib.sha256(f"{fj_base}|{fj_id}|{fj_pos}|{fj_size}".encode("utf-8")).hexdigest()
             local_json['file_name']                         =   fj_id                                                   # третий - имя файла
             local_json['pos']                               =   fj_pos                                                  # четвёртый - смещение
             local_json['len']                               =   fj_size                                                 # пятый - размер записи
@@ -328,11 +330,15 @@ class parser(threading.Thread):
     # ------------------------------------------------------------------------------------------------------------------
     def solr_post_json_data(self, spjd_base):
         start_time                                          =   time.time()
-        spjd_sended                                         =   False
         attempts                                            =   0
         max_attempts                                        =   int(getattr(g.waits, 'solr_cycles', 10))
         max_attempts                                        =   max_attempts if max_attempts > 0 else 10
-        while not spjd_sended and not self.stopMe:
+        if not self.json_data[self.name]:
+            t.debug_print("Post skipped: no data", self.name)
+            return True
+
+        while attempts < max_attempts and not self.stopMe:
+            attempts                                        +=  1
             try:
                 #while not g.execution.solr.started:                                                                     # ждём, пока Solr проснётся
                 #    t.debug_print("waiting for solr to start",self.name)
@@ -347,17 +353,11 @@ class parser(threading.Thread):
                                                                     base_name = spjd_base,
                                                                     logger_name = self.name
                                                                 )
-                # шлём, пока не пройдёт --------------------------------------------------------------------------------
-                while spjd_ret_code                         !=  200 and not self.stopMe:                                 # http://localhost:8983/solr/PER/update?wt=json
-                    t.debug_print(f"Post data returned {str(spjd_ret_code)}, retrying")
+                if spjd_ret_code                            !=  200:
+                    t.debug_print(f"Post data returned {str(spjd_ret_code)}, retrying", self.name)
                     time.sleep(g.waits.solr_on_bad_send_to)
-                    spjd_ret_code                           =   snd.post_query(
-                                                                    self.chclient,
-                                                                    spjd_post_url,
-                                                                    data    =   self.json_data[self.name],
-                                                                    base_name = spjd_base,
-                                                                    logger_name = self.name
-                                                                )
+                    continue
+
                 t.debug_print("Post data was sucesfully sended", self.name)
                 del self.json_data[self.name][:]                                                                        # пачку отправили, обнуляем данные
                 # попытка коммита --------------------------------------------------------------------------------------
@@ -372,20 +372,44 @@ class parser(threading.Thread):
                 #    time.sleep(g.waits.solr_on_bad_send_to)
                 #    #spjd_ret_code                           =   self.get_query(spjd_commit_url)
                 t.debug_print("Commit was succefully sended", self.name)
-                spjd_sended                                 =   True
+                t.debug_print("Post took "+str(time.time()-start_time),self.name)
+                return True
             except Exception as ee:
                 error_message                               =   f"Ошибка при отправке в SOLR: {str(ee)}"
                 t.debug_print(error_message, self.name)
                 time.sleep(g.waits.solr_on_bad_send_to)
-            finally:
-                attempts                                    +=  1
-                if attempts                                 >=  max_attempts and not spjd_sended:
-                    t.debug_print(
-                        f"Post/commit не удались за {attempts} попыток. Данные НЕ будут удалены, повторим позже.",
-                        self.name
-                    )
-                    break
+
+        t.debug_print(
+            f"Post/commit не удались за {attempts} попыток. State не будет обновлён.",
+            self.name
+        )
         t.debug_print("Post took "+str(time.time()-start_time),self.name)
+        return False
+
+    def commit_json_data(self, pf_name, pf_base, file_state, batch_start_offset, records_to_log):
+        if state_manager.is_block_committed(
+            pf_name,
+            batch_start_offset,
+            file_state['filesizeread'],
+            records_to_log,
+            pf_base
+        ):
+            t.debug_print(f"{pf_base}: block already committed, moving state without resend", self.name)
+            del self.json_data[self.name][:]
+        elif records_to_log:
+            if not self.solr_post_json_data(pf_base):
+                del self.json_data[self.name][:]
+                return False
+
+        state_manager.log_committed_block(
+            pf_name,
+            batch_start_offset,
+            file_state['filesizeread'],
+            records_to_log,
+            pf_base
+        )
+        state_manager.update_file_state(file_state['filename'], file_state['filesize'], file_state['filesizeread'], pf_base)
+        return True
     # ------------------------------------------------------------------------------------------------------------------
     # проверка корректности записи через её чтение и разбор
     # ------------------------------------------------------------------------------------------------------------------
@@ -409,8 +433,7 @@ class parser(threading.Thread):
                  try:
                      t.debug_print(f"Проверка существования таблицы {g.conf.clickhouse.database}.{pf_base}", self.name)
                      
-                     # Используем ReplacingMergeTree с кодеком ZSTD для максимального сжатия и дедупликации
-                     # ORDER BY (date, file_name, file_pos) обеспечивает уникальность записи
+                     # Используем ReplacingMergeTree с кодеком ZSTD; строгая защита от дублей делается перед INSERT.
                      create_table_query                      =   f"""
                          CREATE TABLE IF NOT EXISTS {g.conf.clickhouse.database}.`{pf_base}` (
                              date DateTime CODEC(DoubleDelta, ZSTD(3)),
@@ -440,7 +463,7 @@ class parser(threading.Thread):
                              file_pos UInt64 CODEC(ZSTD(3))
                          ) 
                          ENGINE = ReplacingMergeTree()
-                         ORDER BY (date, file_name, file_pos)
+                         ORDER BY (file_name, file_pos)
                          PARTITION BY toYYYYMM(date)
                          SETTINGS index_granularity = 8192
                          COMMENT 'Журнал регистрации 1С с максимальным сжатием ZSTD (ReplacingMergeTree)'
@@ -576,16 +599,15 @@ class parser(threading.Thread):
                                                                 len(self.json_data[self.name])
                     # сохраняем копию данных для логирования, так как solr_post_json_data очистит список
                     records_to_log                          =   list(self.json_data[self.name])
-                    self.solr_post_json_data(pf_base)
-                    state_manager.log_committed_block(
+                    if not self.commit_json_data(
                         pf_name,
+                        pf_base,
+                        file_state,
                         batch_start_offset,
-                        file_state['filesizeread'],
-                        records_to_log,
-                        pf_base
-                    )
-                    state_manager.update_file_state(file_state['filename'], file_state['filesize'], file_state['filesizeread'], pf_base)
-                    batch_start_offset              =   file_state['filesizeread']
+                        records_to_log
+                    ):
+                        return
+                    batch_start_offset                      =   file_state['filesizeread']
                     parser.set_parsed_size(pf_base,file_state['filesizeread'])                                          # устанавливаю размер на количетво распарсенных данных
                 else:                                                                                                   # в ret ничего не вернулось
                     t.debug_print("no rows was returned",self.name)
@@ -769,15 +791,14 @@ class parser(threading.Thread):
                                     )
                                     block_commit_start      =   time.time()
                                 records_to_log              =   list(self.json_data[self.name])                         # сохраняем копию перед отправкой
-                                self.solr_post_json_data(pf_base)                                                       # отправляем данные
-                                state_manager.log_committed_block(
+                                if not self.commit_json_data(
                                     pf_name,
+                                    pf_base,
+                                    file_state,
                                     batch_start_offset,
-                                    file_state['filesizeread'],
-                                    records_to_log,
-                                    pf_base
-                                )
-                                state_manager.update_file_state(file_state['filename'], file_state['filesize'], file_state['filesizeread'], pf_base)
+                                    records_to_log
+                                ):
+                                    return
                                 batch_start_offset          =   file_state['filesizeread']
                                 # увеличиваю размер на количетво распарсенных данных ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
                                 parser.inc_parsed_size(pf_base, pf_bytes_2_commit)                                      # увеличиваю размер на количетво распарсенных данных
@@ -797,25 +818,32 @@ class parser(threading.Thread):
                                                                                 self.name
                                                                             )                                           # add 2019.02.15 для https://github.com/WonderMr/Journal2Ct/issues/40
                             file_state['filesizeread']      =   pf_size                                                 # закрываем чтение
-                            records_to_log                  =   []
-                            if(len(self.json_data[self.name])>  0):                                                     # если есть неотправленные данные
-                                records_to_log              =   list(self.json_data[self.name])                         # сохраняем копию
+                            records_to_log                  =   list(self.json_data[self.name])                         # сохраняем копию
+                            if records_to_log:                                                                          # если есть неотправленные данные
                                 if block_time_start:
                                     t.debug_print("Block tooked before commit " + str(time.time() - block_commit_start))
                                     block_commit_start      =   time.time()
-                                self.solr_post_json_data(pf_base)                                                       # отправляем данные
+                                if not self.commit_json_data(
+                                    pf_name,
+                                    pf_base,
+                                    file_state,
+                                    batch_start_offset,
+                                    records_to_log
+                                ):
+                                    return
                                 # увеличиваю размер на количетво распарсенных данных ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
                                 parser.inc_parsed_size(pf_base,pf_size_read)                                            # увеличиваю размер на количетво распарсенных данных
                                 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
                                 pf_bytes_2_commit           =   0
-                            state_manager.log_committed_block(
-                                pf_name,
-                                batch_start_offset,
-                                file_state['filesizeread'],
-                                records_to_log,
-                                pf_base
-                            )
-                            state_manager.update_file_state(file_state['filename'], file_state['filesize'], file_state['filesizeread'], pf_base)
+                            else:
+                                if not self.commit_json_data(
+                                    pf_name,
+                                    pf_base,
+                                    file_state,
+                                    batch_start_offset,
+                                    records_to_log
+                                ):
+                                    return
                             batch_start_offset              =   file_state['filesizeread']
                         else:
                             pf_block_mul                    *=  2                                                       # разобрать блок на записи ЖР не получилось, увеличиваю мультипликатор

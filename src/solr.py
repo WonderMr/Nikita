@@ -7,6 +7,7 @@ import  subprocess                                                              
 import  time                                                                                                            # Stubs for time
 import  shlex                                                                                                           # A lexical analyzer class for simple shell-like syntaxes.
 import  os                                                                                                              # OS routines for NT or Posix depending on what system we're on.
+import  re                                                                                                              # Regular expressions
 # ======================================================================================================================
 from    src                 import  globals                 as  g
 from    src.tools           import  tools                   as  t
@@ -52,25 +53,56 @@ class solr_thread(threading.Thread):
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     # запускает Apahe Solr
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    def get_java_major_version(self, java_exe):
+        try:
+            version_output                                  =   subprocess.check_output(
+                                                                    [java_exe, "-version"],
+                                                                    stderr=subprocess.STDOUT,
+                                                                    text=True
+                                                                )
+            version_match                                   =   re.search(r'version "([^"]+)"', version_output)
+            if not version_match:
+                return None
+            version                                         =   version_match.group(1)
+            if version.startswith("1."):
+                return int(version.split(".")[1])
+            return int(version.split(".")[0])
+        except Exception as e:
+            t.debug_print(f"Failed to check Java version for Solr: {e}", self.name)
+            return None
+
     def start2(self):
-        ss_command                                          =   '"'+g.conf.solr.java_home+'\\bin\\java.exe"'
+        java_exe                                            =   os.path.join(g.conf.solr.java_home, "bin", "java.exe")
+        if not os.path.exists(java_exe):
+            t.debug_print(f"Solr Java not found: {java_exe}. Set SOLR_JAVA_HOME to JDK 17.", self.name)
+            return False
+
+        java_major                                          =   self.get_java_major_version(java_exe)
+        if java_major is None:
+            t.debug_print(f"Cannot detect Java version for Solr: {java_exe}", self.name)
+            return False
+        if java_major < 11:
+            t.debug_print(
+                f"Solr requires Java 11+ (recommended JDK 17), but {java_exe} is Java {java_major}. "
+                "Set SOLR_JAVA_HOME to the bundled java\\jdk-17.* directory.",
+                self.name
+            )
+            return False
+
+        solr_env                                            =   os.environ.copy()
+        solr_env["JAVA_HOME"]                               =   g.conf.solr.java_home
+        solr_env["JRE_HOME"]                                =   g.conf.solr.java_home
+        solr_env["SOLR_JAVA_HOME"]                          =   g.conf.solr.java_home
+        solr_env["PATH"]                                    =   os.path.dirname(java_exe) + os.pathsep + solr_env.get("PATH", "")
+
+        ss_command                                          =   '"'+java_exe+'"'
         ss_command                                          +=  " -server"
         ss_command                                          +=  " -Xms"+g.conf.solr.mem_min
         ss_command                                          +=  " -Xmx"+g.conf.solr.mem_max
         ss_command                                          +=  " -Duser.timezone=UTC"
-        ss_command                                          +=  " -XX:NewRatio=3"
-        ss_command                                          +=  " -XX:SurvivorRatio=4"
-        ss_command                                          +=  " -XX:TargetSurvivorRatio=90"
-        ss_command                                          +=  " -XX:MaxTenuringThreshold=8"
-        ss_command                                          +=  " -XX:+UseConcMarkSweepGC"
+        ss_command                                          +=  " -XX:+UseG1GC"
         ss_command                                          +=  " -XX:ConcGCThreads="+g.conf.solr.threads
         ss_command                                          +=  " -XX:ParallelGCThreads="+g.conf.solr.threads
-        ss_command                                          +=  " -XX:+CMSScavengeBeforeRemark"
-        ss_command                                          +=  " -XX:PretenureSizeThreshold=64m"
-        ss_command                                          +=  " -XX:+UseCMSInitiatingOccupancyOnly"
-        ss_command                                          +=  " -XX:CMSInitiatingOccupancyFraction=50"
-        ss_command                                          +=  " -XX:CMSMaxAbortablePrecleanTime=6000"
-        ss_command                                          +=  " -XX:+CMSParallelRemarkEnabled"
         ss_command                                          +=  " -XX:+ParallelRefProcEnabled"
         ss_command                                          +=  " -XX:-OmitStackTraceInFastThrow"
         ss_command                                          +=  ' -XX:+ExitOnOutOfMemoryError'                          # тестово
@@ -108,7 +140,8 @@ class solr_thread(threading.Thread):
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         g.execution.solr.pid                                =   subprocess.Popen(
                                                                     args,
-                                                                    cwd=os.path.join(g.conf.solr.dir, "server")
+                                                                    cwd=os.path.join(g.conf.solr.dir, "server"),
+                                                                    env=solr_env
                                                                 ).pid
         # запускаю solr и получаю его pid
         solr_wakes                                          =   False

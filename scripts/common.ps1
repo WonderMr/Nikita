@@ -499,6 +499,31 @@ function Copy-Dlls {
     Write-Success "DLL файлы скопированы"
 }
 
+function Resolve-JavaHome {
+    param(
+        [string]$JavaPath
+    )
+
+    if (!$JavaPath -or !(Test-Path $JavaPath)) {
+        throw "Java path not found: $JavaPath"
+    }
+
+    $directJava = Join-Path $JavaPath "bin\java.exe"
+    if (Test-Path $directJava) {
+        return (Resolve-Path $JavaPath).Path
+    }
+
+    $jdkFolder = Get-ChildItem $JavaPath -Directory -ErrorAction SilentlyContinue |
+        Where-Object { Test-Path (Join-Path $_.FullName "bin\java.exe") } |
+        Select-Object -First 1
+
+    if ($jdkFolder) {
+        return $jdkFolder.FullName
+    }
+
+    throw "Java executable not found under $JavaPath"
+}
+
 function Copy-JavaSolr {
     param(
         [string]$JavaPath,
@@ -510,8 +535,12 @@ function Copy-JavaSolr {
 
     if ($JavaPath -and (Test-Path $JavaPath)) {
         $javaTarget = Join-Path $TargetDir "java"
-        Write-Info "Копирование Java из $JavaPath в $javaTarget"
-        Copy-Item $JavaPath $javaTarget -Recurse -Force
+        $javaHome = Resolve-JavaHome -JavaPath $JavaPath
+        Write-Info "Копирование Java из $javaHome в $javaTarget"
+        if (Test-Path $javaTarget) {
+            Remove-Item $javaTarget -Recurse -Force
+        }
+        Copy-Item $javaHome $javaTarget -Recurse -Force
     }
 
     if ($SolrPath -and (Test-Path $SolrPath)) {

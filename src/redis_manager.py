@@ -65,9 +65,11 @@ class RedisQueue:
     def __init__(self):
         self.client                                         =   None
         self.key_prefix                                     =   "nikita:queue:"
-        self.connect()
+        self.main_key                                       =   self.key_prefix + "main"
+        self.processing_key                                 =   self.key_prefix + "processing"
+        self.connect(recover=True)
 
-    def connect(self):
+    def connect(self, recover=False):
         if not g.conf.redis.enabled:
             return
         if redis is None:
@@ -82,9 +84,21 @@ class RedisQueue:
                 decode_responses                            =   True  # Получаем строки вместо байтов
             )
             self.client.ping()
+            if recover:
+                self.recover_processing()
             t.debug_print("Connected to Redis", "RedisQueue")
         except Exception as e:
             t.debug_print(f"Redis connection failed: {e}", "RedisQueue")
+            self.client                                     =   None
+
+    def recover_processing(self):
+        if not self.client:
+            return
+        try:
+            while self.client.llen(self.processing_key) > 0:
+                self.client.rpoplpush(self.processing_key, self.main_key)
+        except Exception as e:
+            t.debug_print(f"Redis processing recovery failed: {e}", "RedisQueue")
             self.client                                     =   None
 
     def push(self, data, base_name):
@@ -104,8 +118,8 @@ class RedisQueue:
                 "base":                                         base_name,
                 "data":                                         data
             })
-            # Используем RPUSH для добавления в конец очереди
-            self.client.rpush(self.key_prefix + "main", payload)
+            # LPUSH + BRPOPLPUSH дают FIFO и processing-очередь до ack.
+            self.client.lpush(self.main_key, payload)
             return True
         except Exception as e:
             t.debug_print(f"Redis push failed: {e}", "RedisQueue")
@@ -121,20 +135,53 @@ class RedisQueue:
             self.connect()
             if not self.client:
                 time.sleep(1)
-                return None, None
+                return None, None, None
 
         try:
-            # BLPOP блокирует поток до появления данных или таймаута
-            result                                          =   self.client.blpop(self.key_prefix + "main", timeout=timeout)
-            if result:
-                _, payload                                  =   result
+            payload                                         =   self.client.brpoplpush(
+                                                                    self.main_key,
+                                                                    self.processing_key,
+                                                                    timeout=timeout
+                                                                )
+            if payload:
                 item                                        =   json.loads(payload)
-                return item["base"], item["data"]
+                return item["base"], item["data"], payload
         except Exception as e:
             t.debug_print(f"Redis pop failed: {e}", "RedisQueue")
             self.client                                     =   None
         
-        return None, None
+        return None, None, None
+
+    def ack(self, payload):
+        if not payload:
+            return False
+        if not self.client:
+            self.connect()
+            if not self.client:
+                return False
+        try:
+            self.client.lrem(self.processing_key, 1, payload)
+            return True
+        except Exception as e:
+            t.debug_print(f"Redis ack failed: {e}", "RedisQueue")
+            self.client                                     =   None
+            return False
+
+    def requeue(self, payload):
+        if not payload:
+            return False
+        if not self.client:
+            self.connect()
+            if not self.client:
+                return False
+        try:
+            self.client.lrem(self.processing_key, 1, payload)
+            self.client.lpush(self.main_key, payload)
+            return True
+        except Exception as e:
+            t.debug_print(f"Redis requeue failed: {e}", "RedisQueue")
+            self.client                                     =   None
+            return False
 
 # Глобальный экземпляр очереди
 queue                                                       =   RedisQueue()
