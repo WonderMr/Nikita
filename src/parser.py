@@ -351,7 +351,8 @@ class parser(threading.Thread):
                                                                     spjd_post_url,
                                                                     data      = self.json_data[self.name],
                                                                     base_name = spjd_base,
-                                                                    logger_name = self.name
+                                                                    logger_name = self.name,
+                                                                    bypass_redis = True
                                                                 )
                 if spjd_ret_code                            !=  200:
                     if 400 <= spjd_ret_code < 500 and spjd_ret_code != 429:
