@@ -360,6 +360,7 @@ def post_query(chclient, solr_url, data, base_name, logger_name, bypass_redis=Fa
             t.debug_print(f"✗ Solr: Отправка не удалась (статус: {solr_status})", logger_name)
     
     if not sent_to_any and not g.conf.clickhouse.enabled and not g.conf.solr.enabled:
+        success                                             =   False
         t.debug_print("⚠ ВНИМАНИЕ: Ни ClickHouse, ни Solr не настроены! Данные никуда не отправлены.", logger_name)
     
     if success:

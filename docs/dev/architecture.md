@@ -272,6 +272,11 @@ CREATE TABLE file_states (
 
 ### 6. Sender (`src/sender.py`)
 
+> **Важно про Redis:** основной путь парсера вызывает `post_query(..., bypass_redis=True)` и отправляет batch
+> синхронно. Семантика Redis `main`/`processing`/`ack`/`requeue` применяется к очереди Sender при
+> `bypass_redis=False`; перевод parser path на асинхронную очередь требует отдельного изменения, где
+> `file_states` продвигается только после `ack` от `sender_thread`.
+
 **Назначение:** Отправка данных в хранилища.
 
 **Ключевые функции:**
