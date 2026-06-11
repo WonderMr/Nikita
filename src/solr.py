@@ -80,9 +80,21 @@ class solr_thread(threading.Thread):
             t.debug_print(f"Failed to check Java version for Solr: {e}", self.name)
             return None
 
+    def java_executable_names(self):
+        if os.name == "nt":
+            return ("java.exe", "java")
+        return ("java", "java.exe")
+
+    def get_java_executable(self, java_home):
+        for java_name in self.java_executable_names():
+            java_exe                                        =   os.path.join(java_home, "bin", java_name)
+            if os.path.exists(java_exe):
+                return java_exe
+        return None
+
     def get_java_home_info(self, java_home):
-        java_exe                                            =   os.path.join(java_home, "bin", "java.exe")
-        if not os.path.exists(java_exe):
+        java_exe                                            =   self.get_java_executable(java_home)
+        if not java_exe:
             return None
         return (self.get_java_major_version(java_exe), os.path.abspath(java_home))
 
@@ -139,8 +151,8 @@ class solr_thread(threading.Thread):
         if not java_home:
             t.debug_print("Solr Java home is not configured. Set SOLR_JAVA_HOME to JDK 17.", self.name)
             return False
-        java_exe                                            =   os.path.join(java_home, "bin", "java.exe")
-        if not os.path.exists(java_exe):
+        java_exe                                            =   self.get_java_executable(java_home)
+        if not java_exe:
             t.debug_print(f"Solr Java not found: {java_exe}. Set SOLR_JAVA_HOME to JDK 17.", self.name)
             return False
 

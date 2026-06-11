@@ -282,6 +282,9 @@ class StateManager:
 
     def update_file_state(self, filename: str, filesize: int, filesizeread: int, database_name: str = 'unknown') -> bool:
         """
+        Returns:
+            True if the SQLite update was committed, False if it failed.
+
         Обновление состояния файла
         
         Args:
@@ -319,10 +322,10 @@ class StateManager:
             return hashlib.sha256(data_str.encode('utf-8')).hexdigest()
         return "empty"
 
-    def is_block_committed(self, filename: str, offset_start: int, offset_end: int, data_records: List[Any], database_name: str = 'unknown') -> bool:
+    def is_block_committed(self, filename: str, offset_start: int, offset_end: int, data_records: List[Any], database_name: str = 'unknown', data_hash: Optional[str] = None) -> bool:
         try:
             file_basename                                       =   os.path.basename(filename)
-            data_hash                                           =   self._data_hash(data_records)
+            data_hash                                           =   data_hash if data_hash is not None else self._data_hash(data_records)
 
             with self.conn_lock:
                 conn                                            =   None
@@ -348,7 +351,7 @@ class StateManager:
             t.debug_print(f"Ошибка is_block_committed: {e}", "StateManager")
             return False
 
-    def log_committed_block(self, filename: str, offset_start: int, offset_end: int, data_records: List[Any], database_name: str = 'unknown') -> bool:
+    def log_committed_block(self, filename: str, offset_start: int, offset_end: int, data_records: List[Any], database_name: str = 'unknown', data_hash: Optional[str] = None) -> bool:
         """
         Логирует закоммиченный блок с его хешем.
         
@@ -369,7 +372,7 @@ class StateManager:
                 if isinstance(first_record, dict) and 'ibase' in first_record:
                     database_name                               =   first_record['ibase']
             
-            data_hash                                           =   self._data_hash(data_records)
+            data_hash                                           =   data_hash if data_hash is not None else self._data_hash(data_records)
             record_count                                        =   len(data_records) if data_records else 0
 
             with self.conn_lock:

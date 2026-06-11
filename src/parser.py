@@ -390,18 +390,19 @@ class parser(threading.Thread):
         return False
 
     def commit_json_data(self, pf_name, pf_base, file_state, batch_start_offset, records_to_log):
+        data_hash                                           =   state_manager._data_hash(records_to_log)
         if state_manager.is_block_committed(
             pf_name,
             batch_start_offset,
             file_state['filesizeread'],
             records_to_log,
-            pf_base
+            pf_base,
+            data_hash=data_hash
         ):
             t.debug_print(f"{pf_base}: block already committed, moving state without resend", self.name)
             del self.json_data[self.name][:]
         elif records_to_log:
             if not self.solr_post_json_data(pf_base):
-                del self.json_data[self.name][:]
                 return False
 
         if not state_manager.log_committed_block(
@@ -409,7 +410,8 @@ class parser(threading.Thread):
             batch_start_offset,
             file_state['filesizeread'],
             records_to_log,
-            pf_base
+            pf_base,
+            data_hash=data_hash
         ):
             t.debug_print(f"{pf_base}: committed block was sent, but SQLite block log failed", self.name)
             return False

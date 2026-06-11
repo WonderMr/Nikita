@@ -43,6 +43,8 @@ FILE_NAME_INDEX                                             =   COLUMN_NAMES.ind
 FILE_POS_INDEX                                              =   COLUMN_NAMES.index("file_pos")
 BASE_NAME_RE                                                =   re.compile(r'^[a-zA-Z0-9_а-яА-ЯёЁ]+$')
 RETRIABLE_SENDER_STATUSES                                  =   {404, 409, 429}
+CLICKHOUSE_DEDUPE_LOOKUP_CHUNK_SIZE                        =   100
+CLICKHOUSE_DEDUPE_LOOKUP_MAX_LITERAL_CHARS                  =   60000
 
 def is_non_retriable_solr_status(status):
     return (
@@ -70,9 +72,21 @@ def escape_clickhouse(s: str) -> str:
 def row_identity(row):
     return (str(row[FILE_NAME_INDEX]), int(row[FILE_POS_INDEX]))
 
-def chunked(values, size):
-    for pos in range(0, len(values), size):
-        yield values[pos:pos + size]
+def chunk_clickhouse_key_literals(keys):
+    chunk                                                   =   []
+    literal_chars                                           =   0
+    for file_name, file_pos in keys:
+        literal                                             =   f"('{escape_clickhouse(file_name)}', {file_pos})"
+        next_size                                           =   literal_chars + len(literal) + (1 if chunk else 0)
+        if chunk and (len(chunk) >= CLICKHOUSE_DEDUPE_LOOKUP_CHUNK_SIZE or next_size > CLICKHOUSE_DEDUPE_LOOKUP_MAX_LITERAL_CHARS):
+            yield chunk
+            chunk                                           =   []
+            literal_chars                                   =   0
+            next_size                                       =   len(literal)
+        chunk.append(literal)
+        literal_chars                                       =   next_size
+    if chunk:
+        yield chunk
 
 def get_existing_clickhouse_keys(chclient: Any, rows: List[tuple], base_name: str) -> set:
     keys                                                    =   []
@@ -84,11 +98,11 @@ def get_existing_clickhouse_keys(chclient: Any, rows: List[tuple], base_name: st
             seen.add(key)
 
     existing                                                =   set()
-    for key_chunk in chunked(keys, 500):
-        key_literals                                        =   ",".join(
-                                                                    f"('{escape_clickhouse(file_name)}', {file_pos})"
-                                                                    for file_name, file_pos in key_chunk
-                                                                )
+    if not keys:
+        return existing
+
+    for key_literals_chunk in chunk_clickhouse_key_literals(keys):
+        key_literals                                        =   ",".join(key_literals_chunk)
         query                                               =   f"""
             SELECT file_name, file_pos
             FROM {g.conf.clickhouse.database}.`{base_name}`

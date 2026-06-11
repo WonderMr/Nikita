@@ -10,6 +10,8 @@ import uuid
 from src.tools import tools as t
 from src import globals as g
 
+RECOVERY_BATCH_SIZE                                        =   1000
+
 # redis (python) может отсутствовать, если Redis выключен (например, Windows сборка).
 try:
     import redis
@@ -103,15 +105,22 @@ class RedisQueue:
             return False
         try:
             script                                          =   """
-                local payload = redis.call('LPOP', KEYS[1])
-                if payload then
+                local limit = tonumber(ARGV[1]) or 1000
+                local moved = 0
+                while moved < limit do
+                    local payload = redis.call('LPOP', KEYS[1])
+                    if not payload then
+                        break
+                    end
                     redis.call('RPUSH', KEYS[2], payload)
-                    return 1
+                    moved = moved + 1
                 end
-                return 0
+                return moved
             """
-            while int(self.client.eval(script, 2, self.processing_key, self.main_key)) == 1:
-                pass
+            while True:
+                moved                                       =   int(self.client.eval(script, 2, self.processing_key, self.main_key, RECOVERY_BATCH_SIZE))
+                if moved < RECOVERY_BATCH_SIZE:
+                    break
             return True
         except Exception as e:
             t.debug_print(f"Redis processing recovery failed: {e}", "RedisQueue")

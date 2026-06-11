@@ -499,6 +499,28 @@ function Copy-Dlls {
     Write-Success "DLL файлы скопированы"
 }
 
+function Get-JavaMajorVersion {
+    param(
+        [string]$JavaExe
+    )
+
+    try {
+        $versionOutput = & $JavaExe -version 2>&1 | Out-String
+        if ($versionOutput -match 'version "([^"]+)"') {
+            $version = $Matches[1]
+            if ($version.StartsWith("1.")) {
+                return [int]($version.Split(".")[1])
+            }
+            return [int]($version.Split(".")[0])
+        }
+    }
+    catch {
+        return -1
+    }
+
+    return -1
+}
+
 function Resolve-JavaHome {
     param(
         [string]$JavaPath
@@ -510,35 +532,24 @@ function Resolve-JavaHome {
 
     $directJava = Join-Path $JavaPath "bin\java.exe"
     if (Test-Path $directJava) {
-        return (Resolve-Path $JavaPath).Path
+        $directMajorVersion = Get-JavaMajorVersion -JavaExe $directJava
+        if ($directMajorVersion -ge 17) {
+            return (Resolve-Path $JavaPath).Path
+        }
     }
 
     $jdkFolder = Get-ChildItem $JavaPath -Directory -ErrorAction SilentlyContinue |
         Where-Object { Test-Path (Join-Path $_.FullName "bin\java.exe") } |
         ForEach-Object {
             $javaExe = Join-Path $_.FullName "bin\java.exe"
-            $majorVersion = -1
-            try {
-                $versionOutput = & $javaExe -version 2>&1 | Out-String
-                if ($versionOutput -match 'version "([^"]+)"') {
-                    $version = $Matches[1]
-                    if ($version.StartsWith("1.")) {
-                        $majorVersion = [int]($version.Split(".")[1])
-                    }
-                    else {
-                        $majorVersion = [int]($version.Split(".")[0])
-                    }
-                }
-            }
-            catch {
-                $majorVersion = -1
-            }
+            $majorVersion = Get-JavaMajorVersion -JavaExe $javaExe
             [PSCustomObject]@{
                 Folder       = $_
                 MajorVersion = $majorVersion
                 Name         = $_.Name
             }
         } |
+        Where-Object { $_.MajorVersion -ge 17 } |
         Sort-Object -Property @{Expression = "MajorVersion"; Descending = $true}, @{Expression = "Name"; Descending = $true} |
         Select-Object -First 1
 
@@ -546,7 +557,7 @@ function Resolve-JavaHome {
         return $jdkFolder.Folder.FullName
     }
 
-    throw "Java executable not found under $JavaPath"
+    throw "Java 17+ executable not found under $JavaPath"
 }
 
 function Copy-JavaSolr {
