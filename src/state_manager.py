@@ -61,6 +61,7 @@ class StateManager:
 
     def _init_db(self) -> None:
         """Инициализация базы данных SQLite"""
+        conn                                                    =   None
         try:
             # t.debug_print(f"StateManager: Инициализация базы данных: {self.db_path}", "StateManager")
             with self.conn_lock:
@@ -234,8 +235,14 @@ class StateManager:
                 
                 conn.commit()
                 conn.close()
+                conn                                            =   None
                 # t.debug_print(f"✓ StateManager: База данных успешно инициализирована", "StateManager")
         except Exception as e:
+            if conn is not None:
+                try:
+                    conn.close()
+                except Exception as close_error:
+                    t.debug_print(f"StateManager: failed to close init connection: {close_error}", "StateManager")
             # t.debug_print(f"✗ StateManager: Ошибка инициализации: {e}", "StateManager")
             print(f"✗ StateManager: Ошибка инициализации: {e}")
             import traceback

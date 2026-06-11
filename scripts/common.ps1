@@ -515,6 +515,7 @@ function Resolve-JavaHome {
 
     $jdkFolder = Get-ChildItem $JavaPath -Directory -ErrorAction SilentlyContinue |
         Where-Object { Test-Path (Join-Path $_.FullName "bin\java.exe") } |
+        Sort-Object -Property Name -Descending |
         Select-Object -First 1
 
     if ($jdkFolder) {

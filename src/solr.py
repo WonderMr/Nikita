@@ -70,6 +70,12 @@ class solr_thread(threading.Thread):
             t.debug_print(f"Failed to check Java version for Solr: {e}", self.name)
             return None
 
+    def get_java_home_info(self, java_home):
+        java_exe                                            =   os.path.join(java_home, "bin", "java.exe")
+        if not os.path.exists(java_exe):
+            return None
+        return (self.get_java_major_version(java_exe), os.path.abspath(java_home))
+
     def resolve_java_home(self):
         candidates                                          =   []
         if g.conf.solr.java_home:
@@ -79,12 +85,13 @@ class solr_thread(threading.Thread):
         if g.conf.solr.dir:
             candidates.append(os.path.join(os.path.dirname(g.conf.solr.dir), "java"))
 
+        java_homes                                          =   []
         for candidate in candidates:
             if not candidate:
                 continue
-            direct_java                                     =   os.path.join(candidate, "bin", "java.exe")
-            if os.path.exists(direct_java):
-                return os.path.abspath(candidate)
+            direct_java                                     =   self.get_java_home_info(candidate)
+            if direct_java:
+                java_homes.append(direct_java)
             if os.path.isdir(candidate):
                 try:
                     candidate_children                      =   sorted(os.listdir(candidate))
@@ -93,13 +100,35 @@ class solr_thread(threading.Thread):
                     continue
                 for child in candidate_children:
                     nested                                  =   os.path.join(candidate, child)
-                    nested_java                             =   os.path.join(nested, "bin", "java.exe")
-                    if os.path.exists(nested_java):
-                        return os.path.abspath(nested)
+                    nested_java                             =   self.get_java_home_info(nested)
+                    if nested_java:
+                        java_homes.append(nested_java)
+
+        supported_java_homes                                =   [
+                                                                    java_home
+                                                                    for java_home in java_homes
+                                                                    if java_home[0] is not None and java_home[0] >= 17
+                                                                ]
+        if supported_java_homes:
+            return max(supported_java_homes, key=lambda java_home: (java_home[0], java_home[1]))[1]
+
+        versioned_java_homes                                =   [
+                                                                    java_home
+                                                                    for java_home in java_homes
+                                                                    if java_home[0] is not None
+                                                                ]
+        if versioned_java_homes:
+            return max(versioned_java_homes, key=lambda java_home: (java_home[0], java_home[1]))[1]
+
+        if java_homes:
+            return java_homes[0][1]
         return g.conf.solr.java_home
 
     def start2(self):
         java_home                                           =   self.resolve_java_home()
+        if not java_home:
+            t.debug_print("Solr Java home is not configured. Set SOLR_JAVA_HOME to JDK 17.", self.name)
+            return False
         java_exe                                            =   os.path.join(java_home, "bin", "java.exe")
         if not os.path.exists(java_exe):
             t.debug_print(f"Solr Java not found: {java_exe}. Set SOLR_JAVA_HOME to JDK 17.", self.name)
