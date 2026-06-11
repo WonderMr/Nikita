@@ -101,8 +101,16 @@ class RedisQueue:
         if not self.client:
             return False
         try:
-            while self.client.llen(self.processing_key) > 0:
-                self.client.rpoplpush(self.processing_key, self.main_key)
+            script                                          =   """
+                local payload = redis.call('RPOP', KEYS[1])
+                if payload then
+                    redis.call('RPUSH', KEYS[2], payload)
+                    return 1
+                end
+                return 0
+            """
+            while int(self.client.eval(script, 2, self.processing_key, self.main_key)) == 1:
+                pass
             return True
         except Exception as e:
             t.debug_print(f"Redis processing recovery failed: {e}", "RedisQueue")
@@ -137,7 +145,7 @@ class RedisQueue:
     def pop(self, timeout=5):
         """
         Получает пакет данных из очереди (блокирующий вызов).
-        Возвращает (base_name, data) или (None, None).
+        Возвращает (base_name, data, payload) или (None, None, None).
         """
         if not self.client:
             self.connect()

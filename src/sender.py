@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import  threading
 import  time
+import  re
 import  requests
 import  datetime
 import  traceback
@@ -40,6 +41,7 @@ COLUMN_NAMES                                                 =   (
                                                                 )
 FILE_NAME_INDEX                                             =   COLUMN_NAMES.index("file_name")
 FILE_POS_INDEX                                              =   COLUMN_NAMES.index("file_pos")
+BASE_NAME_RE                                                =   re.compile(r'^[a-zA-Z0-9_а-яА-ЯёЁ]+$')
 
 # ======================================================================================================================
 # Утилиты для отправки данных
@@ -98,8 +100,7 @@ def send_to_clickhouse(chclient: Any, data: List[Dict[str, Any]], base_name: str
     
     # Валидация имени базы (таблицы) для защиты от инъекций в F-строке
     # Разрешаем только латиницу, кириллицу, цифры и подчеркивание
-    import re
-    if not re.match(r'^[a-zA-Z0-9_а-яА-ЯёЁ]+$', base_name):
+    if not isinstance(base_name, str) or not BASE_NAME_RE.match(base_name):
         t.debug_print(f"✗ CLICKHOUSE: Недопустимое имя базы/таблицы: '{base_name}'. Пропуск отправки.", logger_name)
         return False
 
@@ -158,9 +159,12 @@ def send_to_clickhouse(chclient: Any, data: List[Dict[str, Any]], base_name: str
                                                                     for row in unique_rows
                                                                     if row_identity(row) not in existing_keys
                                                                 ]
-            skipped_count                                   =   len(rows) - len(rows_to_insert)
-            if skipped_count:
-                t.debug_print(f"CLICKHOUSE: Пропущено {skipped_count} уже отправленных записей для {base_name}", logger_name)
+            duplicate_count                                 =   len(rows) - len(unique_rows)
+            already_sent_count                              =   len(unique_rows) - len(rows_to_insert)
+            if duplicate_count:
+                t.debug_print(f"CLICKHOUSE: Пропущено {duplicate_count} дублей внутри batch для {base_name}", logger_name)
+            if already_sent_count:
+                t.debug_print(f"CLICKHOUSE: Пропущено {already_sent_count} уже отправленных записей для {base_name}", logger_name)
 
             if rows_to_insert:
                 column_list                                 =   ", ".join(COLUMN_NAMES)
@@ -377,6 +381,13 @@ class sender_thread(threading.Thread):
         t.debug_print(f"Redis {action} failed. Sender stops to avoid unknown queue state.", self.name)
         self.stop_signal                                    =   True
 
+    def move_payload_to_dead(self, payload, reason):
+        t.debug_print(f"Redis payload {reason}; moving to dead letter", self.name)
+        if not queue.move_to_dead(payload):
+            self.stop_on_queue_error("dead-letter move")
+            return False
+        return True
+
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     # Основной цикл
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -394,10 +405,11 @@ class sender_thread(threading.Thread):
                 
                 if not payload:
                     continue
-                if not base_name or data is None:
-                    t.debug_print("Redis payload has no base or data; requeueing", self.name)
-                    if not queue.requeue(payload):
-                        self.stop_on_queue_error("requeue")
+                if not isinstance(base_name, str) or not base_name or not isinstance(data, list):
+                    self.move_payload_to_dead(payload, "has invalid base or data")
+                    continue
+                if not BASE_NAME_RE.match(base_name):
+                    self.move_payload_to_dead(payload, f"has invalid target '{base_name}'")
                     continue
                 if not data:
                     t.debug_print(f"Empty Redis payload for {base_name}; acking", self.name)
@@ -420,7 +432,9 @@ class sender_thread(threading.Thread):
 
                 if ret_code                                 !=  200:
                     t.debug_print(f"Failed to send data (code {ret_code}).", self.name)
-                    if not queue.requeue(payload):
+                    if 400 <= ret_code < 500 and ret_code != 429:
+                        self.move_payload_to_dead(payload, f"failed with non-retriable status {ret_code}")
+                    elif not queue.requeue(payload):
                         self.stop_on_queue_error("requeue")
                     time.sleep(1)
                 else:

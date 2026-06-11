@@ -86,7 +86,12 @@ class solr_thread(threading.Thread):
             if os.path.exists(direct_java):
                 return os.path.abspath(candidate)
             if os.path.isdir(candidate):
-                for child in sorted(os.listdir(candidate)):
+                try:
+                    candidate_children                      =   sorted(os.listdir(candidate))
+                except OSError as e:
+                    t.debug_print(f"Cannot inspect Solr Java candidate {candidate}: {e}", self.name)
+                    continue
+                for child in candidate_children:
                     nested                                  =   os.path.join(candidate, child)
                     nested_java                             =   os.path.join(nested, "bin", "java.exe")
                     if os.path.exists(nested_java):
