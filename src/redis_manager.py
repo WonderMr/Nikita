@@ -144,6 +144,31 @@ class RedisQueue:
             self.client                                     =   None # Сбрасываем соединение
             return False
 
+    def pop_to_processing(self, timeout):
+        try:
+            return self.client.blmove(
+                self.main_key,
+                self.processing_key,
+                timeout=timeout,
+                src="RIGHT",
+                dest="LEFT"
+            )
+        except AttributeError:
+            pass
+        except TypeError:
+            pass
+        except Exception as e:
+            response_error                                  =   getattr(getattr(redis, "exceptions", None), "ResponseError", None)
+            if response_error is None or not isinstance(e, response_error) or "unknown" not in str(e).lower():
+                raise
+            t.debug_print("Redis BLMOVE is not available; falling back to BRPOPLPUSH", "RedisQueue")
+
+        return self.client.brpoplpush(
+            self.main_key,
+            self.processing_key,
+            timeout=timeout
+        )
+
     def pop(self, timeout=5):
         """
         Получает пакет данных из очереди (блокирующий вызов).
@@ -156,11 +181,7 @@ class RedisQueue:
                 return None, None, None
 
         try:
-            payload                                         =   self.client.brpoplpush(
-                                                                    self.main_key,
-                                                                    self.processing_key,
-                                                                    timeout=timeout
-                                                                )
+            payload                                         =   self.pop_to_processing(timeout)
             if payload:
                 try:
                     item                                    =   json.loads(payload)
