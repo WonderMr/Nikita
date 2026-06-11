@@ -355,7 +355,7 @@ class parser(threading.Thread):
                                                                     bypass_redis = True
                                                                 )
                 if spjd_ret_code                            !=  200:
-                    if 400 <= spjd_ret_code < 500 and spjd_ret_code != 429:
+                    if 400 <= spjd_ret_code < 500 and spjd_ret_code not in snd.RETRIABLE_SENDER_STATUSES:
                         t.debug_print(f"Post data returned non-retriable client error {str(spjd_ret_code)}", self.name)
                         break
                     t.debug_print(f"Post data returned {str(spjd_ret_code)}, retrying", self.name)
@@ -370,12 +370,11 @@ class parser(threading.Thread):
                 # spjd_ret_code                               =   self.get_query(spjd_commit_url)
                 # пока всё не зайдёт
                 
-                spjd_ret_code                               =   200
                 # while spjd_ret_code                         !=  200:
                 #    t.debug_print(f"Post commit returned {str(spjd_ret_code)}, retrying")
                 #    time.sleep(g.waits.solr_on_bad_send_to)
                 #    #spjd_ret_code                           =   self.get_query(spjd_commit_url)
-                t.debug_print("Commit was succefully sended", self.name)
+                t.debug_print("Explicit Solr commit skipped; update request accepted", self.name)
                 t.debug_print("Post took "+str(time.time()-start_time),self.name)
                 return True
             except Exception as ee:
