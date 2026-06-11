@@ -354,6 +354,9 @@ class parser(threading.Thread):
                                                                     logger_name = self.name
                                                                 )
                 if spjd_ret_code                            !=  200:
+                    if 400 <= spjd_ret_code < 500 and spjd_ret_code != 429:
+                        t.debug_print(f"Post data returned non-retriable client error {str(spjd_ret_code)}", self.name)
+                        break
                     t.debug_print(f"Post data returned {str(spjd_ret_code)}, retrying", self.name)
                     time.sleep(g.waits.solr_on_bad_send_to)
                     continue
@@ -401,14 +404,18 @@ class parser(threading.Thread):
                 del self.json_data[self.name][:]
                 return False
 
-        state_manager.log_committed_block(
+        if not state_manager.log_committed_block(
             pf_name,
             batch_start_offset,
             file_state['filesizeread'],
             records_to_log,
             pf_base
-        )
-        state_manager.update_file_state(file_state['filename'], file_state['filesize'], file_state['filesizeread'], pf_base)
+        ):
+            t.debug_print(f"{pf_base}: committed block was sent, but SQLite block log failed", self.name)
+            return False
+        if not state_manager.update_file_state(file_state['filename'], file_state['filesize'], file_state['filesizeread'], pf_base):
+            t.debug_print(f"{pf_base}: committed block was sent, but SQLite file state update failed", self.name)
+            return False
         return True
     # ------------------------------------------------------------------------------------------------------------------
     # проверка корректности записи через её чтение и разбор

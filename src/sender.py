@@ -269,6 +269,8 @@ def send_to_solr(url: str, data: List[Dict[str, Any]], logger_name: str) -> int:
 def post_query(chclient, solr_url, data, base_name, logger_name, bypass_redis=False):
     ret_ok                                                  =   200
     ret_err                                                 =   500
+    non_solr_failure                                        =   False
+    solr_status                                             =   None
     
     # 1. Если Redis включен и мы не обходим его (т.е. мы не Sender thread)
     if g.conf.redis.enabled and not bypass_redis:
@@ -320,6 +322,7 @@ def post_query(chclient, solr_url, data, base_name, logger_name, bypass_redis=Fa
             sent_to_any                                     =   True
         else:
             success                                         =   False
+            non_solr_failure                                =   True
     
     # Solr (только если включен и URL задан)
     if solr_url and g.conf.solr.enabled:
@@ -333,8 +336,11 @@ def post_query(chclient, solr_url, data, base_name, logger_name, bypass_redis=Fa
     if not sent_to_any and not g.conf.clickhouse.enabled and not g.conf.solr.enabled:
         t.debug_print("⚠ ВНИМАНИЕ: Ни ClickHouse, ни Solr не настроены! Данные никуда не отправлены.", logger_name)
     
-    result                                                  =   ret_ok if success else ret_err
-    return result
+    if success:
+        return ret_ok
+    if solr_status and solr_status != 200 and not non_solr_failure:
+        return solr_status
+    return ret_err
 
 # ======================================================================================================================
 # Поток отправки данных из очереди Redis
@@ -367,6 +373,10 @@ class sender_thread(threading.Thread):
 
         t.debug_print("Thread initialized", self.name)
 
+    def stop_on_queue_error(self, action):
+        t.debug_print(f"Redis {action} failed. Sender stops to avoid unknown queue state.", self.name)
+        self.stop_signal                                    =   True
+
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     # Основной цикл
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -382,12 +392,24 @@ class sender_thread(threading.Thread):
                 # Читаем из очереди
                 base_name, data, payload                     =   queue.pop(timeout=2)
                 
-                if base_name and data:
-                    t.debug_print(f"Got {len(data)} records for {base_name} from Redis", self.name)
-                    
-                    solr_url                                =   f"{g.execution.solr.url_main}/{base_name}/update?wt=json"
-                    
-                    ret_code                                =   post_query(
+                if not payload:
+                    continue
+                if not base_name or data is None:
+                    t.debug_print("Redis payload has no base or data; requeueing", self.name)
+                    if not queue.requeue(payload):
+                        self.stop_on_queue_error("requeue")
+                    continue
+                if not data:
+                    t.debug_print(f"Empty Redis payload for {base_name}; acking", self.name)
+                    if not queue.ack(payload):
+                        self.stop_on_queue_error("ack")
+                    continue
+
+                t.debug_print(f"Got {len(data)} records for {base_name} from Redis", self.name)
+
+                solr_url                                    =   f"{g.execution.solr.url_main}/{base_name}/update?wt=json"
+
+                ret_code                                    =   post_query(
                                                                     self.chclient,
                                                                     solr_url,
                                                                     data,
@@ -395,17 +417,20 @@ class sender_thread(threading.Thread):
                                                                     self.name,
                                                                     bypass_redis=True
                                                                 )
-                    
-                    if ret_code                             !=  200:
-                        t.debug_print(f"Failed to send data (code {ret_code}).", self.name)
-                        queue.requeue(payload)
-                        time.sleep(1)
-                    else:
-                        queue.ack(payload)
+
+                if ret_code                                 !=  200:
+                    t.debug_print(f"Failed to send data (code {ret_code}).", self.name)
+                    if not queue.requeue(payload):
+                        self.stop_on_queue_error("requeue")
+                    time.sleep(1)
+                else:
+                    if not queue.ack(payload):
+                        self.stop_on_queue_error("ack")
             except Exception as e:
                 t.debug_print(f"Sender loop exception: {str(e)}", self.name)
                 if payload:
-                    queue.requeue(payload)
+                    if not queue.requeue(payload):
+                        self.stop_on_queue_error("requeue")
                 time.sleep(1)
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

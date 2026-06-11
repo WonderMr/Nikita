@@ -26,22 +26,21 @@ class solr_thread(threading.Thread):
         t.debug_print("Thread initialized", self.name)
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     def check_base_exists(self,cbe_name):
-        #for ibase in g.parser.ibases:
-        if not (self.base_exists(cbe_name)):                                                                            # если базы нету
-            if not self.base_create(cbe_name):                                                                          # то создаём её
-                t.debug_print("Не удалось создать ядро " + cbe_name,self.name)
+        if not self.base_exists(cbe_name):
+            if not self.base_create(cbe_name):
+                t.debug_print("Cannot create Solr core " + cbe_name, self.name)
                 return False
-            else:
-                return True
-        else:
-            return True
+        return self.validate_core_schema(cbe_name)
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     def run(self):
         if self.start2():
             for ibase in g.parser.ibases:
-                self.check_base_exists(ibase[g.nms.ib.name])
+                if not self.check_base_exists(ibase[g.nms.ib.name]):
+                    t.graceful_shutdown(1)
+                    return
         else:
             t.graceful_shutdown(1)
+            return
         t.debug_print("Thread started", self.name)
         g.execution.solr.started                            =   True
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -71,8 +70,32 @@ class solr_thread(threading.Thread):
             t.debug_print(f"Failed to check Java version for Solr: {e}", self.name)
             return None
 
+    def resolve_java_home(self):
+        candidates                                          =   []
+        if g.conf.solr.java_home:
+            candidates.append(g.conf.solr.java_home)
+        if g.execution.self_dir:
+            candidates.append(os.path.join(g.execution.self_dir, "java"))
+        if g.conf.solr.dir:
+            candidates.append(os.path.join(os.path.dirname(g.conf.solr.dir), "java"))
+
+        for candidate in candidates:
+            if not candidate:
+                continue
+            direct_java                                     =   os.path.join(candidate, "bin", "java.exe")
+            if os.path.exists(direct_java):
+                return os.path.abspath(candidate)
+            if os.path.isdir(candidate):
+                for child in sorted(os.listdir(candidate)):
+                    nested                                  =   os.path.join(candidate, child)
+                    nested_java                             =   os.path.join(nested, "bin", "java.exe")
+                    if os.path.exists(nested_java):
+                        return os.path.abspath(nested)
+        return g.conf.solr.java_home
+
     def start2(self):
-        java_exe                                            =   os.path.join(g.conf.solr.java_home, "bin", "java.exe")
+        java_home                                           =   self.resolve_java_home()
+        java_exe                                            =   os.path.join(java_home, "bin", "java.exe")
         if not os.path.exists(java_exe):
             t.debug_print(f"Solr Java not found: {java_exe}. Set SOLR_JAVA_HOME to JDK 17.", self.name)
             return False
@@ -81,18 +104,19 @@ class solr_thread(threading.Thread):
         if java_major is None:
             t.debug_print(f"Cannot detect Java version for Solr: {java_exe}", self.name)
             return False
-        if java_major < 11:
+        if java_major < 17:
             t.debug_print(
-                f"Solr requires Java 11+ (recommended JDK 17), but {java_exe} is Java {java_major}. "
-                "Set SOLR_JAVA_HOME to the bundled java\\jdk-17.* directory.",
+                f"Solr requires Java 17+, but {java_exe} is Java {java_major}. "
+                "Set SOLR_JAVA_HOME to the bundled java directory.",
                 self.name
             )
             return False
 
+        g.conf.solr.java_home                               =   java_home
         solr_env                                            =   os.environ.copy()
-        solr_env["JAVA_HOME"]                               =   g.conf.solr.java_home
-        solr_env["JRE_HOME"]                                =   g.conf.solr.java_home
-        solr_env["SOLR_JAVA_HOME"]                          =   g.conf.solr.java_home
+        solr_env["JAVA_HOME"]                               =   java_home
+        solr_env["JRE_HOME"]                                =   java_home
+        solr_env["SOLR_JAVA_HOME"]                          =   java_home
         solr_env["PATH"]                                    =   os.path.dirname(java_exe) + os.pathsep + solr_env.get("PATH", "")
 
         ss_command                                          =   '"'+java_exe+'"'
@@ -185,10 +209,50 @@ class solr_thread(threading.Thread):
         t.debug_print("core "+bc_name+" created with code "+str(bc_ret),self.name)
         return bc_ret                                       ==  200
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    def validate_core_schema(self, core_name):
+        try:
+            field_response                                  =   requests.get(
+                                                                    f"{g.execution.solr.url_main}/{core_name}/schema/fields/id",
+                                                                    timeout=5
+                                                                )
+            if field_response.status_code != 200:
+                t.debug_print(
+                    f"Solr core {core_name} schema id check failed: HTTP {field_response.status_code}",
+                    self.name
+                )
+                return False
+
+            field_type                                      =   field_response.json().get("field", {}).get("type")
+            unique_response                                 =   requests.get(
+                                                                    f"{g.execution.solr.url_main}/{core_name}/schema/uniquekey",
+                                                                    timeout=5
+                                                                )
+            if unique_response.status_code != 200:
+                t.debug_print(
+                    f"Solr core {core_name} uniqueKey check failed: HTTP {unique_response.status_code}",
+                    self.name
+                )
+                return False
+
+            unique_key                                      =   unique_response.json().get("uniqueKey")
+            if field_type != "string" or unique_key != "id":
+                t.debug_print(
+                    f"Solr core {core_name} has incompatible schema: id type={field_type}, uniqueKey={unique_key}. "
+                    "Recreate the core with the bundled schema before parsing.",
+                    self.name
+                )
+                return False
+
+            return True
+        except Exception as e:
+            t.debug_print(f"Solr core {core_name} schema validation failed: {e}", self.name)
+            return False
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     # проверка наличия core среди имеющихся
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     def base_exists(self,be_name):
         count                                               =   0
+        be_ret                                              =   0
         try:
             be_ret                                          =   requests.get(
                                                                     g.execution.solr.url_main \

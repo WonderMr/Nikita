@@ -67,9 +67,13 @@ class RedisQueue:
         self.key_prefix                                     =   "nikita:queue:"
         self.main_key                                       =   self.key_prefix + "main"
         self.processing_key                                 =   self.key_prefix + "processing"
+        self.dead_key                                       =   self.key_prefix + "dead"
+        self.recovery_pending                               =   True
         self.connect(recover=True)
 
     def connect(self, recover=False):
+        if recover:
+            self.recovery_pending                           =   True
         if not g.conf.redis.enabled:
             return
         if redis is None:
@@ -84,8 +88,10 @@ class RedisQueue:
                 decode_responses                            =   True  # Получаем строки вместо байтов
             )
             self.client.ping()
-            if recover:
-                self.recover_processing()
+            if self.recovery_pending:
+                if not self.recover_processing():
+                    return
+                self.recovery_pending                       =   False
             t.debug_print("Connected to Redis", "RedisQueue")
         except Exception as e:
             t.debug_print(f"Redis connection failed: {e}", "RedisQueue")
@@ -93,13 +99,15 @@ class RedisQueue:
 
     def recover_processing(self):
         if not self.client:
-            return
+            return False
         try:
             while self.client.llen(self.processing_key) > 0:
                 self.client.rpoplpush(self.processing_key, self.main_key)
+            return True
         except Exception as e:
             t.debug_print(f"Redis processing recovery failed: {e}", "RedisQueue")
             self.client                                     =   None
+            return False
 
     def push(self, data, base_name):
         """
@@ -144,10 +152,19 @@ class RedisQueue:
                                                                     timeout=timeout
                                                                 )
             if payload:
-                item                                        =   json.loads(payload)
-                return item["base"], item["data"], payload
+                try:
+                    item                                    =   json.loads(payload)
+                    base_name                               =   item["base"]
+                    data                                    =   item["data"]
+                except (json.JSONDecodeError, KeyError, TypeError) as e:
+                    t.debug_print(f"Redis payload is invalid, moving to dead letter: {e}", "RedisQueue")
+                    if not self.move_to_dead(payload):
+                        t.debug_print("Redis invalid payload could not be moved to dead letter", "RedisQueue")
+                    return None, None, None
+                return base_name, data, payload
         except Exception as e:
             t.debug_print(f"Redis pop failed: {e}", "RedisQueue")
+            self.recovery_pending                           =   True
             self.client                                     =   None
         
         return None, None, None
@@ -160,10 +177,10 @@ class RedisQueue:
             if not self.client:
                 return False
         try:
-            self.client.lrem(self.processing_key, 1, payload)
-            return True
+            return self.client.lrem(self.processing_key, 1, payload) > 0
         except Exception as e:
             t.debug_print(f"Redis ack failed: {e}", "RedisQueue")
+            self.recovery_pending                           =   True
             self.client                                     =   None
             return False
 
@@ -175,11 +192,41 @@ class RedisQueue:
             if not self.client:
                 return False
         try:
-            self.client.lrem(self.processing_key, 1, payload)
-            self.client.lpush(self.main_key, payload)
-            return True
+            script                                          =   """
+                local removed = redis.call('LREM', KEYS[1], 1, ARGV[1])
+                if removed > 0 then
+                    redis.call('LPUSH', KEYS[2], ARGV[1])
+                    return 1
+                end
+                return 0
+            """
+            return int(self.client.eval(script, 2, self.processing_key, self.main_key, payload)) == 1
         except Exception as e:
             t.debug_print(f"Redis requeue failed: {e}", "RedisQueue")
+            self.recovery_pending                           =   True
+            self.client                                     =   None
+            return False
+
+    def move_to_dead(self, payload):
+        if not payload:
+            return False
+        if not self.client:
+            self.connect()
+            if not self.client:
+                return False
+        try:
+            script                                          =   """
+                local removed = redis.call('LREM', KEYS[1], 1, ARGV[1])
+                if removed > 0 then
+                    redis.call('LPUSH', KEYS[2], ARGV[1])
+                    return 1
+                end
+                return 0
+            """
+            return int(self.client.eval(script, 2, self.processing_key, self.dead_key, payload)) == 1
+        except Exception as e:
+            t.debug_print(f"Redis dead-letter move failed: {e}", "RedisQueue")
+            self.recovery_pending                           =   True
             self.client                                     =   None
             return False
 

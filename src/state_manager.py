@@ -94,6 +94,13 @@ class StateManager:
                         timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     )
                 ''')
+
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS migrations (
+                        migration_key TEXT PRIMARY KEY,
+                        applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                ''')
                 
                 # Миграция старой структуры таблиц к новой (если нужно)
                 # Проверяем, используется ли старая структура (filename вместо database_name + file_basename)
@@ -187,17 +194,33 @@ class StateManager:
                     cursor.execute('DROP TABLE committed_blocks_old')
                     t.debug_print("✓ Миграция committed_blocks завершена", "StateManager")
                 
-                cursor.execute("UPDATE committed_blocks SET database_name = 'unknown' WHERE database_name IS NULL")
-                cursor.execute("UPDATE committed_blocks SET file_basename = 'unknown' WHERE file_basename IS NULL")
-                cursor.execute("UPDATE committed_blocks SET data_hash = 'empty' WHERE data_hash IS NULL")
-                cursor.execute('''
-                    DELETE FROM committed_blocks
-                    WHERE id NOT IN (
-                        SELECT MIN(id)
-                        FROM committed_blocks
-                        GROUP BY database_name, file_basename, offset_start, offset_end, data_hash
+                cleanup_migration_key                       =   "committed_blocks_cleanup_v1"
+                cursor.execute("SELECT 1 FROM migrations WHERE migration_key = ?", (cleanup_migration_key,))
+                if cursor.fetchone() is None:
+                    cursor.execute("UPDATE committed_blocks SET database_name = 'unknown' WHERE database_name IS NULL")
+                    database_fixed                          =   cursor.rowcount
+                    cursor.execute("UPDATE committed_blocks SET file_basename = 'unknown' WHERE file_basename IS NULL")
+                    file_fixed                              =   cursor.rowcount
+                    cursor.execute("UPDATE committed_blocks SET data_hash = 'empty' WHERE data_hash IS NULL")
+                    hash_fixed                              =   cursor.rowcount
+                    cursor.execute('''
+                        DELETE FROM committed_blocks
+                        WHERE id NOT IN (
+                            SELECT MIN(id)
+                            FROM committed_blocks
+                            GROUP BY database_name, file_basename, offset_start, offset_end, data_hash
+                        )
+                    ''')
+                    deduped_rows                            =   cursor.rowcount
+                    cursor.execute(
+                        "INSERT INTO migrations (migration_key) VALUES (?)",
+                        (cleanup_migration_key,)
                     )
-                ''')
+                    t.debug_print(
+                        "committed_blocks cleanup applied: "
+                        f"database={database_fixed}, file={file_fixed}, hash={hash_fixed}, deduped={deduped_rows}",
+                        "StateManager"
+                    )
 
                 # Индексы для быстрого поиска
                 cursor.execute('CREATE INDEX IF NOT EXISTS idx_file_states_db ON file_states(database_name)')
@@ -250,7 +273,7 @@ class StateManager:
             t.debug_print(f"Ошибка get_file_state: {e}")
             return None
 
-    def update_file_state(self, filename: str, filesize: int, filesizeread: int, database_name: str = 'unknown') -> None:
+    def update_file_state(self, filename: str, filesize: int, filesizeread: int, database_name: str = 'unknown') -> bool:
         """
         Обновление состояния файла
         
@@ -274,8 +297,10 @@ class StateManager:
                 ''', (database_name, file_basename, filesize, filesizeread))
                 conn.commit()
                 conn.close()
+                return True
         except Exception as e:
             t.debug_print(f"Ошибка update_file_state: {e}")
+            return False
 
     def _data_hash(self, data_records: List[Any]) -> str:
         if data_records:
@@ -308,7 +333,7 @@ class StateManager:
             t.debug_print(f"Ошибка is_block_committed: {e}", "StateManager")
             return False
 
-    def log_committed_block(self, filename: str, offset_start: int, offset_end: int, data_records: List[Any], database_name: str = 'unknown') -> None:
+    def log_committed_block(self, filename: str, offset_start: int, offset_end: int, data_records: List[Any], database_name: str = 'unknown') -> bool:
         """
         Логирует закоммиченный блок с его хешем.
         
@@ -344,8 +369,10 @@ class StateManager:
                 
                 # Логируем для отладки
                 t.debug_print(f"✓ Logged block: db={database_name}, file={file_basename}, records={record_count}", "StateManager")
+                return True
         except Exception as e:
             t.debug_print(f"Ошибка log_committed_block: {e}", "StateManager")
+            return False
 
     def get_total_records_sent(self, database_name: str) -> int:
         """
