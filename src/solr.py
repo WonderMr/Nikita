@@ -153,7 +153,7 @@ class solr_thread(threading.Thread):
             return False
         java_exe                                            =   self.get_java_executable(java_home)
         if not java_exe:
-            t.debug_print(f"Solr Java not found: {java_exe}. Set SOLR_JAVA_HOME to JDK 17.", self.name)
+            t.debug_print(f"Solr Java not found under {java_home}. Set SOLR_JAVA_HOME to JDK 17.", self.name)
             return False
 
         java_major                                          =   self.get_java_major_version(java_exe)

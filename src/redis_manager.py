@@ -155,17 +155,14 @@ class RedisQueue:
 
     def pop_to_processing(self, timeout):
         try:
-            return self.client.blmove(
+            return self.client.execute_command(
+                "BLMOVE",
                 self.main_key,
                 self.processing_key,
-                timeout=timeout,
-                src="RIGHT",
-                dest="LEFT"
+                "RIGHT",
+                "LEFT",
+                timeout
             )
-        except AttributeError:
-            pass
-        except TypeError:
-            pass
         except Exception as e:
             response_error                                  =   getattr(getattr(redis, "exceptions", None), "ResponseError", None)
             if response_error is None or not isinstance(e, response_error) or "unknown" not in str(e).lower():
