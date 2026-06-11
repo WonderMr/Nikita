@@ -168,6 +168,8 @@ class RedisQueue:
                     t.debug_print(f"Redis payload is invalid, moving to dead letter: {e}", "RedisQueue")
                     if not self.move_to_dead(payload):
                         t.debug_print("Redis invalid payload could not be moved to dead letter", "RedisQueue")
+                        self.recovery_pending               =   True
+                        self.client                         =   None
                     return None, None, None
                 return base_name, data, payload
         except Exception as e:
