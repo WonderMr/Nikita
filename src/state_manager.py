@@ -61,6 +61,7 @@ class StateManager:
 
     def _init_db(self) -> None:
         """Инициализация базы данных SQLite"""
+        conn                                                    =   None
         try:
             # t.debug_print(f"StateManager: Инициализация базы данных: {self.db_path}", "StateManager")
             with self.conn_lock:
@@ -92,6 +93,13 @@ class StateManager:
                         data_hash TEXT,
                         record_count INTEGER,
                         timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                ''')
+
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS migrations (
+                        migration_key TEXT PRIMARY KEY,
+                        applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     )
                 ''')
                 
@@ -187,16 +195,54 @@ class StateManager:
                     cursor.execute('DROP TABLE committed_blocks_old')
                     t.debug_print("✓ Миграция committed_blocks завершена", "StateManager")
                 
+                cleanup_migration_key                       =   "committed_blocks_cleanup_v1"
+                cursor.execute("SELECT 1 FROM migrations WHERE migration_key = ?", (cleanup_migration_key,))
+                if cursor.fetchone() is None:
+                    cursor.execute("UPDATE committed_blocks SET database_name = 'unknown' WHERE database_name IS NULL")
+                    database_fixed                          =   cursor.rowcount
+                    cursor.execute("UPDATE committed_blocks SET file_basename = 'unknown' WHERE file_basename IS NULL")
+                    file_fixed                              =   cursor.rowcount
+                    cursor.execute("UPDATE committed_blocks SET data_hash = 'empty' WHERE data_hash IS NULL")
+                    hash_fixed                              =   cursor.rowcount
+                    cursor.execute('''
+                        DELETE FROM committed_blocks
+                        WHERE id NOT IN (
+                            SELECT MIN(id)
+                            FROM committed_blocks
+                            GROUP BY database_name, file_basename, offset_start, offset_end, data_hash
+                        )
+                    ''')
+                    deduped_rows                            =   cursor.rowcount
+                    cursor.execute(
+                        "INSERT OR IGNORE INTO migrations (migration_key) VALUES (?)",
+                        (cleanup_migration_key,)
+                    )
+                    t.debug_print(
+                        "committed_blocks cleanup applied: "
+                        f"database={database_fixed}, file={file_fixed}, hash={hash_fixed}, deduped={deduped_rows}",
+                        "StateManager"
+                    )
+
                 # Индексы для быстрого поиска
                 cursor.execute('CREATE INDEX IF NOT EXISTS idx_file_states_db ON file_states(database_name)')
                 cursor.execute('CREATE INDEX IF NOT EXISTS idx_blocks_database ON committed_blocks(database_name)')
                 cursor.execute('CREATE INDEX IF NOT EXISTS idx_blocks_file ON committed_blocks(file_basename)')
                 cursor.execute('CREATE INDEX IF NOT EXISTS idx_blocks_db_file ON committed_blocks(database_name, file_basename)')
+                cursor.execute('''
+                    CREATE UNIQUE INDEX IF NOT EXISTS idx_blocks_unique
+                    ON committed_blocks(database_name, file_basename, offset_start, offset_end, data_hash)
+                ''')
                 
                 conn.commit()
                 conn.close()
+                conn                                            =   None
                 # t.debug_print(f"✓ StateManager: База данных успешно инициализирована", "StateManager")
         except Exception as e:
+            if conn is not None:
+                try:
+                    conn.close()
+                except Exception as close_error:
+                    t.debug_print(f"StateManager: failed to close init connection: {close_error}", "StateManager")
             # t.debug_print(f"✗ StateManager: Ошибка инициализации: {e}", "StateManager")
             print(f"✗ StateManager: Ошибка инициализации: {e}")
             import traceback
@@ -234,8 +280,11 @@ class StateManager:
             t.debug_print(f"Ошибка get_file_state: {e}")
             return None
 
-    def update_file_state(self, filename: str, filesize: int, filesizeread: int, database_name: str = 'unknown') -> None:
+    def update_file_state(self, filename: str, filesize: int, filesizeread: int, database_name: str = 'unknown') -> bool:
         """
+        Returns:
+            True if the SQLite update was committed, False if it failed.
+
         Обновление состояния файла
         
         Args:
@@ -249,19 +298,60 @@ class StateManager:
             file_basename                                       =   os.path.basename(filename)
             
             with self.conn_lock:
-                conn                                            =   sqlite3.connect(self.db_path, check_same_thread=False)
-                cursor                                          =   conn.cursor()
+                conn                                            =   None
+                try:
+                    conn                                        =   sqlite3.connect(self.db_path, check_same_thread=False)
+                    cursor                                      =   conn.cursor()
                 # Используем INSERT OR REPLACE как совместимый способ
-                cursor.execute('''
+                    cursor.execute('''
                     INSERT OR REPLACE INTO file_states (database_name, file_basename, filesize, filesizeread, last_updated)
                     VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-                ''', (database_name, file_basename, filesize, filesizeread))
-                conn.commit()
-                conn.close()
+                    ''', (database_name, file_basename, filesize, filesizeread))
+                    conn.commit()
+                finally:
+                    if conn is not None:
+                        conn.close()
+                return True
         except Exception as e:
             t.debug_print(f"Ошибка update_file_state: {e}")
+            return False
 
-    def log_committed_block(self, filename: str, offset_start: int, offset_end: int, data_records: List[Any], database_name: str = 'unknown') -> None:
+    def _data_hash(self, data_records: List[Any]) -> str:
+        if data_records:
+            data_str                                            =   json.dumps(data_records, sort_keys=True, default=str)
+            return hashlib.sha256(data_str.encode('utf-8')).hexdigest()
+        return "empty"
+
+    def is_block_committed(self, filename: str, offset_start: int, offset_end: int, data_records: List[Any], database_name: str = 'unknown', data_hash: Optional[str] = None) -> bool:
+        try:
+            file_basename                                       =   os.path.basename(filename)
+            data_hash                                           =   data_hash if data_hash is not None else self._data_hash(data_records)
+
+            with self.conn_lock:
+                conn                                            =   None
+                try:
+                    conn                                        =   sqlite3.connect(self.db_path, check_same_thread=False)
+                    cursor                                      =   conn.cursor()
+                    cursor.execute('''
+                        SELECT 1
+                        FROM committed_blocks
+                        WHERE database_name = ?
+                          AND file_basename = ?
+                          AND offset_start = ?
+                          AND offset_end = ?
+                          AND data_hash = ?
+                        LIMIT 1
+                    ''', (database_name, file_basename, offset_start, offset_end, data_hash))
+                    row                                         =   cursor.fetchone()
+                finally:
+                    if conn is not None:
+                        conn.close()
+                return row is not None
+        except Exception as e:
+            t.debug_print(f"Ошибка is_block_committed: {e}", "StateManager")
+            return False
+
+    def log_committed_block(self, filename: str, offset_start: int, offset_end: int, data_records: List[Any], database_name: str = 'unknown', data_hash: Optional[str] = None) -> bool:
         """
         Логирует закоммиченный блок с его хешем.
         
@@ -282,30 +372,33 @@ class StateManager:
                 if isinstance(first_record, dict) and 'ibase' in first_record:
                     database_name                               =   first_record['ibase']
             
-            # Вычисляем хеш отправляемых данных
-            # Используем json dumps с sort_keys для стабильности
-            if data_records:
-                data_str                                        =   json.dumps(data_records, sort_keys=True, default=str)
-                data_hash                                       =   hashlib.sha256(data_str.encode('utf-8')).hexdigest()
-                record_count                                    =   len(data_records)
-            else:
-                data_hash                                       =   "empty"
-                record_count                                    =   0
+            data_hash                                           =   data_hash if data_hash is not None else self._data_hash(data_records)
+            record_count                                        =   len(data_records) if data_records else 0
 
             with self.conn_lock:
-                conn                                            =   sqlite3.connect(self.db_path, check_same_thread=False)
-                cursor                                          =   conn.cursor()
-                cursor.execute('''
-                    INSERT INTO committed_blocks (database_name, file_basename, offset_start, offset_end, data_hash, record_count)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                ''', (database_name, file_basename, offset_start, offset_end, data_hash, record_count))
-                conn.commit()
-                conn.close()
+                conn                                            =   None
+                try:
+                    conn                                        =   sqlite3.connect(self.db_path, check_same_thread=False)
+                    cursor                                      =   conn.cursor()
+                    cursor.execute('''
+                        INSERT OR IGNORE INTO committed_blocks (database_name, file_basename, offset_start, offset_end, data_hash, record_count)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    ''', (database_name, file_basename, offset_start, offset_end, data_hash, record_count))
+                    inserted_rows                               =   cursor.rowcount
+                    conn.commit()
+                finally:
+                    if conn is not None:
+                        conn.close()
                 
                 # Логируем для отладки
-                t.debug_print(f"✓ Logged block: db={database_name}, file={file_basename}, records={record_count}", "StateManager")
+                if inserted_rows:
+                    t.debug_print(f"✓ Logged block: db={database_name}, file={file_basename}, records={record_count}", "StateManager")
+                else:
+                    t.debug_print(f"✓ Block already logged: db={database_name}, file={file_basename}, records={record_count}", "StateManager")
+                return True
         except Exception as e:
             t.debug_print(f"Ошибка log_committed_block: {e}", "StateManager")
+            return False
 
     def get_total_records_sent(self, database_name: str) -> int:
         """

@@ -7,6 +7,7 @@ import  subprocess                                                              
 import  time                                                                                                            # Stubs for time
 import  shlex                                                                                                           # A lexical analyzer class for simple shell-like syntaxes.
 import  os                                                                                                              # OS routines for NT or Posix depending on what system we're on.
+import  re                                                                                                              # Regular expressions
 # ======================================================================================================================
 from    src                 import  globals                 as  g
 from    src.tools           import  tools                   as  t
@@ -25,22 +26,31 @@ class solr_thread(threading.Thread):
         t.debug_print("Thread initialized", self.name)
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     def check_base_exists(self,cbe_name):
-        #for ibase in g.parser.ibases:
-        if not (self.base_exists(cbe_name)):                                                                            # если базы нету
-            if not self.base_create(cbe_name):                                                                          # то создаём её
-                t.debug_print("Не удалось создать ядро " + cbe_name,self.name)
+        if not self.base_exists(cbe_name):
+            if not self.base_create(cbe_name):
+                t.debug_print("Cannot create Solr core " + cbe_name, self.name)
                 return False
-            else:
+        schema_attempts                                     =   3
+        for schema_attempt in range(schema_attempts):
+            if self.validate_core_schema(cbe_name):
                 return True
-        else:
-            return True
+            if schema_attempt < schema_attempts - 1:
+                t.debug_print(
+                    f"Solr core {cbe_name} schema validation attempt {schema_attempt + 1}/{schema_attempts} failed, retrying",
+                    self.name
+                )
+                time.sleep(g.waits.solr_on_bad_send_to)
+        return False
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     def run(self):
         if self.start2():
             for ibase in g.parser.ibases:
-                self.check_base_exists(ibase[g.nms.ib.name])
+                if not self.check_base_exists(ibase[g.nms.ib.name]):
+                    t.graceful_shutdown(1)
+                    return
         else:
             t.graceful_shutdown(1)
+            return
         t.debug_print("Thread started", self.name)
         g.execution.solr.started                            =   True
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -52,25 +62,127 @@ class solr_thread(threading.Thread):
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     # запускает Apahe Solr
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    def get_java_major_version(self, java_exe):
+        try:
+            version_output                                  =   subprocess.check_output(
+                                                                    [java_exe, "-version"],
+                                                                    stderr=subprocess.STDOUT,
+                                                                    text=True
+                                                                )
+            version_match                                   =   re.search(r'version "([^"]+)"', version_output)
+            if not version_match:
+                return None
+            version                                         =   version_match.group(1)
+            if version.startswith("1."):
+                return int(version.split(".")[1])
+            return int(version.split(".")[0])
+        except Exception as e:
+            t.debug_print(f"Failed to check Java version for Solr: {e}", self.name)
+            return None
+
+    def java_executable_names(self):
+        if os.name == "nt":
+            return ("java.exe", "java")
+        return ("java", "java.exe")
+
+    def get_java_executable(self, java_home):
+        for java_name in self.java_executable_names():
+            java_exe                                        =   os.path.join(java_home, "bin", java_name)
+            if os.path.exists(java_exe):
+                return java_exe
+        return None
+
+    def get_java_home_info(self, java_home):
+        java_exe                                            =   self.get_java_executable(java_home)
+        if not java_exe:
+            return None
+        return (self.get_java_major_version(java_exe), os.path.abspath(java_home))
+
+    def resolve_java_home(self):
+        candidates                                          =   []
+        if g.conf.solr.java_home:
+            candidates.append(g.conf.solr.java_home)
+        if g.execution.self_dir:
+            candidates.append(os.path.join(g.execution.self_dir, "java"))
+        if g.conf.solr.dir:
+            candidates.append(os.path.join(os.path.dirname(g.conf.solr.dir), "java"))
+
+        java_homes                                          =   []
+        for candidate in candidates:
+            if not candidate:
+                continue
+            direct_java                                     =   self.get_java_home_info(candidate)
+            if direct_java:
+                java_homes.append(direct_java)
+            if os.path.isdir(candidate):
+                try:
+                    candidate_children                      =   sorted(os.listdir(candidate))
+                except OSError as e:
+                    t.debug_print(f"Cannot inspect Solr Java candidate {candidate}: {e}", self.name)
+                    continue
+                for child in candidate_children:
+                    nested                                  =   os.path.join(candidate, child)
+                    nested_java                             =   self.get_java_home_info(nested)
+                    if nested_java:
+                        java_homes.append(nested_java)
+
+        supported_java_homes                                =   [
+                                                                    java_home
+                                                                    for java_home in java_homes
+                                                                    if java_home[0] is not None and java_home[0] >= 17
+                                                                ]
+        if supported_java_homes:
+            return max(supported_java_homes, key=lambda java_home: (java_home[0], java_home[1]))[1]
+
+        versioned_java_homes                                =   [
+                                                                    java_home
+                                                                    for java_home in java_homes
+                                                                    if java_home[0] is not None
+                                                                ]
+        if versioned_java_homes:
+            return max(versioned_java_homes, key=lambda java_home: (java_home[0], java_home[1]))[1]
+
+        if java_homes:
+            return java_homes[0][1]
+        return g.conf.solr.java_home
+
     def start2(self):
-        ss_command                                          =   '"'+g.conf.solr.java_home+'\\bin\\java.exe"'
+        java_home                                           =   self.resolve_java_home()
+        if not java_home:
+            t.debug_print("Solr Java home is not configured. Set SOLR_JAVA_HOME to JDK 17.", self.name)
+            return False
+        java_exe                                            =   self.get_java_executable(java_home)
+        if not java_exe:
+            t.debug_print(f"Solr Java not found under {java_home}. Set SOLR_JAVA_HOME to JDK 17.", self.name)
+            return False
+
+        java_major                                          =   self.get_java_major_version(java_exe)
+        if java_major is None:
+            t.debug_print(f"Cannot detect Java version for Solr: {java_exe}", self.name)
+            return False
+        if java_major < 17:
+            t.debug_print(
+                f"Solr requires Java 17+, but {java_exe} is Java {java_major}. "
+                "Set SOLR_JAVA_HOME to the bundled java directory.",
+                self.name
+            )
+            return False
+
+        g.conf.solr.java_home                               =   java_home
+        solr_env                                            =   os.environ.copy()
+        solr_env["JAVA_HOME"]                               =   java_home
+        solr_env["JRE_HOME"]                                =   java_home
+        solr_env["SOLR_JAVA_HOME"]                          =   java_home
+        solr_env["PATH"]                                    =   os.path.dirname(java_exe) + os.pathsep + solr_env.get("PATH", "")
+
+        ss_command                                          =   '"'+java_exe+'"'
         ss_command                                          +=  " -server"
         ss_command                                          +=  " -Xms"+g.conf.solr.mem_min
         ss_command                                          +=  " -Xmx"+g.conf.solr.mem_max
         ss_command                                          +=  " -Duser.timezone=UTC"
-        ss_command                                          +=  " -XX:NewRatio=3"
-        ss_command                                          +=  " -XX:SurvivorRatio=4"
-        ss_command                                          +=  " -XX:TargetSurvivorRatio=90"
-        ss_command                                          +=  " -XX:MaxTenuringThreshold=8"
-        ss_command                                          +=  " -XX:+UseConcMarkSweepGC"
+        ss_command                                          +=  " -XX:+UseG1GC"
         ss_command                                          +=  " -XX:ConcGCThreads="+g.conf.solr.threads
         ss_command                                          +=  " -XX:ParallelGCThreads="+g.conf.solr.threads
-        ss_command                                          +=  " -XX:+CMSScavengeBeforeRemark"
-        ss_command                                          +=  " -XX:PretenureSizeThreshold=64m"
-        ss_command                                          +=  " -XX:+UseCMSInitiatingOccupancyOnly"
-        ss_command                                          +=  " -XX:CMSInitiatingOccupancyFraction=50"
-        ss_command                                          +=  " -XX:CMSMaxAbortablePrecleanTime=6000"
-        ss_command                                          +=  " -XX:+CMSParallelRemarkEnabled"
         ss_command                                          +=  " -XX:+ParallelRefProcEnabled"
         ss_command                                          +=  " -XX:-OmitStackTraceInFastThrow"
         ss_command                                          +=  ' -XX:+ExitOnOutOfMemoryError'                          # тестово
@@ -108,7 +220,8 @@ class solr_thread(threading.Thread):
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         g.execution.solr.pid                                =   subprocess.Popen(
                                                                     args,
-                                                                    cwd=os.path.join(g.conf.solr.dir, "server")
+                                                                    cwd=os.path.join(g.conf.solr.dir, "server"),
+                                                                    env=solr_env
                                                                 ).pid
         # запускаю solr и получаю его pid
         solr_wakes                                          =   False
@@ -152,10 +265,50 @@ class solr_thread(threading.Thread):
         t.debug_print("core "+bc_name+" created with code "+str(bc_ret),self.name)
         return bc_ret                                       ==  200
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    def validate_core_schema(self, core_name):
+        try:
+            field_response                                  =   requests.get(
+                                                                    f"{g.execution.solr.url_main}/{core_name}/schema/fields/id",
+                                                                    timeout=5
+                                                                )
+            if field_response.status_code != 200:
+                t.debug_print(
+                    f"Solr core {core_name} schema id check failed: HTTP {field_response.status_code}",
+                    self.name
+                )
+                return False
+
+            field_type                                      =   field_response.json().get("field", {}).get("type")
+            unique_response                                 =   requests.get(
+                                                                    f"{g.execution.solr.url_main}/{core_name}/schema/uniquekey",
+                                                                    timeout=5
+                                                                )
+            if unique_response.status_code != 200:
+                t.debug_print(
+                    f"Solr core {core_name} uniqueKey check failed: HTTP {unique_response.status_code}",
+                    self.name
+                )
+                return False
+
+            unique_key                                      =   unique_response.json().get("uniqueKey")
+            if field_type != "string" or unique_key != "id":
+                t.debug_print(
+                    f"Solr core {core_name} has incompatible schema: id type={field_type}, uniqueKey={unique_key}. "
+                    "Recreate the core with the bundled schema before parsing.",
+                    self.name
+                )
+                return False
+
+            return True
+        except Exception as e:
+            t.debug_print(f"Solr core {core_name} schema validation failed: {e}", self.name)
+            return False
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     # проверка наличия core среди имеющихся
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     def base_exists(self,be_name):
         count                                               =   0
+        be_ret                                              =   0
         try:
             be_ret                                          =   requests.get(
                                                                     g.execution.solr.url_main \

@@ -6,8 +6,11 @@ import time
 import shlex
 import os
 import json
+import uuid
 from src.tools import tools as t
 from src import globals as g
+
+RECOVERY_BATCH_SIZE                                        =   1000
 
 # redis (python) может отсутствовать, если Redis выключен (например, Windows сборка).
 try:
@@ -65,9 +68,15 @@ class RedisQueue:
     def __init__(self):
         self.client                                         =   None
         self.key_prefix                                     =   "nikita:queue:"
-        self.connect()
+        self.main_key                                       =   self.key_prefix + "main"
+        self.processing_key                                 =   self.key_prefix + "processing"
+        self.dead_key                                       =   self.key_prefix + "dead"
+        self.recovery_pending                               =   True
+        self.connect(recover=True)
 
-    def connect(self):
+    def connect(self, recover=False):
+        if recover:
+            self.recovery_pending                           =   True
         if not g.conf.redis.enabled:
             return
         if redis is None:
@@ -82,10 +91,41 @@ class RedisQueue:
                 decode_responses                            =   True  # Получаем строки вместо байтов
             )
             self.client.ping()
+            if self.recovery_pending:
+                if not self.recover_processing():
+                    return
+                self.recovery_pending                       =   False
             t.debug_print("Connected to Redis", "RedisQueue")
         except Exception as e:
             t.debug_print(f"Redis connection failed: {e}", "RedisQueue")
             self.client                                     =   None
+
+    def recover_processing(self):
+        if not self.client:
+            return False
+        try:
+            script                                          =   """
+                local limit = tonumber(ARGV[1]) or 1000
+                local moved = 0
+                while moved < limit do
+                    local payload = redis.call('LPOP', KEYS[1])
+                    if not payload then
+                        break
+                    end
+                    redis.call('RPUSH', KEYS[2], payload)
+                    moved = moved + 1
+                end
+                return moved
+            """
+            while True:
+                moved                                       =   int(self.client.eval(script, 2, self.processing_key, self.main_key, RECOVERY_BATCH_SIZE))
+                if moved < RECOVERY_BATCH_SIZE:
+                    break
+            return True
+        except Exception as e:
+            t.debug_print(f"Redis processing recovery failed: {e}", "RedisQueue")
+            self.client                                     =   None
+            return False
 
     def push(self, data, base_name):
         """
@@ -101,40 +141,133 @@ class RedisQueue:
         try:
             # Сериализуем данные. Можно использовать msgpack для скорости, но json проще для отладки.
             payload                                         =   json.dumps({
+                "id":                                           uuid.uuid4().hex,
                 "base":                                         base_name,
                 "data":                                         data
             })
-            # Используем RPUSH для добавления в конец очереди
-            self.client.rpush(self.key_prefix + "main", payload)
+            # LPUSH + BRPOPLPUSH дают FIFO и processing-очередь до ack.
+            self.client.lpush(self.main_key, payload)
             return True
         except Exception as e:
             t.debug_print(f"Redis push failed: {e}", "RedisQueue")
             self.client                                     =   None # Сбрасываем соединение
             return False
 
+    def pop_to_processing(self, timeout):
+        try:
+            return self.client.execute_command(
+                "BLMOVE",
+                self.main_key,
+                self.processing_key,
+                "RIGHT",
+                "LEFT",
+                timeout
+            )
+        except Exception as e:
+            response_error                                  =   getattr(getattr(redis, "exceptions", None), "ResponseError", None)
+            if response_error is None or not isinstance(e, response_error) or "unknown" not in str(e).lower():
+                raise
+            t.debug_print("Redis BLMOVE is not available; falling back to BRPOPLPUSH", "RedisQueue")
+
+        return self.client.brpoplpush(
+            self.main_key,
+            self.processing_key,
+            timeout=timeout
+        )
+
     def pop(self, timeout=5):
         """
         Получает пакет данных из очереди (блокирующий вызов).
-        Возвращает (base_name, data) или (None, None).
+        Возвращает (base_name, data, payload) или (None, None, None).
         """
         if not self.client:
             self.connect()
             if not self.client:
                 time.sleep(1)
-                return None, None
+                return None, None, None
 
         try:
-            # BLPOP блокирует поток до появления данных или таймаута
-            result                                          =   self.client.blpop(self.key_prefix + "main", timeout=timeout)
-            if result:
-                _, payload                                  =   result
-                item                                        =   json.loads(payload)
-                return item["base"], item["data"]
+            payload                                         =   self.pop_to_processing(timeout)
+            if payload:
+                try:
+                    item                                    =   json.loads(payload)
+                    base_name                               =   item["base"]
+                    data                                    =   item["data"]
+                except (json.JSONDecodeError, KeyError, TypeError) as e:
+                    t.debug_print(f"Redis payload is invalid, moving to dead letter: {e}", "RedisQueue")
+                    if not self.move_to_dead(payload):
+                        t.debug_print("Redis invalid payload could not be moved to dead letter", "RedisQueue")
+                        self.recovery_pending               =   True
+                        self.client                         =   None
+                    return None, None, None
+                return base_name, data, payload
         except Exception as e:
             t.debug_print(f"Redis pop failed: {e}", "RedisQueue")
+            self.recovery_pending                           =   True
             self.client                                     =   None
         
-        return None, None
+        return None, None, None
+
+    def ack(self, payload):
+        if not payload:
+            return False
+        if not self.client:
+            self.connect()
+            if not self.client:
+                return False
+        try:
+            return self.client.lrem(self.processing_key, 1, payload) > 0
+        except Exception as e:
+            t.debug_print(f"Redis ack failed: {e}", "RedisQueue")
+            self.recovery_pending                           =   True
+            self.client                                     =   None
+            return False
+
+    def requeue(self, payload):
+        if not payload:
+            return False
+        if not self.client:
+            self.connect()
+            if not self.client:
+                return False
+        try:
+            script                                          =   """
+                local removed = redis.call('LREM', KEYS[1], 1, ARGV[1])
+                if removed > 0 then
+                    redis.call('LPUSH', KEYS[2], ARGV[1])
+                    return 1
+                end
+                return 0
+            """
+            return int(self.client.eval(script, 2, self.processing_key, self.main_key, payload)) == 1
+        except Exception as e:
+            t.debug_print(f"Redis requeue failed: {e}", "RedisQueue")
+            self.recovery_pending                           =   True
+            self.client                                     =   None
+            return False
+
+    def move_to_dead(self, payload):
+        if not payload:
+            return False
+        if not self.client:
+            self.connect()
+            if not self.client:
+                return False
+        try:
+            script                                          =   """
+                local removed = redis.call('LREM', KEYS[1], 1, ARGV[1])
+                if removed > 0 then
+                    redis.call('LPUSH', KEYS[2], ARGV[1])
+                    return 1
+                end
+                return 0
+            """
+            return int(self.client.eval(script, 2, self.processing_key, self.dead_key, payload)) == 1
+        except Exception as e:
+            t.debug_print(f"Redis dead-letter move failed: {e}", "RedisQueue")
+            self.recovery_pending                           =   True
+            self.client                                     =   None
+            return False
 
 # Глобальный экземпляр очереди
 queue                                                       =   RedisQueue()

@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import  threading
 import  time
+import  re
 import  requests
 import  datetime
 import  traceback
@@ -10,6 +11,47 @@ from    clickhouse_driver   import  Client                  as  ch
 from    src.tools           import  tools                   as  t
 from    src                 import  globals                 as  g
 from    src.redis_manager   import  queue
+
+COLUMN_NAMES                                                 =   (
+                                                                    "date",
+                                                                    "date_idx",
+                                                                    "t_status",
+                                                                    "t_id",
+                                                                    "t_pos",
+                                                                    "user_name",
+                                                                    "user_guid",
+                                                                    "computer",
+                                                                    "app",
+                                                                    "connect",
+                                                                    "event",
+                                                                    "severity",
+                                                                    "comment",
+                                                                    "meta_name",
+                                                                    "meta_uuid",
+                                                                    "data",
+                                                                    "data_pres",
+                                                                    "server",
+                                                                    "port",
+                                                                    "port_sec",
+                                                                    "session",
+                                                                    "area",
+                                                                    "area_sec",
+                                                                    "file_name",
+                                                                    "file_pos",
+                                                                )
+FILE_NAME_INDEX                                             =   COLUMN_NAMES.index("file_name")
+FILE_POS_INDEX                                              =   COLUMN_NAMES.index("file_pos")
+BASE_NAME_RE                                                =   re.compile(r'^[a-zA-Z0-9_а-яА-ЯёЁ]+$')
+RETRIABLE_SENDER_STATUSES                                  =   {404, 409, 429}
+CLICKHOUSE_DEDUPE_LOOKUP_CHUNK_SIZE                        =   100
+CLICKHOUSE_DEDUPE_LOOKUP_MAX_LITERAL_CHARS                  =   60000
+
+def is_non_retriable_solr_status(status):
+    return (
+        status is not None
+        and 400 <= status < 500
+        and status not in RETRIABLE_SENDER_STATUSES
+    )
 
 # ======================================================================================================================
 # Утилиты для отправки данных
@@ -27,6 +69,49 @@ def escape_clickhouse(s: str) -> str:
         .replace("\r", r"\r")     # возврат каретки
     )
 
+def row_identity(row):
+    return (str(row[FILE_NAME_INDEX]), int(row[FILE_POS_INDEX]))
+
+def chunk_clickhouse_key_literals(keys):
+    chunk                                                   =   []
+    literal_chars                                           =   0
+    for file_name, file_pos in keys:
+        literal                                             =   f"('{escape_clickhouse(file_name)}', {file_pos})"
+        next_size                                           =   literal_chars + len(literal) + (1 if chunk else 0)
+        if chunk and (len(chunk) >= CLICKHOUSE_DEDUPE_LOOKUP_CHUNK_SIZE or next_size > CLICKHOUSE_DEDUPE_LOOKUP_MAX_LITERAL_CHARS):
+            yield chunk
+            chunk                                           =   []
+            literal_chars                                   =   0
+            next_size                                       =   len(literal)
+        chunk.append(literal)
+        literal_chars                                       =   next_size
+    if chunk:
+        yield chunk
+
+def get_existing_clickhouse_keys(chclient: Any, rows: List[tuple], base_name: str) -> set:
+    keys                                                    =   []
+    seen                                                    =   set()
+    for row in rows:
+        key                                                 =   row_identity(row)
+        if key not in seen:
+            keys.append(key)
+            seen.add(key)
+
+    existing                                                =   set()
+    if not keys:
+        return existing
+
+    for key_literals_chunk in chunk_clickhouse_key_literals(keys):
+        key_literals                                        =   ",".join(key_literals_chunk)
+        query                                               =   f"""
+            SELECT file_name, file_pos
+            FROM {g.conf.clickhouse.database}.`{base_name}`
+            WHERE (file_name, file_pos) IN ({key_literals})
+        """
+        for file_name, file_pos in chclient.execute(query):
+            existing.add((str(file_name), int(file_pos)))
+    return existing
+
 # ----------------------------------------------------------------------------------------------------------------------
 # Отправка пакета данных в ClickHouse
 # ----------------------------------------------------------------------------------------------------------------------
@@ -37,8 +122,7 @@ def send_to_clickhouse(chclient: Any, data: List[Dict[str, Any]], base_name: str
     
     # Валидация имени базы (таблицы) для защиты от инъекций в F-строке
     # Разрешаем только латиницу, кириллицу, цифры и подчеркивание
-    import re
-    if not re.match(r'^[a-zA-Z0-9_а-яА-ЯёЁ]+$', base_name):
+    if not isinstance(base_name, str) or not BASE_NAME_RE.match(base_name):
         t.debug_print(f"✗ CLICKHOUSE: Недопустимое имя базы/таблицы: '{base_name}'. Пропуск отправки.", logger_name)
         return False
 
@@ -82,17 +166,45 @@ def send_to_clickhouse(chclient: Any, data: List[Dict[str, Any]], base_name: str
             rows.append(row)
         
         if rows:
-            query                                           =   f"INSERT INTO {g.conf.clickhouse.database}.`{base_name}` (date, date_idx, t_status, t_id, t_pos, user_name, user_guid, computer, app, connect, event, severity, comment, meta_name, meta_uuid, data, data_pres, server, port, port_sec, session, area, area_sec, file_name, file_pos) VALUES"
-            exec_result                                     =   chclient.execute(query, rows)
+            unique_rows                                     =   []
+            seen_in_batch                                   =   set()
+            for row in rows:
+                key                                         =   row_identity(row)
+                if key in seen_in_batch:
+                    continue
+                unique_rows.append(row)
+                seen_in_batch.add(key)
+
+            existing_keys                                   =   get_existing_clickhouse_keys(chclient, unique_rows, base_name)
+            rows_to_insert                                  =   [
+                                                                    row
+                                                                    for row in unique_rows
+                                                                    if row_identity(row) not in existing_keys
+                                                                ]
+            duplicate_count                                 =   len(rows) - len(unique_rows)
+            already_sent_count                              =   len(unique_rows) - len(rows_to_insert)
+            if duplicate_count:
+                t.debug_print(f"CLICKHOUSE: Пропущено {duplicate_count} дублей внутри batch для {base_name}", logger_name)
+            if already_sent_count:
+                t.debug_print(f"CLICKHOUSE: Пропущено {already_sent_count} уже отправленных записей для {base_name}", logger_name)
+
+            if rows_to_insert:
+                column_list                                 =   ", ".join(COLUMN_NAMES)
+                query                                       =   f"INSERT INTO {g.conf.clickhouse.database}.`{base_name}` ({column_list}) VALUES"
+                chclient.execute(query, rows_to_insert)
+            else:
+                t.debug_print(f"CLICKHOUSE: Новых записей для {base_name} нет", logger_name)
+
             elapsed_time                                    =   time.time() - start_time
             
             # Обновляем статистику успешной отправки
-            g.stats.clickhouse_total_sent                   +=  len(rows)
+            g.stats.clickhouse_total_sent                   +=  len(rows_to_insert)
             g.stats.clickhouse_last_success_time            =   datetime.datetime.now()
             g.stats.clickhouse_connection_ok                =   True
             
-            t.debug_print(f"✓ CLICKHOUSE: Успешно отправлено {len(rows)} записей в таблицу {g.conf.clickhouse.database}.{base_name}", logger_name)
-            t.debug_print(f"✓ CLICKHOUSE: Время выполнения: {elapsed_time:.3f} сек ({len(rows)/elapsed_time:.1f} записей/сек)", logger_name)
+            rate                                            =   len(rows_to_insert) / elapsed_time if elapsed_time else 0
+            t.debug_print(f"✓ CLICKHOUSE: Успешно отправлено {len(rows_to_insert)} записей в таблицу {g.conf.clickhouse.database}.{base_name}", logger_name)
+            t.debug_print(f"✓ CLICKHOUSE: Время выполнения: {elapsed_time:.3f} сек ({rate:.1f} записей/сек)", logger_name)
             t.debug_print(f"✓ CLICKHOUSE: Всего отправлено за сессию: {g.stats.clickhouse_total_sent} записей", logger_name)
         return True
 
@@ -183,6 +295,8 @@ def send_to_solr(url: str, data: List[Dict[str, Any]], logger_name: str) -> int:
 def post_query(chclient, solr_url, data, base_name, logger_name, bypass_redis=False):
     ret_ok                                                  =   200
     ret_err                                                 =   500
+    non_solr_failure                                        =   False
+    solr_status                                             =   None
     
     # 1. Если Redis включен и мы не обходим его (т.е. мы не Sender thread)
     if g.conf.redis.enabled and not bypass_redis:
@@ -234,6 +348,7 @@ def post_query(chclient, solr_url, data, base_name, logger_name, bypass_redis=Fa
             sent_to_any                                     =   True
         else:
             success                                         =   False
+            non_solr_failure                                =   True
     
     # Solr (только если включен и URL задан)
     if solr_url and g.conf.solr.enabled:
@@ -245,10 +360,23 @@ def post_query(chclient, solr_url, data, base_name, logger_name, bypass_redis=Fa
             t.debug_print(f"✗ Solr: Отправка не удалась (статус: {solr_status})", logger_name)
     
     if not sent_to_any and not g.conf.clickhouse.enabled and not g.conf.solr.enabled:
+        success                                             =   False
         t.debug_print("⚠ ВНИМАНИЕ: Ни ClickHouse, ни Solr не настроены! Данные никуда не отправлены.", logger_name)
     
-    result                                                  =   ret_ok if success else ret_err
-    return result
+    if success:
+        return ret_ok
+    if non_solr_failure:
+        if is_non_retriable_solr_status(solr_status):
+            t.debug_print(
+                f"Non-Solr failure keeps payload retriable before dead-lettering Solr status {solr_status}",
+                logger_name
+            )
+        return ret_err
+    if is_non_retriable_solr_status(solr_status):
+        return solr_status
+    if solr_status and solr_status != 200:
+        return solr_status
+    return ret_err
 
 # ======================================================================================================================
 # Поток отправки данных из очереди Redis
@@ -281,6 +409,17 @@ class sender_thread(threading.Thread):
 
         t.debug_print("Thread initialized", self.name)
 
+    def stop_on_queue_error(self, action):
+        t.debug_print(f"Redis {action} failed. Sender stops to avoid unknown queue state.", self.name)
+        self.stop_signal                                    =   True
+
+    def move_payload_to_dead(self, payload, reason):
+        t.debug_print(f"Redis payload {reason}; moving to dead letter", self.name)
+        if not queue.move_to_dead(payload):
+            self.stop_on_queue_error("dead-letter move")
+            return False
+        return True
+
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     # Основной цикл
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -291,16 +430,30 @@ class sender_thread(threading.Thread):
                 time.sleep(5)
                 continue
 
+            payload                                             =   None
             try:
                 # Читаем из очереди
-                base_name, data                             =   queue.pop(timeout=2)
+                base_name, data, payload                     =   queue.pop(timeout=2)
                 
-                if base_name and data:
-                    t.debug_print(f"Got {len(data)} records for {base_name} from Redis", self.name)
-                    
-                    solr_url                                =   f"{g.execution.solr.url_main}/{base_name}/update?wt=json"
-                    
-                    ret_code                                =   post_query(
+                if not payload:
+                    continue
+                if not isinstance(base_name, str) or not base_name or not isinstance(data, list):
+                    self.move_payload_to_dead(payload, "has invalid base or data")
+                    continue
+                if not BASE_NAME_RE.match(base_name):
+                    self.move_payload_to_dead(payload, f"has invalid target '{base_name}'")
+                    continue
+                if not data:
+                    t.debug_print(f"Empty Redis payload for {base_name}; acking", self.name)
+                    if not queue.ack(payload):
+                        self.stop_on_queue_error("ack")
+                    continue
+
+                t.debug_print(f"Got {len(data)} records for {base_name} from Redis", self.name)
+
+                solr_url                                    =   f"{g.execution.solr.url_main}/{base_name}/update?wt=json"
+
+                ret_code                                    =   post_query(
                                                                     self.chclient,
                                                                     solr_url,
                                                                     data,
@@ -308,12 +461,22 @@ class sender_thread(threading.Thread):
                                                                     self.name,
                                                                     bypass_redis=True
                                                                 )
-                    
-                    if ret_code                             !=  200:
-                        t.debug_print(f"Failed to send data (code {ret_code}).", self.name)
-                        time.sleep(1)
+
+                if ret_code                                 !=  200:
+                    t.debug_print(f"Failed to send data (code {ret_code}).", self.name)
+                    if is_non_retriable_solr_status(ret_code):
+                        self.move_payload_to_dead(payload, f"failed with non-retriable status {ret_code}")
+                    elif not queue.requeue(payload):
+                        self.stop_on_queue_error("requeue")
+                    time.sleep(1)
+                else:
+                    if not queue.ack(payload):
+                        self.stop_on_queue_error("ack")
             except Exception as e:
                 t.debug_print(f"Sender loop exception: {str(e)}", self.name)
+                if payload:
+                    if not queue.requeue(payload):
+                        self.stop_on_queue_error("requeue")
                 time.sleep(1)
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

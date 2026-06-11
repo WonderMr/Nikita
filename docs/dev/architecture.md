@@ -250,12 +250,13 @@ with g.ibases_lock:
 
 **Таблицы:**
 - `file_states` — состояние файлов (размер, прочитано)
-- `committed_blocks` — история отправленных блоков
+- `committed_blocks` — история отправленных блоков и идемпотентный барьер
 
 **Ключевые методы:**
 - `get_file_state(filename, database_name)` — получить состояние файла
 - `update_file_state(...)` — обновить состояние
 - `log_committed_block(...)` — записать отправленный блок
+- `is_block_committed(...)` — проверить, был ли блок уже успешно отправлен
 - `get_total_records_sent(database_name)` — счётчик записей
 
 **Структура file_states:**
@@ -270,6 +271,11 @@ CREATE TABLE file_states (
 ```
 
 ### 6. Sender (`src/sender.py`)
+
+> **Важно про Redis:** основной путь парсера вызывает `post_query(..., bypass_redis=True)` и отправляет batch
+> синхронно. Семантика Redis `main`/`processing`/`ack`/`requeue` применяется к очереди Sender при
+> `bypass_redis=False`; перевод parser path на асинхронную очередь требует отдельного изменения, где
+> `file_states` продвигается только после `ack` от `sender_thread`.
 
 **Назначение:** Отправка данных в хранилища.
 

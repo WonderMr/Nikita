@@ -66,30 +66,37 @@ TEST_UT11     | 20251211.lgp    | 5242880   | 2621440
 
 ### Таблица `committed_blocks`
 
-История отправленных блоков данных.
+История отправленных блоков данных и идемпотентный барьер перед повторной отправкой.
 
 ```sql
 CREATE TABLE committed_blocks (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    database_name TEXT NOT NULL,
-    file_basename TEXT NOT NULL,
+    database_name TEXT,
+    file_basename TEXT,
     offset_start INTEGER,
     offset_end INTEGER,
-    data_records INTEGER,
-    committed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    data_hash TEXT,
+    record_count INTEGER,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE UNIQUE INDEX idx_blocks_unique
+ON committed_blocks(database_name, file_basename, offset_start, offset_end, data_hash);
 ```
+
+В хранимой схеме `database_name` и `file_basename` остаются nullable для совместимости с ранними SQLite базами. Миграция `committed_blocks_cleanup_v1` нормализует `NULL` в `unknown` перед созданием unique index.
 
 **Пример данных:**
 ```
-id | database_name | file_basename | offset_start | offset_end | data_records | committed_at
----|---------------|---------------|--------------|------------|--------------|---------------------
-1  | PROD_ZUP      | 20251211.lgp  | 0            | 1048576    | 200          | 2025-12-11 14:23:45
-2  | PROD_ZUP      | 20251211.lgp  | 1048576      | 2097152    | 200          | 2025-12-11 14:24:10
+id | database_name | file_basename | offset_start | offset_end | data_hash | record_count | timestamp
+---|---------------|---------------|--------------|------------|-----------|--------------|---------------------
+1  | PROD_ZUP      | 20251211.lgp  | 0            | 1048576    | a1b2...   | 200          | 2025-12-11 14:23:45
+2  | PROD_ZUP      | 20251211.lgp  | 1048576      | 2097152    | c3d4...   | 200          | 2025-12-11 14:24:10
 ```
 
 **Назначение:**
 - Аудит отправленных данных
+- Проверка уже отправленного блока перед повторной отправкой
 - Подсчёт общего количества записей по базе
 - Отладка (можно увидеть, когда и что было отправлено)
 
@@ -190,18 +197,21 @@ state_manager.log_committed_block(
     filename="/path/to/base1/20251211.lgp",
     offset_start=0,
     offset_end=1048576,
-    data_records=200,
+    data_records=[
+        {"ibase": "PROD_ZUP", "event": "Connect", "file_pos": 0},
+        {"ibase": "PROD_ZUP", "event": "Disconnect", "file_pos": 512}
+    ],
     database_name="PROD_ZUP"
 )
 ```
 
-**Записывается в таблицу `committed_blocks`** для истории.
+**Записывается в таблицу `committed_blocks`** для истории и последующей проверки `is_block_committed(...)`.
 
 ### Получение общего количества отправленных записей
 
 ```python
 total = state_manager.get_total_records_sent("PROD_ZUP")
-# Вернёт: 15432 (сумма data_records для database_name='PROD_ZUP')
+# Вернёт: 15432 (сумма record_count для database_name='PROD_ZUP')
 ```
 
 ---
