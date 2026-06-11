@@ -214,7 +214,7 @@ class StateManager:
                     ''')
                     deduped_rows                            =   cursor.rowcount
                     cursor.execute(
-                        "INSERT INTO migrations (migration_key) VALUES (?)",
+                        "INSERT OR IGNORE INTO migrations (migration_key) VALUES (?)",
                         (cleanup_migration_key,)
                     )
                     t.debug_print(
@@ -371,11 +371,15 @@ class StateManager:
                     INSERT OR IGNORE INTO committed_blocks (database_name, file_basename, offset_start, offset_end, data_hash, record_count)
                     VALUES (?, ?, ?, ?, ?, ?)
                 ''', (database_name, file_basename, offset_start, offset_end, data_hash, record_count))
+                inserted_rows                                   =   cursor.rowcount
                 conn.commit()
                 conn.close()
                 
                 # Логируем для отладки
-                t.debug_print(f"✓ Logged block: db={database_name}, file={file_basename}, records={record_count}", "StateManager")
+                if inserted_rows:
+                    t.debug_print(f"✓ Logged block: db={database_name}, file={file_basename}, records={record_count}", "StateManager")
+                else:
+                    t.debug_print(f"✓ Block already logged: db={database_name}, file={file_basename}, records={record_count}", "StateManager")
                 return True
         except Exception as e:
             t.debug_print(f"Ошибка log_committed_block: {e}", "StateManager")

@@ -515,11 +515,35 @@ function Resolve-JavaHome {
 
     $jdkFolder = Get-ChildItem $JavaPath -Directory -ErrorAction SilentlyContinue |
         Where-Object { Test-Path (Join-Path $_.FullName "bin\java.exe") } |
-        Sort-Object -Property Name -Descending |
+        ForEach-Object {
+            $javaExe = Join-Path $_.FullName "bin\java.exe"
+            $majorVersion = -1
+            try {
+                $versionOutput = & $javaExe -version 2>&1 | Out-String
+                if ($versionOutput -match 'version "([^"]+)"') {
+                    $version = $Matches[1]
+                    if ($version.StartsWith("1.")) {
+                        $majorVersion = [int]($version.Split(".")[1])
+                    }
+                    else {
+                        $majorVersion = [int]($version.Split(".")[0])
+                    }
+                }
+            }
+            catch {
+                $majorVersion = -1
+            }
+            [PSCustomObject]@{
+                Folder       = $_
+                MajorVersion = $majorVersion
+                Name         = $_.Name
+            }
+        } |
+        Sort-Object -Property @{Expression = "MajorVersion"; Descending = $true}, @{Expression = "Name"; Descending = $true} |
         Select-Object -First 1
 
     if ($jdkFolder) {
-        return $jdkFolder.FullName
+        return $jdkFolder.Folder.FullName
     }
 
     throw "Java executable not found under $JavaPath"
