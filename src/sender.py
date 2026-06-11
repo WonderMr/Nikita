@@ -44,6 +44,13 @@ FILE_POS_INDEX                                              =   COLUMN_NAMES.ind
 BASE_NAME_RE                                                =   re.compile(r'^[a-zA-Z0-9_а-яА-ЯёЁ]+$')
 RETRIABLE_SENDER_STATUSES                                  =   {404, 409, 429}
 
+def is_non_retriable_solr_status(status):
+    return (
+        status is not None
+        and 400 <= status < 500
+        and status not in RETRIABLE_SENDER_STATUSES
+    )
+
 # ======================================================================================================================
 # Утилиты для отправки данных
 # ======================================================================================================================
@@ -343,6 +350,8 @@ def post_query(chclient, solr_url, data, base_name, logger_name, bypass_redis=Fa
     
     if success:
         return ret_ok
+    if is_non_retriable_solr_status(solr_status):
+        return solr_status
     if solr_status and solr_status != 200 and not non_solr_failure:
         return solr_status
     return ret_err
@@ -433,7 +442,7 @@ class sender_thread(threading.Thread):
 
                 if ret_code                                 !=  200:
                     t.debug_print(f"Failed to send data (code {ret_code}).", self.name)
-                    if 400 <= ret_code < 500 and ret_code not in RETRIABLE_SENDER_STATUSES:
+                    if is_non_retriable_solr_status(ret_code):
                         self.move_payload_to_dead(payload, f"failed with non-retriable status {ret_code}")
                     elif not queue.requeue(payload):
                         self.stop_on_queue_error("requeue")
