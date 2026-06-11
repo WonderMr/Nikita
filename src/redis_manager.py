@@ -102,7 +102,7 @@ class RedisQueue:
             return False
         try:
             script                                          =   """
-                local payload = redis.call('RPOP', KEYS[1])
+                local payload = redis.call('LPOP', KEYS[1])
                 if payload then
                     redis.call('RPUSH', KEYS[2], payload)
                     return 1

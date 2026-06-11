@@ -42,6 +42,7 @@ COLUMN_NAMES                                                 =   (
 FILE_NAME_INDEX                                             =   COLUMN_NAMES.index("file_name")
 FILE_POS_INDEX                                              =   COLUMN_NAMES.index("file_pos")
 BASE_NAME_RE                                                =   re.compile(r'^[a-zA-Z0-9_а-яА-ЯёЁ]+$')
+RETRIABLE_SENDER_STATUSES                                  =   {404, 409, 429}
 
 # ======================================================================================================================
 # Утилиты для отправки данных
@@ -432,7 +433,7 @@ class sender_thread(threading.Thread):
 
                 if ret_code                                 !=  200:
                     t.debug_print(f"Failed to send data (code {ret_code}).", self.name)
-                    if 400 <= ret_code < 500 and ret_code != 429:
+                    if 400 <= ret_code < 500 and ret_code not in RETRIABLE_SENDER_STATUSES:
                         self.move_payload_to_dead(payload, f"failed with non-retriable status {ret_code}")
                     elif not queue.requeue(payload):
                         self.stop_on_queue_error("requeue")
