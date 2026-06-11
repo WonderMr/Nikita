@@ -71,8 +71,8 @@ TEST_UT11     | 20251211.lgp    | 5242880   | 2621440
 ```sql
 CREATE TABLE committed_blocks (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    database_name TEXT NOT NULL,
-    file_basename TEXT NOT NULL,
+    database_name TEXT,
+    file_basename TEXT,
     offset_start INTEGER,
     offset_end INTEGER,
     data_hash TEXT,
@@ -83,6 +83,8 @@ CREATE TABLE committed_blocks (
 CREATE UNIQUE INDEX idx_blocks_unique
 ON committed_blocks(database_name, file_basename, offset_start, offset_end, data_hash);
 ```
+
+В хранимой схеме `database_name` и `file_basename` остаются nullable для совместимости с ранними SQLite базами. Миграция `committed_blocks_cleanup_v1` нормализует `NULL` в `unknown` перед созданием unique index.
 
 **Пример данных:**
 ```
@@ -195,7 +197,10 @@ state_manager.log_committed_block(
     filename="/path/to/base1/20251211.lgp",
     offset_start=0,
     offset_end=1048576,
-    data_records=200,
+    data_records=[
+        {"ibase": "PROD_ZUP", "event": "Connect", "file_pos": 0},
+        {"ibase": "PROD_ZUP", "event": "Disconnect", "file_pos": 512}
+    ],
     database_name="PROD_ZUP"
 )
 ```

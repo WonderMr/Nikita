@@ -6,6 +6,7 @@ import time
 import shlex
 import os
 import json
+import uuid
 from src.tools import tools as t
 from src import globals as g
 
@@ -131,6 +132,7 @@ class RedisQueue:
         try:
             # Сериализуем данные. Можно использовать msgpack для скорости, но json проще для отладки.
             payload                                         =   json.dumps({
+                "id":                                           uuid.uuid4().hex,
                 "base":                                         base_name,
                 "data":                                         data
             })

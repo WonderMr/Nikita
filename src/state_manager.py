@@ -295,15 +295,19 @@ class StateManager:
             file_basename                                       =   os.path.basename(filename)
             
             with self.conn_lock:
-                conn                                            =   sqlite3.connect(self.db_path, check_same_thread=False)
-                cursor                                          =   conn.cursor()
+                conn                                            =   None
+                try:
+                    conn                                        =   sqlite3.connect(self.db_path, check_same_thread=False)
+                    cursor                                      =   conn.cursor()
                 # Используем INSERT OR REPLACE как совместимый способ
-                cursor.execute('''
+                    cursor.execute('''
                     INSERT OR REPLACE INTO file_states (database_name, file_basename, filesize, filesizeread, last_updated)
                     VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-                ''', (database_name, file_basename, filesize, filesizeread))
-                conn.commit()
-                conn.close()
+                    ''', (database_name, file_basename, filesize, filesizeread))
+                    conn.commit()
+                finally:
+                    if conn is not None:
+                        conn.close()
                 return True
         except Exception as e:
             t.debug_print(f"Ошибка update_file_state: {e}")
@@ -321,20 +325,24 @@ class StateManager:
             data_hash                                           =   self._data_hash(data_records)
 
             with self.conn_lock:
-                conn                                            =   sqlite3.connect(self.db_path, check_same_thread=False)
-                cursor                                          =   conn.cursor()
-                cursor.execute('''
-                    SELECT 1
-                    FROM committed_blocks
-                    WHERE database_name = ?
-                      AND file_basename = ?
-                      AND offset_start = ?
-                      AND offset_end = ?
-                      AND data_hash = ?
-                    LIMIT 1
-                ''', (database_name, file_basename, offset_start, offset_end, data_hash))
-                row                                             =   cursor.fetchone()
-                conn.close()
+                conn                                            =   None
+                try:
+                    conn                                        =   sqlite3.connect(self.db_path, check_same_thread=False)
+                    cursor                                      =   conn.cursor()
+                    cursor.execute('''
+                        SELECT 1
+                        FROM committed_blocks
+                        WHERE database_name = ?
+                          AND file_basename = ?
+                          AND offset_start = ?
+                          AND offset_end = ?
+                          AND data_hash = ?
+                        LIMIT 1
+                    ''', (database_name, file_basename, offset_start, offset_end, data_hash))
+                    row                                         =   cursor.fetchone()
+                finally:
+                    if conn is not None:
+                        conn.close()
                 return row is not None
         except Exception as e:
             t.debug_print(f"Ошибка is_block_committed: {e}", "StateManager")
@@ -365,15 +373,19 @@ class StateManager:
             record_count                                        =   len(data_records) if data_records else 0
 
             with self.conn_lock:
-                conn                                            =   sqlite3.connect(self.db_path, check_same_thread=False)
-                cursor                                          =   conn.cursor()
-                cursor.execute('''
-                    INSERT OR IGNORE INTO committed_blocks (database_name, file_basename, offset_start, offset_end, data_hash, record_count)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                ''', (database_name, file_basename, offset_start, offset_end, data_hash, record_count))
-                inserted_rows                                   =   cursor.rowcount
-                conn.commit()
-                conn.close()
+                conn                                            =   None
+                try:
+                    conn                                        =   sqlite3.connect(self.db_path, check_same_thread=False)
+                    cursor                                      =   conn.cursor()
+                    cursor.execute('''
+                        INSERT OR IGNORE INTO committed_blocks (database_name, file_basename, offset_start, offset_end, data_hash, record_count)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    ''', (database_name, file_basename, offset_start, offset_end, data_hash, record_count))
+                    inserted_rows                               =   cursor.rowcount
+                    conn.commit()
+                finally:
+                    if conn is not None:
+                        conn.close()
                 
                 # Логируем для отладки
                 if inserted_rows:

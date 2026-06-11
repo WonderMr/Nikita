@@ -30,7 +30,13 @@ class solr_thread(threading.Thread):
             if not self.base_create(cbe_name):
                 t.debug_print("Cannot create Solr core " + cbe_name, self.name)
                 return False
-        return self.validate_core_schema(cbe_name)
+        for schema_attempt in range(3):
+            if self.validate_core_schema(cbe_name):
+                return True
+            if schema_attempt < 2:
+                t.debug_print(f"Solr core {cbe_name} schema validation retry {schema_attempt + 1}/2", self.name)
+                time.sleep(g.waits.solr_on_bad_send_to)
+        return False
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     def run(self):
         if self.start2():
