@@ -364,9 +364,16 @@ def post_query(chclient, solr_url, data, base_name, logger_name, bypass_redis=Fa
     
     if success:
         return ret_ok
+    if non_solr_failure:
+        if is_non_retriable_solr_status(solr_status):
+            t.debug_print(
+                f"Non-Solr failure keeps payload retriable before dead-lettering Solr status {solr_status}",
+                logger_name
+            )
+        return ret_err
     if is_non_retriable_solr_status(solr_status):
         return solr_status
-    if solr_status and solr_status != 200 and not non_solr_failure:
+    if solr_status and solr_status != 200:
         return solr_status
     return ret_err
 
