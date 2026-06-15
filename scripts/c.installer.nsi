@@ -11,7 +11,6 @@ RequestExecutionLevel admin
 
 ; MUI 1.67 compatible ------
 !include "MUI.nsh"
-!include "WinMessages.nsh"      ; ${WM_SETTINGCHANGE} / ${HWND_BROADCAST} — применить переменные окружения без перезагрузки
 
 ; MUI Settings
 !define MUI_ABORTWARNING
@@ -105,16 +104,16 @@ Section -Post
   WriteRegStr ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "UninstallString" "$INSTDIR\uninst.exe"
   WriteRegStr ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "DisplayIcon" "$INSTDIR\Nikita.exe"
   WriteRegStr ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "DisplayVersion" "${PRODUCT_VERSION}"
-
-  ; Системная переменная SOLR_JAVA_HOME -> bundled Java 17.
-  ; Пишется ДО установки/старта службы, чтобы Solr поднимал нужную Java при любом
-  ; способе запуска (служба LocalSystem, консоль, ручной solr.cmd / java -jar).
-  WriteRegExpandStr HKLM "SYSTEM\CurrentControlSet\Control\Session Manager\Environment" "SOLR_JAVA_HOME" "$INSTDIR\java"
-  SendMessage ${HWND_BROADCAST} ${WM_SETTINGCHANGE} 0 "STR:Environment" /TIMEOUT=5000
-
   ExecWait '"$SYSDIR\cmd.exe" /c "$INSTDIR\add.firewall.rule.cmd"'
   ExecWait '"$INSTDIR\pcnsl.exe"'
   ExecWait '"$INSTDIR\Nikita.exe" --startup auto install'
+
+  ; SOLR_JAVA_HOME задаётся ТОЛЬКО в окружении службы Nikita (per-service),
+  ; а не в общесистемной переменной — чтобы не затирать чужую машинную SOLR_JAVA_HOME.
+  ; Ключ Environment (REG_MULTI_SZ) службы читается SCM при старте; пишется ПОСЛЕ
+  ; --startup auto install (он создаёт ветку службы). При sc delete (uninstall)
+  ; значение исчезает вместе с веткой службы — отдельная очистка не нужна.
+  ExecWait '"$SYSDIR\reg.exe" add "HKLM\SYSTEM\CurrentControlSet\Services\Nikita" /v Environment /t REG_MULTI_SZ /d "SOLR_JAVA_HOME=$INSTDIR\java" /f'
 SectionEnd
 
 Function un.onUninstSuccess
@@ -132,13 +131,9 @@ Section Uninstall
   SetShellVarContext all
 
   ExecWait '"$SYSDIR\sc.exe" stop Nikita'
+  ; sc delete удаляет ветку службы вместе с её Environment (SOLR_JAVA_HOME) — отдельная очистка не нужна
   ExecWait '"$SYSDIR\sc.exe" delete Nikita'
   ExecWait '"$SYSDIR\netsh.exe" advfirewall firewall delete rule name="Nikita"'
-
-  ; Убираем системную переменную SOLR_JAVA_HOME
-  DeleteRegValue HKLM "SYSTEM\CurrentControlSet\Control\Session Manager\Environment" "SOLR_JAVA_HOME"
-  SendMessage ${HWND_BROADCAST} ${WM_SETTINGCHANGE} 0 "STR:Environment" /TIMEOUT=5000
-
   RMDir /r $INSTDIR
   Delete "$SMPROGRAMS\Nikita\*.*"
 
