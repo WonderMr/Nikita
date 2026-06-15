@@ -131,7 +131,10 @@ Section Uninstall
   SetShellVarContext all
 
   ExecWait '"$SYSDIR\sc.exe" stop Nikita'
-  ; sc delete удаляет ветку службы вместе с её Environment (SOLR_JAVA_HOME) — отдельная очистка не нужна
+  ; Явно убираем per-service SOLR_JAVA_HOME ДО sc delete: если удаление службы отложится
+  ; (marked-for-delete при открытых хэндлах), ключ службы может остаться до перезагрузки —
+  ; чистим Environment заранее, чтобы не оставить висящее значение. sc delete затем снесёт ключ.
+  ExecWait '"$SYSDIR\reg.exe" delete "HKLM\SYSTEM\CurrentControlSet\Services\Nikita" /v Environment /f'
   ExecWait '"$SYSDIR\sc.exe" delete Nikita'
   ExecWait '"$SYSDIR\netsh.exe" advfirewall firewall delete rule name="Nikita"'
   RMDir /r $INSTDIR
