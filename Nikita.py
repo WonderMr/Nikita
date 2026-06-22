@@ -364,8 +364,10 @@ class conf:
             if not clstr_candidates:
                 t.debug_print(f"no cluster file found in {str(clstr_dir)}, skipping cluster")
                 continue                                                                                                # пропускаем кластер без реестра, остальные из regs обрабатываем дальше
-            clstr_nonempty                                  =   [p for p in clstr_candidates if os.path.getsize(p) > 0] \
-                                                                or clstr_candidates
+            clstr_nonempty                                  =   [p for p in clstr_candidates if os.path.getsize(p) > 0]
+            if not clstr_nonempty:
+                t.debug_print(f"all cluster files are empty in {str(clstr_dir)}, skipping cluster")
+                continue                                                                                                # пустой реестр не парсим: иначе периодический детект удалит живые базы
             clstr_file                                      =   max(
                                                                     clstr_nonempty,
                                                                     key=lambda p: (os.path.getmtime(p), os.path.getsize(p))
