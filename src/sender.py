@@ -303,6 +303,13 @@ def send_to_solr(url: str, data: List[Dict[str, Any]], logger_name: str) -> int:
             t.debug_print(f"✓ SOLR: Время выполнения: {elapsed_time:.3f} сек ({len(data)/elapsed_time:.1f} записей/сек)", logger_name)
             t.debug_print(f"✓ SOLR: Всего отправлено за сессию: {g.stats.solr_total_sent} записей", logger_name)
         else:
+            # Solr ещё поднимается: ядро ещё не создано -> /update отдаёт 404 (или 503).
+            # Пока Solr не помечен запущенным (g.execution.solr.started), это ожидаемо:
+            # не засоряем last_errors/solr_total_errors; статус retriable — пачка
+            # повторится и уйдёт, когда ядро будет создано.
+            if status_code in (404, 503) and not getattr(g.execution.solr, "started", False):
+                t.debug_print(f"SOLR: ядро ещё не готово (HTTP {status_code}), повтор позже: {url}", logger_name)
+                return status_code
             # Обновляем статистику ошибок
             g.stats.solr_total_errors                       +=  1
             g.stats.solr_last_error_time                    =   datetime.datetime.now()
