@@ -92,83 +92,31 @@ class solr_thread(threading.Thread):
                 return java_exe
         return None
 
-    def get_java_home_info(self, java_home):
-        java_exe                                            =   self.get_java_executable(java_home)
-        if not java_exe:
-            return None
-        return (self.get_java_major_version(java_exe), os.path.abspath(java_home))
-
-    def resolve_java_home(self):
-        candidates                                          =   []
-        if g.conf.solr.java_home:
-            candidates.append(g.conf.solr.java_home)
-        if g.execution.self_dir:
-            candidates.append(os.path.join(g.execution.self_dir, "java"))
-        if g.conf.solr.dir:
-            candidates.append(os.path.join(os.path.dirname(g.conf.solr.dir), "java"))
-
-        java_homes                                          =   []
-        for candidate in candidates:
-            if not candidate:
-                continue
-            direct_java                                     =   self.get_java_home_info(candidate)
-            if direct_java:
-                java_homes.append(direct_java)
-            if os.path.isdir(candidate):
-                try:
-                    candidate_children                      =   sorted(os.listdir(candidate))
-                except OSError as e:
-                    t.debug_print(f"Cannot inspect Solr Java candidate {candidate}: {e}", self.name)
-                    continue
-                for child in candidate_children:
-                    nested                                  =   os.path.join(candidate, child)
-                    nested_java                             =   self.get_java_home_info(nested)
-                    if nested_java:
-                        java_homes.append(nested_java)
-
-        supported_java_homes                                =   [
-                                                                    java_home
-                                                                    for java_home in java_homes
-                                                                    if java_home[0] is not None and java_home[0] >= 17
-                                                                ]
-        if supported_java_homes:
-            return max(supported_java_homes, key=lambda java_home: (java_home[0], java_home[1]))[1]
-
-        versioned_java_homes                                =   [
-                                                                    java_home
-                                                                    for java_home in java_homes
-                                                                    if java_home[0] is not None
-                                                                ]
-        if versioned_java_homes:
-            return max(versioned_java_homes, key=lambda java_home: (java_home[0], java_home[1]))[1]
-
-        if java_homes:
-            return java_homes[0][1]
-        return g.conf.solr.java_home
-
     def start2(self):
-        java_home                                           =   self.resolve_java_home()
-        if not java_home:
-            t.debug_print("Solr Java home is not configured. Set SOLR_JAVA_HOME to JDK 17.", self.name)
+        # Solr ВСЕГДА запускается на встроенной Java из подкаталога установки <self_dir>/java
+        # (внутри уже лежит bin/java). Системные переменные SOLR_JAVA_HOME / JAVA_HOME
+        # намеренно игнорируются — используется только встроенная Java.
+        if not g.execution.self_dir:
+            t.debug_print("Cannot locate bundled Java: install directory (self_dir) is empty.", self.name)
             return False
+        java_home                                           =   os.path.join(g.execution.self_dir, "java")
         java_exe                                            =   self.get_java_executable(java_home)
         if not java_exe:
-            t.debug_print(f"Solr Java not found under {java_home}. Set SOLR_JAVA_HOME to JDK 17.", self.name)
+            t.debug_print(f"Bundled Java not found at {java_home} (expected bin/java). Reinstall with the bundled JDK 17.", self.name)
             return False
 
         java_major                                          =   self.get_java_major_version(java_exe)
         if java_major is None:
-            t.debug_print(f"Cannot detect Java version for Solr: {java_exe}", self.name)
+            t.debug_print(f"Cannot detect version of bundled Java: {java_exe}", self.name)
             return False
         if java_major < 17:
             t.debug_print(
-                f"Solr requires Java 17+, but {java_exe} is Java {java_major}. "
-                "Set SOLR_JAVA_HOME to the bundled java directory.",
+                f"Bundled Java is too old: {java_exe} is Java {java_major}, Solr requires Java 17+. "
+                "Reinstall with the bundled JDK 17.",
                 self.name
             )
             return False
 
-        g.conf.solr.java_home                               =   java_home
         solr_env                                            =   os.environ.copy()
         solr_env["JAVA_HOME"]                               =   java_home
         solr_env["JRE_HOME"]                                =   java_home
