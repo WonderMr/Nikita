@@ -225,8 +225,8 @@ class conf:
         g.conf.redis.db                                 =   os.getenv("REDIS_DB", "0")
         g.conf.redis.dir                                =   os.getenv("REDIS_DIR", os.path.join(g.execution.self_dir, "redis_data"))
 
-        # Solr default settings
-        g.conf.solr.enabled                             =   t.strtobool(os.getenv("SOLR_ENABLED", "False"))
+        # Solr default settings (как в globals.py: на Windows включён по умолчанию)
+        g.conf.solr.enabled                             =   t.strtobool(os.getenv("SOLR_ENABLED", "True" if is_windows else "False"))
 
         t.debug_print("Conf detection")
         d_found                                             =   False
