@@ -362,8 +362,8 @@ class conf:
                                                                 ]
             clstr_candidates                                =   [p for p in clstr_candidates if os.path.isfile(p)]
             if not clstr_candidates:
-                t.debug_print(f"no cluster file found in {str(clstr_dir)}")
-                return
+                t.debug_print(f"no cluster file found in {str(clstr_dir)}, skipping cluster")
+                continue                                                                                                # пропускаем кластер без реестра, остальные из regs обрабатываем дальше
             clstr_nonempty                                  =   [p for p in clstr_candidates if os.path.getsize(p) > 0] \
                                                                 or clstr_candidates
             clstr_file                                      =   max(
