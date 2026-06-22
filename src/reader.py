@@ -554,15 +554,15 @@ class reader():
             # r4 - отбор по пользователю ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             for user                                        in  g.rexp.q.user_re.findall(param):
                 if g.rexp.uuid_start.match(user):
-                    bsq_users                               +=  "user_id:"   +   d.get_complex_id(
+                    bsq_users                               +=  "user_id:"   +   (d.get_complex_id(
                                                                                 g.execution.c1_dicts.users[ib_name],
                                                                                 gcr_uuid    =   user
-                                                                            )                                   + " || "# формирую отбор по UUID пользователя
+                                                                            ) or "-1")                                   + " || "# формирую отбор по UUID пользователя
                 else:
-                    bsq_users                               +=  "user_id:"   +   d.get_complex_id(
+                    bsq_users                               +=  "user_id:"   +   (d.get_complex_id(
                                                                                 g.execution.c1_dicts.users[ib_name],
                                                                                 gcr_name    =   user
-                                                                            )                                   + " || "# формирую отбор по имени пользователя
+                                                                            ) or "-1")                                   + " || "# формирую отбор по имени пользователя
             # r5 - отбор по компьютерам ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             for computer                                    in  g.rexp.q.computer_re.findall(param):
                 bsq_computers                               +=  "comp_id:"   +   d.get_simple_id(
@@ -592,15 +592,15 @@ class reader():
             # r11 - отбор по метаданным ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             for metadata                                    in  g.rexp.q.metadata_re.findall(param):
                 if g.rexp.uuid_start.match(metadata):
-                    bsq_metadatas                           +=  "meta_id:"  +   d.get_complex_id(
+                    bsq_metadatas                           +=  "meta_id:"  +   (d.get_complex_id(
                                                                                 g.execution.c1_dicts.metadata[ib_name],
                                                                                 gcr_uuid    =   metadata
-                                                                            )                                   + " || "# отбор по GUID метаданных
+                                                                            ) or "-1")                                   + " || "# отбор по GUID метаданных
                 else:
-                    bsq_metadatas                           +=  "meta_id:"  +   d.get_complex_id(
+                    bsq_metadatas                           +=  "meta_id:"  +   (d.get_complex_id(
                                                                                 g.execution.c1_dicts.metadata[ib_name],
                                                                                 gcr_name    =   metadata
-                                                                            )                                   + " || "# отбор по имени метаданных
+                                                                            ) or "-1")                                   + " || "# отбор по имени метаданных
             # r12 - отбор по данным ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             for data                                        in  g.rexp.q.data_re.findall(param):
                 bsq_datas                                   +=  "data:"  +   '"*'+data+'*"'                      + " || "# отбор по данным
@@ -633,7 +633,7 @@ class reader():
                 bsq_ext_main                                +=  "area_id:"  +   ext_main_nmb                        + " || "# отбор по разделению основных данных.#case 2020.05.21
             # r19 - отбор по разделению дополнительных данных ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#case 2020.05.21
             for ext_ext_nmb                                 in  g.rexp.q.ext_add.findall(param):                        #case 2020.05.21
-                bsq_ext_add                                 +=  "area_sec_id:"  +   ext_main_nmb                        + " || "# отбор по разделению дополнительных данных.#case 2020.05.21
+                bsq_ext_add                                 +=  "area_sec_id:"  +   ext_ext_nmb                        + " || "# отбор по разделению дополнительных данных.#case 2020.05.21
             # получаю количество событий ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             for amount                                      in g.rexp.q.amount_re.findall(param):
                 bsq_amount                                  =   re.sub(r'\s',"",amount)

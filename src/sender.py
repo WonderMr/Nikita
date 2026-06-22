@@ -43,10 +43,13 @@ FILE_NAME_INDEX                                             =   COLUMN_NAMES.ind
 FILE_POS_INDEX                                              =   COLUMN_NAMES.index("file_pos")
 BASE_NAME_RE                                                =   re.compile(r'^[a-zA-Z0-9_а-яА-ЯёЁ]+$')
 
-# Поля, объявленные в строгой схеме ядра Solr (g.conf.solr.schema).
-# Запись parser.add_to_json_data двухцелевая: вложенные/расшифрованные поля нужны
-# ClickHouse, а в Solr можно слать ТОЛЬКО эти поля — иначе unknown field/вложенный
-# Map → HTTP 400. Поэтому перед POST в Solr запись проецируется в этот набор.
+# Поля строгой схемы ядра Solr (g.conf.solr.schema), которые project_solr_doc
+# копирует в Solr-документ как есть. Запись parser.add_to_json_data двухцелевая:
+# вложенные/расшифрованные поля нужны ClickHouse, но в Solr нельзя слать unknown
+# field или вложенный Map — иначе HTTP 400, поэтому перед POST запись проецируется.
+# NB: финальный документ = эти поля ПЛЮС добавляемые в project_solr_doc поля
+# comment/data/data_pres (из *_raw) и расплющенные user_guid/meta_uuid; они тоже
+# объявлены в схеме (globals.py) — при изменении схемы синхронизируй оба места.
 SOLR_DOC_FIELDS                                            =   (
                                                                     "id",
                                                                     "file_name",
