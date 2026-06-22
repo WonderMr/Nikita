@@ -1,4 +1,4 @@
-# common.ps1 - Общие функции для сборки Nikita
+﻿# common.ps1 - Общие функции для сборки Nikita
 # Использование: Import-Module $PSScriptRoot\common.ps1
 
 $Script:JavaVersion                                 =   "17"
@@ -390,6 +390,9 @@ function Invoke-PyInstaller {
 
     Write-Info "Запуск PyInstaller..."
 
+    $specPath = Join-Path $ProjectRoot "Nikita.spec"
+    $useSpecBuild = $Optimize -and $OutputName -eq "Nikita" -and (Test-Path $specPath)
+
     # Базовые аргументы
     $pyinstallerArgs = @(
         "$ProjectRoot\Nikita.py",
@@ -448,6 +451,7 @@ function Invoke-PyInstaller {
     try {
         # Определяем путь к pyinstaller
         $pyinstallerPath                                    =   $null
+        $runViaPythonModule                                 =   $false
         if (Get-Command pyinstaller -ErrorAction SilentlyContinue) {
             $pyinstallerPath                                =   "pyinstaller"
         } elseif ($Script:PythonPath) {
@@ -461,10 +465,21 @@ function Invoke-PyInstaller {
             } else {
                 # Пробуем запустить через python -m PyInstaller
                 $pyinstallerPath                            =   $Script:PythonPath
-                $pyinstallerArgs                            =   @("-m", "PyInstaller") + $pyinstallerArgs
+                $runViaPythonModule                         =   $true
+                if (!$useSpecBuild) {
+                    $pyinstallerArgs                        =   @("-m", "PyInstaller") + $pyinstallerArgs
+                }
             }
         } else {
             throw "PyInstaller не найден и путь к Python неизвестен"
+        }
+
+        if ($useSpecBuild) {
+            Write-Info "Используется переносимый spec: $specPath"
+            $pyinstallerArgs = @("--clean", "--noconfirm", "--log-level", "DEBUG", $specPath)
+            if ($runViaPythonModule) {
+                $pyinstallerArgs = @("-m", "PyInstaller") + $pyinstallerArgs
+            }
         }
 
         Write-Info "Команда: $pyinstallerPath $($pyinstallerArgs -join ' ')"
@@ -505,7 +520,23 @@ function Get-JavaMajorVersion {
     )
 
     try {
-        $versionOutput = & $JavaExe -version 2>&1 | Out-String
+        if (!(Test-Path $JavaExe)) {
+            return -1
+        }
+
+        $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+        $startInfo.FileName = $JavaExe
+        $startInfo.Arguments = "-version"
+        $startInfo.UseShellExecute = $false
+        $startInfo.RedirectStandardOutput = $true
+        $startInfo.RedirectStandardError = $true
+
+        $process = [System.Diagnostics.Process]::Start($startInfo)
+        $stdOut = $process.StandardOutput.ReadToEnd()
+        $stdErr = $process.StandardError.ReadToEnd()
+        $process.WaitForExit()
+
+        $versionOutput = "$stdOut`n$stdErr"
         if ($versionOutput -match 'version "([^"]+)"') {
             $version = $Matches[1]
             if ($version.StartsWith("1.")) {

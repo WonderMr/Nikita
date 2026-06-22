@@ -105,6 +105,8 @@ class tools():
                     g.debug.filehandle.write(dp_msg + "\n")
                     g.debug.filehandle.flush()
                 else:                                                                                                   # если ещё не открыт
+                    if not g.debug.dir or not g.debug.filename:
+                        return
                     if(not os.path.exists(g.debug.dir)):
                         os.makedirs(g.debug.dir)
                     g.debug.filehandle                      =   open(g.debug.filename, 'a', encoding='UTF8')

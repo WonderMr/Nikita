@@ -1,4 +1,4 @@
-# download-deps.ps1 - Загрузка зависимостей Java и Solr
+﻿# download-deps.ps1 - Загрузка зависимостей Java и Solr
 # Использование: .\download-deps.ps1 [-Force]
 
 param(

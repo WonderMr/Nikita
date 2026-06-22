@@ -1,4 +1,4 @@
-# build.ps1 - Основная сборка Nikita
+﻿# build.ps1 - Основная сборка Nikita
 # Использование: .\build.ps1 [-Optimize] [-NoTest]
 
 param(

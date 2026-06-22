@@ -1,4 +1,4 @@
-# run-tests.ps1 - Запуск тестов Nikita для Windows
+﻿# run-tests.ps1 - Запуск тестов Nikita для Windows
 # Использование: .\run-tests.ps1 [-Verbose] [-CreateVenv]
 
 param(

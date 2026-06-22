@@ -1,12 +1,17 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+from pathlib import Path
+
+
+project_root = Path(SPECPATH)
+
 
 a = Analysis(
-    ['C:\\Users\\Administrator\\Documents\\Nikita\\Nikita.py'],
-    pathex=[],
+    [str(project_root / 'Nikita.py')],
+    pathex=[str(project_root)],
     binaries=[],
-    datas=[('LICENSE', '.')],
-    hiddenimports=['subprocess', 'cherrypy', 'urllib', 'threading', 'requests', 're', 'time', 'operator', 'json', 'psutil', 'shlex', 'platform', 'socket', 'sqlite3', 'src.parser', 'src.reader', 'src.dictionaries', 'src.messenger', 'src.globals', 'src.tools', 'src.solr', 'src.sender', 'src.redis_manager', 'src.state_manager', 'src.parser_state', 'src.cherry', 'clickhouse_driver', 'win32timezone', 'clickhouse_driver', 'win32timezone'],
+    datas=[(str(project_root / 'LICENSE'), '.')],
+    hiddenimports=['subprocess', 'cherrypy', 'urllib', 'threading', 'requests', 're', 'time', 'operator', 'json', 'psutil', 'shlex', 'platform', 'socket', 'sqlite3', 'src.parser', 'src.reader', 'src.dictionaries', 'src.messenger', 'src.globals', 'src.tools', 'src.solr', 'src.sender', 'src.redis_manager', 'src.state_manager', 'src.parser_state', 'src.cherry', 'clickhouse_driver', 'win32timezone'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
