@@ -328,6 +328,14 @@ def send_to_solr(url: str, data: List[Dict[str, Any]], logger_name: str) -> int:
         elapsed_time                                        =   time.time() - start_time
         error_msg                                           =   str(e)
         
+        # Solr ещё поднимается (или перезапускается): отказ в соединении на этом этапе —
+        # ожидаемое состояние, а не ошибка. Пока Solr не помечен запущенным
+        # (g.execution.solr.started), не засоряем last_errors/solr_total_errors и
+        # возвращаем retriable 503 — пачка повторится и уйдёт, когда Solr поднимется.
+        if isinstance(e, requests.exceptions.ConnectionError) and not getattr(g.execution.solr, "started", False):
+            t.debug_print(f"SOLR: сервер ещё не готов, повтор позже: {error_msg[:200]}", logger_name)
+            return 503
+
         # Обновляем статистику ошибок
         g.stats.solr_total_errors                           +=  1
         g.stats.solr_last_error_time                        =   datetime.datetime.now()

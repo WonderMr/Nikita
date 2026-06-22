@@ -51,3 +51,5 @@ src/dictionaries.cpython-311-x86_64-linux-gnu.so
 
 src/parser.cpython-311-x86_64-linux-gnu.so
 tests/__pycache__/
+
+history.md

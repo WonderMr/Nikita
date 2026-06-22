@@ -892,7 +892,7 @@ class nikita_web(object):
                                             // Пытаемся распарсить дату из строки лога: YYYY-MM-DD HH:MM:SS.mmmmmm:::thread:::msg
                                             let displayLog = log;
                                             // Regex: начало строки, дата, разделитель, остальное
-                                            const match = log.match(/^(\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}\.\d+)(:::.*)/);
+                                            const match = log.match(/^(\\d{4}-\\d{2}-\\d{2}\\s\\d{2}:\\d{2}:\\d{2}\\.\\d+)(:::.*)/);
                                             
                                             if (match) {
                                                 const timeStr = match[1];
