@@ -42,6 +42,35 @@ COLUMN_NAMES                                                 =   (
 FILE_NAME_INDEX                                             =   COLUMN_NAMES.index("file_name")
 FILE_POS_INDEX                                              =   COLUMN_NAMES.index("file_pos")
 BASE_NAME_RE                                                =   re.compile(r'^[a-zA-Z0-9_а-яА-ЯёЁ]+$')
+
+# Поля, объявленные в строгой схеме ядра Solr (g.conf.solr.schema).
+# Запись parser.add_to_json_data двухцелевая: вложенные/расшифрованные поля нужны
+# ClickHouse, а в Solr можно слать ТОЛЬКО эти поля — иначе unknown field/вложенный
+# Map → HTTP 400. Поэтому перед POST в Solr запись проецируется в этот набор.
+SOLR_DOC_FIELDS                                            =   (
+                                                                    "id",
+                                                                    "file_name",
+                                                                    "pos",
+                                                                    "len",
+                                                                    "date",
+                                                                    "date_idx",
+                                                                    "t_status",
+                                                                    "t_id",
+                                                                    "t_pos",
+                                                                    "user_id",
+                                                                    "comp_id",
+                                                                    "app_id",
+                                                                    "conn_id",
+                                                                    "event_id",
+                                                                    "severity",
+                                                                    "meta_id",
+                                                                    "server_id",
+                                                                    "port_id",
+                                                                    "port_sec_id",
+                                                                    "session_id",
+                                                                    "area_id",
+                                                                    "area_sec_id",
+                                                                )
 RETRIABLE_SENDER_STATUSES                                  =   {404, 409, 429}
 CLICKHOUSE_DEDUPE_LOOKUP_CHUNK_SIZE                        =   100
 CLICKHOUSE_DEDUPE_LOOKUP_MAX_LITERAL_CHARS                  =   60000
@@ -231,14 +260,34 @@ def send_to_clickhouse(chclient: Any, data: List[Dict[str, Any]], base_name: str
         return False
 
 # ----------------------------------------------------------------------------------------------------------------------
+# Проекция записи в документ Solr (только поля схемы; вложенные dict-и расплющиваются)
+# ----------------------------------------------------------------------------------------------------------------------
+def project_solr_doc(rec: Dict[str, Any]) -> Dict[str, Any]:
+    doc                                                     =   {f: rec[f] for f in SOLR_DOC_FIELDS if f in rec}
+    # Текстовые поля индексируем по сырым значениям (без ClickHouse-экранирования кавычек/слешей)
+    doc["comment"]                                          =   rec.get("comment_raw", rec.get("comment", ""))
+    doc["data"]                                             =   rec.get("data_raw", rec.get("data", ""))
+    doc["data_pres"]                                        =   rec.get("data_pres_raw", rec.get("data_pres", ""))
+    # Расплющиваем вложенные {"uuid","name"} в строковые поля схемы
+    user                                                    =   rec.get("user")
+    if isinstance(user, dict):
+        doc["user_guid"]                                    =   user.get("uuid", "")
+    meta                                                    =   rec.get("metadata")
+    if isinstance(meta, dict):
+        doc["meta_uuid"]                                    =   meta.get("uuid", "")
+    return doc
+
+# ----------------------------------------------------------------------------------------------------------------------
 # Отправка пакета данных в Solr
 # ----------------------------------------------------------------------------------------------------------------------
 def send_to_solr(url: str, data: List[Dict[str, Any]], logger_name: str) -> int:
     start_time                                              =   time.time()
-    
+
     try:
         t.debug_print(f"→ SOLR: Отправка пакета на {url} (записей: {len(data)})", logger_name)
-        status_code                                         =   requests.post(url=url, json=data, timeout=30).status_code
+        solr_docs                                           =   [project_solr_doc(rec) for rec in data]                 # только поля схемы → нет HTTP 400 на unknown field
+        response                                            =   requests.post(url=url, json=solr_docs, timeout=30)
+        status_code                                         =   response.status_code
         elapsed_time                                        =   time.time() - start_time
         
         if status_code                                      ==  200:
@@ -264,6 +313,10 @@ def send_to_solr(url: str, data: List[Dict[str, Any]], logger_name: str) -> int:
                 g.stats.last_errors.pop(0)
             
             t.debug_print(f"✗ SOLR: Ошибка отправки, статус: {status_code}", logger_name)
+            try:
+                t.debug_print(f"✗ SOLR: ответ сервера: {response.text[:2000]}", logger_name)                            # тело ответа Solr — точная формулировка ошибки
+            except Exception:
+                pass
             t.debug_print(f"✗ SOLR: Всего ошибок за сессию: {g.stats.solr_total_errors}", logger_name)
         
         return status_code

@@ -242,7 +242,7 @@ class parser(threading.Thread):
             local_json['len']                               =   fj_size                                                 # пятый - размер записи
             local_json['date']                              =   fj_rec[0]
             local_json['date_idx']                          =   fj_dt_sort_add
-            local_json['t_status']                          =   d.trans_state_full.get(fj_rec[1], fj_rec[1])
+            local_json['t_status']                          =   fj_rec[1]                                               # сырая буква 1С (C/U/R/N); ДОЛЖНА совпадать с reader.trans_id() в Solr-запросе и read_lgp_data()
             local_json['t_id_hex']                          =   "0x" + fj_rec[2]
             local_json['t_id']                              =   int(int(fj_rec[2],16)/10000)                            # в десятичном формате
             cc = 2

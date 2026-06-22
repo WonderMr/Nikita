@@ -549,29 +549,29 @@ class reader():
                 bsq_date_end                                =   reader.date_to_zhr_date(date_stop)
             # r2 - отбор по статусу транзакции ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             for tran                                        in g.rexp.q.trans_status_re.findall(param):
-                bsq_status_trans                            +=  "r2:"   +   reader.trans_id(tran)               + " || "# формирую отбор по статусу транзакции
+                bsq_status_trans                            +=  "t_status:"   +   reader.trans_id(tran)           + " || "# формирую отбор по статусу транзакции
             # r3 - отбор транзакции ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             # r4 - отбор по пользователю ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             for user                                        in  g.rexp.q.user_re.findall(param):
                 if g.rexp.uuid_start.match(user):
-                    bsq_users                               +=  "r4:"   +   d.get_complex_id(
+                    bsq_users                               +=  "user_id:"   +   d.get_complex_id(
                                                                                 g.execution.c1_dicts.users[ib_name],
                                                                                 gcr_uuid    =   user
                                                                             )                                   + " || "# формирую отбор по UUID пользователя
                 else:
-                    bsq_users                               +=  "r4:"   +   d.get_complex_id(
+                    bsq_users                               +=  "user_id:"   +   d.get_complex_id(
                                                                                 g.execution.c1_dicts.users[ib_name],
                                                                                 gcr_name    =   user
                                                                             )                                   + " || "# формирую отбор по имени пользователя
             # r5 - отбор по компьютерам ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             for computer                                    in  g.rexp.q.computer_re.findall(param):
-                bsq_computers                               +=  "r5:"   +   d.get_simple_id(
+                bsq_computers                               +=  "comp_id:"   +   d.get_simple_id(
                                                                                 g.execution.c1_dicts.computers[ib_name],
                                                                                 computer
                                                                             )                                   + " || "# формирую отбор по компьютеру
             # r6 - отбор по приложению ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             for application                                 in g.rexp.q.application_re.findall(param):
-                bsq_applications                            +=  "r6:"   +   d.get_simple_id(
+                bsq_applications                            +=  "app_id:"   +   d.get_simple_id(
                                                                                 g.execution.c1_dicts.applications[ib_name],
                                                                                 application
                                                                             )                                   + " || "# формирую отбор по приложению
@@ -579,61 +579,61 @@ class reader():
             for action                                      in  g.rexp.q.action_re.findall(param):
                 for each                                    in  d.actions:
                     action                                  =   each if d.actions[each] ==  action else action          # если это предопределённый action из словаря, то выбираем его внутреннее представление
-                bsq_actions                                 +=  "r8:"   +   d.get_simple_id(
+                bsq_actions                                 +=  "event_id:"   +   d.get_simple_id(
                                                                                 g.execution.c1_dicts.actions[ib_name],
                                                                                 action
                                                                             )                                   + " || "# формирую отбор по событиям
             # r9 - отбор по уровню важности ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             for level                                       in g.rexp.q.level_re.findall(param):
-                bsq_levels                                  +=  "r9:"   +   reader.rec_descr_id(level)          + " || "# формирую отбор по уровеню события
+                bsq_levels                                  +=  "severity:"   +   reader.rec_descr_id(level)          + " || "# формирую отбор по уровеню события
             # r10 - отбор по комментарию ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             for comment                                     in  g.rexp.q.comments_re.findall(param):
-                bsq_comments                                +=  "r10:"  +   '"*'+comment+'*"'                   + " || "# отбор по комментарию
+                bsq_comments                                +=  "comment:"  +   '"*'+comment+'*"'                   + " || "# отбор по комментарию
             # r11 - отбор по метаданным ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             for metadata                                    in  g.rexp.q.metadata_re.findall(param):
                 if g.rexp.uuid_start.match(metadata):
-                    bsq_metadatas                           +=  "r11:"  +   d.get_complex_id(
+                    bsq_metadatas                           +=  "meta_id:"  +   d.get_complex_id(
                                                                                 g.execution.c1_dicts.metadata[ib_name],
                                                                                 gcr_uuid    =   metadata
                                                                             )                                   + " || "# отбор по GUID метаданных
                 else:
-                    bsq_metadatas                           +=  "r11:"  +   d.get_complex_id(
+                    bsq_metadatas                           +=  "meta_id:"  +   d.get_complex_id(
                                                                                 g.execution.c1_dicts.metadata[ib_name],
                                                                                 gcr_name    =   metadata
                                                                             )                                   + " || "# отбор по имени метаданных
             # r12 - отбор по данным ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             for data                                        in  g.rexp.q.data_re.findall(param):
-                bsq_datas                                   +=  "r12:"  +   '"*'+data+'*"'                      + " || "# отбор по данным
+                bsq_datas                                   +=  "data:"  +   '"*'+data+'*"'                      + " || "# отбор по данным
             # r13 - отбор по представлению данных ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             for data_presentation                           in  g.rexp.q.data_presentation_re.findall(param):
-                bsq_data_presentations                      +=  "r13:"  +   '"*'+data_presentation+'*"'         + " || "# отбор по представлению данных
+                bsq_data_presentations                      +=  "data_pres:"  +   '"*'+data_presentation+'*"'         + " || "# отбор по представлению данных
             # r14 - отбор по серверам ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             for server                                      in  g.rexp.q.server_re.findall(param):
-                bsq_servers                                 +=  "r14:"  +   d.get_simple_id(
+                bsq_servers                                 +=  "server_id:"  +   d.get_simple_id(
                                                                                 g.execution.c1_dicts.servers[ib_name],
                                                                                 server
                                                                             )                                   + " || "# отбор по серверам
             # r15 - отбор по основному порту ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             for main_port                                   in  g.rexp.q.port_main_re.findall(param):
-                bsq_main_ports                              +=  "r15:"  +   d.get_simple_id(
+                bsq_main_ports                              +=  "port_id:"  +   d.get_simple_id(
                                                                                 g.execution.c1_dicts.ports_main[ib_name],
                                                                                 re.sub(r'\s+','',main_port)
                                                                             )                                   + " || "# отбор по главным портам
             # r16 - отбор по дополнительному порту ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             for add_port                                    in  g.rexp.q.port_add_re.findall(param):
-                bsq_add_ports                               +=  "r16:"  +   d.get_simple_id(
+                bsq_add_ports                               +=  "port_sec_id:"  +   d.get_simple_id(
                                                                                 g.execution.c1_dicts.ports_add[ib_name],
                                                                                 re.sub(r'\s+', '', add_port)
                                                                             )                                   + " || "# отбор по дополнительному порту
             # r17 - отбор по сеансу ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             for seanse                                      in  g.rexp.q.seans_re.findall(param):
-                bsq_seanses                                 +=  "r17:"  +   seanse                              + " || "# отбор по сеансу.
+                bsq_seanses                                 +=  "session_id:"  +   seanse                              + " || "# отбор по сеансу.
             # r18 - отбор по разделению основных данных ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#case 2020.05.21
             for ext_main_nmb                                in  g.rexp.q.ext_main.findall(param):                       #case 2020.05.21
-                bsq_ext_main                                +=  "r18:"  +   ext_main_nmb                        + " || "# отбор по разделению основных данных.#case 2020.05.21
+                bsq_ext_main                                +=  "area_id:"  +   ext_main_nmb                        + " || "# отбор по разделению основных данных.#case 2020.05.21
             # r19 - отбор по разделению дополнительных данных ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#case 2020.05.21
             for ext_ext_nmb                                 in  g.rexp.q.ext_add.findall(param):                        #case 2020.05.21
-                bsq_ext_add                                 +=  "r19:"  +   ext_main_nmb                        + " || "# отбор по разделению дополнительных данных.#case 2020.05.21
+                bsq_ext_add                                 +=  "area_sec_id:"  +   ext_main_nmb                        + " || "# отбор по разделению дополнительных данных.#case 2020.05.21
             # получаю количество событий ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             for amount                                      in g.rexp.q.amount_re.findall(param):
                 bsq_amount                                  =   re.sub(r'\s',"",amount)
@@ -643,7 +643,7 @@ class reader():
         if bsq_date_end                                     ==  "":                                                     # если без отбора по концу
             bsq_date_end                                    =   "*"                                                     # то *
         # строю запрос ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        bsq_dates                                           =   "(r1:[" + bsq_date_start + " TO " + bsq_date_end + "])" # формирую отбор по датам
+        bsq_dates                                           =   "(date:[" + bsq_date_start + " TO " + bsq_date_end + "])" # формирую отбор по датам
         #ret_query                                           =   g.execution.solr.url_main + "/" + ib_name + "/select?q="# начало строки поискового запроса
         ret_query                                           =   bsq_dates                                               # r1 добавляю в запрос отбор по датам
         ret_query                                           +=  reader.q_prep("AND" ,bsq_status_trans)                  # r2 добавляю в запрос отбор по статусам транзакции
@@ -665,10 +665,10 @@ class reader():
         post_query                                          =   {}
         post_query["query"]                                 =   ret_query
         post_query["params"]                                =   {}
-        post_query["params"]["sort"]                        =   "r1 desc, r1nmb desc"
+        post_query["params"]["sort"]                        =   "date desc, date_idx desc"
         post_query["params"]["rows"]                        =   bsq_amount
         #ret_query                                           +=  "&rows="+ bsq_amount                                    # добавляю в запрос количество для отбора
-        #ret_query                                           +=  "&sort=r1 desc, r1nmb desc"                             # добавляю в запрос сортировку
+        #ret_query                                           +=  "&sort=date desc, date_idx desc"                       # добавляю в запрос сортировку
         return post_query
     # ------------------------------------------------------------------------------------------------------------------
     # служебная функция - убирает последние || и всё после них до конца строки и укутывает в скобки
@@ -678,7 +678,7 @@ class reader():
             qp_sorted                                       =   []
             for each in str2.split(' || '):                                                                             # хочу отсортировать перед использованием, но только для цифр )))
                 if len(each)                                >   3:
-                    qp_dec                                  =   re.findall(r'(r\d+)\:(.*)',each)[0]
+                    qp_dec                                  =   re.findall(r'(\w+)\:(.*)',each)[0]                      # имя поля теперь словесное (user_id, t_status, …), не rN
                     if(qp_dec[1].isdigit()):                                                                            # всё-таки делаю это только для цифр )))
                         num                                 =   "0" + qp_dec[1] if len(qp_dec[1]) ==  1 else qp_dec[1]
                     else:
