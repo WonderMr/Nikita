@@ -353,24 +353,24 @@ class conf:
         for reg in regs:
             clstr_dir                                       =   os.path.join(d2_srvinfo, reg)
             t.debug_print(f"clstr_dir={str(clstr_dir)}")
-            clstr_file                                      =   os.path.join(clstr_dir, g.conf.c1.cluster_file)
-            clstr_file_o                                    =   os.path.join(clstr_dir, g.conf.c1.cluster_file_o)
-            clstr_file_o                                    =   clstr_file_o if os.path.exists(clstr_file_o) \
-                                                                else clstr_file                                         # сегодня (2020.05.22) столкнулся с отсутствием c cluster_file_o
-            clstr_file_size                                 =   os.stat(clstr_file).st_size \
-                                                                if os.path.exists(clstr_file) \
-                                                                else 0
-            clstr_file_o_size                               =   os.stat(clstr_file_o).st_size \
-                                                                if os.path.exists(clstr_file_o) \
-                                                                else 0
-            clstr_file                                      =   clstr_file_o \
-                                                                if clstr_file_size > clstr_file_o_size \
-                                                                else clstr_file                                         # предпочитаем читать файл большего размера, если он есть
-            if not os.path.isfile(clstr_file):
-                t.debug_print(f"no cluster file found with {str(clstr_file)}")
+            # Реестр кластера 1С может лежать в двух файлах — 1CV8Clst.lst и 1CV8Clsto.lst.
+            # Среди существующих НЕПУСТЫХ файлов берём самый свежий по времени записи (mtime),
+            # при равном mtime — больший по размеру; пустой/устаревший файл так не выбираем.
+            clstr_candidates                                =   [
+                                                                    os.path.join(clstr_dir, g.conf.c1.cluster_file),
+                                                                    os.path.join(clstr_dir, g.conf.c1.cluster_file_o),
+                                                                ]
+            clstr_candidates                                =   [p for p in clstr_candidates if os.path.isfile(p)]
+            if not clstr_candidates:
+                t.debug_print(f"no cluster file found in {str(clstr_dir)}")
                 return
-            else:
-                t.debug_print(f"processing {str(clstr_file)}")
+            clstr_nonempty                                  =   [p for p in clstr_candidates if os.path.getsize(p) > 0] \
+                                                                or clstr_candidates
+            clstr_file                                      =   max(
+                                                                    clstr_nonempty,
+                                                                    key=lambda p: (os.path.getmtime(p), os.path.getsize(p))
+                                                                )
+            t.debug_print(f"processing {str(clstr_file)} (size={os.path.getsize(clstr_file)})")
             clstr_handle                                    =   open(clstr_file, 'r', encoding='UTF8')
             clstr_text                                      =   clstr_handle.read()
             clstr_handle.close()
@@ -522,6 +522,18 @@ def start_all(wait=False):
         g.stats.start_time                                  =   datetime.now()
         t.debug_print(f"Время запуска службы: {g.stats.start_time.strftime('%Y-%m-%d %H:%M:%S')}")
         
+        # ~~~~~~~ отпечаток сборки: в логе видно, какая именно сборка запущена (mtime+size уникальны на каждую сборку) ~~~
+        build_path                                          =   g.execution.self_name
+        try:
+            build_mtime                                     =   datetime.fromtimestamp(os.path.getmtime(build_path)).strftime('%Y-%m-%d %H:%M:%S')
+            build_size                                      =   os.path.getsize(build_path)
+        except OSError:
+            build_mtime, build_size                         =   "unknown", 0
+        build_kind                                          =   "frozen exe" if getattr(sys, 'frozen', False) else "source"
+        t.debug_print("################################################################################")
+        t.debug_print(f"# BUILD {g.service.build_version} | {build_kind} | {os.path.basename(build_path)} | built {build_mtime} | {build_size} bytes")
+        t.debug_print("################################################################################")
+
         # Вывод конфигурации
         g.print_config()
         
