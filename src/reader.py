@@ -448,11 +448,12 @@ class reader():
     # ------------------------------------------------------------------------------------------------------------------
     def trans_id(td_descr):
         td_str                                              =   ''
-        td_descr                                            =   td_descr.upper()
+        td_descr                                            =   td_descr.strip().upper()
         if td_descr                                         ==  'НЕТ ТРАНЗАКЦИИ': td_str =  'N'
         if td_descr                                         ==  'ЗАФИКСИРОВАНА' : td_str =  'C'                          # Commit
         if td_descr                                         ==  'НЕ ЗАВЕРШЕНА'  : td_str =  'U'                          # Unfinished
         if td_descr                                         ==  'ОТМЕНЕНА'      : td_str =  'R'                          # Rollback
+        if not td_str and td_descr in ('C', 'U', 'R', 'N'): td_str =  td_descr                                          # уже буквенный код 1С (C/U/R/N) — принимаем как есть
         return td_str
     # ------------------------------------------------------------------------------------------------------------------
     # возвращает описания типа транзакции по её букве
@@ -549,7 +550,9 @@ class reader():
                 bsq_date_end                                =   reader.date_to_zhr_date(date_stop)
             # r2 - отбор по статусу транзакции ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             for tran                                        in g.rexp.q.trans_status_re.findall(param):
-                bsq_status_trans                            +=  "t_status:"   +   reader.trans_id(tran)           + " || "# формирую отбор по статусу транзакции
+                tran_code                                   =   reader.trans_id(tran)                                   # буква-код C/U/R/N из русского описания или из буквенного ввода
+                if tran_code:                                                                                           # пустой код → пропускаем, иначе получился бы битый "t_status:"
+                    bsq_status_trans                        +=  "t_status:"   +   tran_code                     + " || "# формирую отбор по статусу транзакции
             # r3 - отбор транзакции ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             # r4 - отбор по пользователю ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             for user                                        in  g.rexp.q.user_re.findall(param):
