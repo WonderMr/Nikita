@@ -1,4 +1,4 @@
-# create-installer.ps1 - Создание Windows инсталлятора с автоматической загрузкой NSIS
+﻿# create-installer.ps1 - Создание Windows инсталлятора с автоматической загрузкой NSIS
 # Использование: .\create-installer.ps1
 
 $ErrorActionPreference                              =   "Stop"

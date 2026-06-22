@@ -7,9 +7,11 @@ echo Nikita Windows Distribution Builder
 echo ==================================================
 
 echo Stopping and removing existing service...
-if exist ".\dist\Nikita\Nikita.exe" (
-    .\dist\Nikita\Nikita.exe stop 2>nul
-    .\dist\Nikita\Nikita.exe remove 2>nul
+%SystemRoot%\System32\sc.exe query Nikita >nul 2>nul
+if %errorlevel% equ 0 (
+    %SystemRoot%\System32\sc.exe stop Nikita >nul 2>nul
+    timeout /t 2 /nobreak >nul
+    %SystemRoot%\System32\sc.exe delete Nikita >nul 2>nul
 )
 
 echo.
