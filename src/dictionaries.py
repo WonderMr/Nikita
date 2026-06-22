@@ -85,6 +85,8 @@ class dictionary():
     actions['_$Session$_.Authentication']                   =   'Сеанс. Аутентификация'
     actions['_$Session$_.AuthenticationError']              =   'Сеанс. Ошибка аутентификации'
     actions['_$Session$_.ConfigExtensionApplyError']        =   'Сеанс. Ошибка применения расширения конфигурации'
+    actions['_$Session$_.ExternalDataProcessorConnect']     =   'Сеанс. Подключение внешней обработки'
+    actions['_$Session$_.ExternalDataProcessorConnectError']=   'Сеанс. Ошибка подключения внешней обработки'
     actions['_$Session$_.Finish']                           =   'Сеанс. Завершение'
     actions['_$Session$_.Start']                            =   'Сеанс. Начало'
     actions['_$Transaction$_.Begin']                        =   'Транзакция. Начало'
