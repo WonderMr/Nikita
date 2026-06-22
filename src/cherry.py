@@ -112,11 +112,11 @@ class nikita_web(object):
         # Записей (с запуска) - только для включенных сервисов
         sent_list                                           =   []
         if g.conf.clickhouse.enabled:
-            sent_list.append(locale.format("%d", g.stats.clickhouse_total_sent, grouping=True))
+            sent_list.append(locale.format_string("%d", g.stats.clickhouse_total_sent, grouping=True))
         if g.conf.solr.enabled:
-            sent_list.append(locale.format("%d", g.stats.solr_total_sent, grouping=True))
+            sent_list.append(locale.format_string("%d", g.stats.solr_total_sent, grouping=True))
         if g.conf.redis.enabled:
-            sent_list.append(locale.format("%d", g.stats.redis_total_queued, grouping=True))
+            sent_list.append(locale.format_string("%d", g.stats.redis_total_queued, grouping=True))
         stats_block                                         +=  f'<span class="cell">{("<br>".join(sent_list)) if sent_list else "-"}</span>'
         
         # Ошибок (с запуска) - только для включенных сервисов
@@ -182,13 +182,13 @@ class nikita_web(object):
         bases                                               +=  '<span class="cell"></span>'  # Путь - пусто
         bases                                               +=  '<span class="cell"></span>'  # Тип - пусто
         bases                                               +=  f'<span class="cell size-value" data-val="{total_size_all}" data-type="lgf">'  \
-                                                            +   locale.format('%d', total_size_all, grouping=True, monetary=True)   \
+                                                            +   locale.format_string('%d', total_size_all, grouping=True, monetary=True)   \
                                                             +   ' байт</span>'
         bases                                               +=  f'<span class="cell size-value" data-val="{total_parsed_all}" data-type="lgf">'  \
-                                                            +   locale.format('%d', total_parsed_all, grouping=True, monetary=True)  \
+                                                            +   locale.format_string('%d', total_parsed_all, grouping=True, monetary=True)  \
                                                             +   ' байт</span>'
         bases                                               +=  f'<span class="cell">'  \
-                                                            +   locale.format('%d', total_sent_all, grouping=True)  \
+                                                            +   locale.format_string('%d', total_sent_all, grouping=True)  \
                                                             +   '</span>'
         bases                                               +=  '<span class="cell"></span>'  # % - пусто
         bases                                               +=  '</div>'
@@ -231,7 +231,7 @@ class nikita_web(object):
             
             # Размер ЖР с data-атрибутами для JS конвертации
             bases                                           +=  '<span class="cell size-value" data-val="' + str(base_total) + '" data-type="' + jr_format + '">' \
-                                                            +   locale.format(
+                                                            +   locale.format_string(
                                                                     '%d',
                                                                     base_total,
                                                                     grouping        =   True,
@@ -242,7 +242,7 @@ class nikita_web(object):
             
             # Обработано с data-атрибутами
             bases                                           +=  '<span class="cell size-value" data-val="' + str(base[g.nms.ib.parsed_size]) + '" data-type="' + jr_format + '">' \
-                                                            +   locale.format(
+                                                            +   locale.format_string(
                                                                     '%d',
                                                                     base[g.nms.ib.parsed_size],
                                                                     grouping        =   True,
@@ -253,7 +253,7 @@ class nikita_web(object):
             
             # Отправлено записей
             bases                                           +=  '<span class="cell">'                           \
-                                                            +   locale.format(
+                                                            +   locale.format_string(
                                                                     '%d',
                                                                     records_sent,
                                                                     grouping        =   True
