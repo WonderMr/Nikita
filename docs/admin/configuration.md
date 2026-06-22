@@ -168,8 +168,7 @@ SOLR_LISTEN_PORT=8983
 SOLR_MEM_MIN=2g
 SOLR_MEM_MAX=32g
 
-# Java для Solr
-SOLR_JAVA_HOME=/path/to/java
+# Java 17 встроена в дистрибутив (<каталог установки>/java) — отдельная переменная не требуется
 
 # Потоки для индексации
 SOLR_THREADS=12
@@ -334,7 +333,6 @@ SOLR_PORT=8983
 SOLR_DIR=/opt/solr
 SOLR_MEM_MIN=4g
 SOLR_MEM_MAX=16g
-SOLR_JAVA_HOME=/usr/lib/jvm/java-17
 SOLR_THREADS=8
 
 # ============================================================
@@ -427,7 +425,6 @@ PARSER_THREADS=1
 | `SOLR_LISTEN_PORT` | integer | `8983` | Порт для прослушивания Solr |
 | `SOLR_MEM_MIN` | string | `2g` | Минимальная память JVM |
 | `SOLR_MEM_MAX` | string | `32g` | Максимальная память JVM |
-| `SOLR_JAVA_HOME` | string | - | Путь к Java для Solr |
 | `SOLR_THREADS` | integer | `12` | Потоки для индексации |
 
 ### Redis

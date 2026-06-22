@@ -182,7 +182,6 @@ class conf:
             # g.conf.solr.listen_port                         =   config[g.conf.solr.section_name]["listen_port"]
             # g.conf.solr.solr_host                           =   config[g.conf.solr.section_name]["solr_host"]
             # g.conf.solr.solr_port                           =   config[g.conf.solr.section_name]["solr_port"]
-            # g.conf.solr.java_home                           =   config[g.conf.solr.section_name]["java"]
             # g.conf.solr.threads                             =   config[g.conf.solr.section_name]["threads"]
 
             # ~~~~~~~ загружаю специфику HTTP ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -436,7 +435,6 @@ class conf:
             g.conf.solr.listen_port                         =   os.getenv('SOLR_LISTEN_PORT', '8983')
             g.conf.solr.solr_host                           =   os.getenv('SOLR_HOST', '127.0.0.1')                     # socket.gethostbyaddr(g.conf.solr.listen_interface)
             g.conf.solr.solr_port                           =   os.getenv('SOLR_PORT', '8983')
-            g.conf.solr.java_home                           =   os.getenv('SOLR_JAVA_HOME', os.path.join(g.execution.self_dir, "java"))
             g.conf.solr.threads                             =   os.getenv('SOLR_THREADS', str(multiprocessing.cpu_count() // 2)) # половину ядер на solr
             # ~~~~~~~ установка параметров http по умолчанию ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             g.conf.http.listen_port                         =   os.getenv('HTTP_LISTEN_PORT', '8984')

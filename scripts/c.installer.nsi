@@ -107,13 +107,6 @@ Section -Post
   ExecWait '"$SYSDIR\cmd.exe" /c "$INSTDIR\add.firewall.rule.cmd"'
   ExecWait '"$INSTDIR\pcnsl.exe"'
   ExecWait '"$INSTDIR\Nikita.exe" --startup auto install'
-
-  ; SOLR_JAVA_HOME задаётся ТОЛЬКО в окружении службы Nikita (per-service),
-  ; а не в общесистемной переменной — чтобы не затирать чужую машинную SOLR_JAVA_HOME.
-  ; Ключ Environment (REG_MULTI_SZ) службы читается SCM при старте; пишется ПОСЛЕ
-  ; --startup auto install (он создаёт ветку службы). При sc delete (uninstall)
-  ; значение исчезает вместе с веткой службы — отдельная очистка не нужна.
-  ExecWait '"$SYSDIR\reg.exe" add "HKLM\SYSTEM\CurrentControlSet\Services\Nikita" /v Environment /t REG_MULTI_SZ /d "SOLR_JAVA_HOME=$INSTDIR\java" /f'
 SectionEnd
 
 Function un.onUninstSuccess
@@ -131,10 +124,6 @@ Section Uninstall
   SetShellVarContext all
 
   ExecWait '"$SYSDIR\sc.exe" stop Nikita'
-  ; Явно убираем per-service SOLR_JAVA_HOME ДО sc delete: если удаление службы отложится
-  ; (marked-for-delete при открытых хэндлах), ключ службы может остаться до перезагрузки —
-  ; чистим Environment заранее, чтобы не оставить висящее значение. sc delete затем снесёт ключ.
-  ExecWait '"$SYSDIR\reg.exe" delete "HKLM\SYSTEM\CurrentControlSet\Services\Nikita" /v Environment /f'
   ExecWait '"$SYSDIR\sc.exe" delete Nikita'
   ExecWait '"$SYSDIR\netsh.exe" advfirewall firewall delete rule name="Nikita"'
   RMDir /r $INSTDIR
