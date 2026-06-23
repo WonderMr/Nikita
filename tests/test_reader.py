@@ -68,5 +68,48 @@ class TestReader(unittest.TestCase):
         finally:
             os.remove(tmp.name)
 
+    def test_decode_1c_data_scalar_passthrough(self):
+        """Скаляры отдаются сырыми — их 1С десериализует сама."""
+        self.assertEqual(reader.decode_1c_data('{"S","abc"}'), '{"S","abc"}')
+        self.assertEqual(reader.decode_1c_data('{"U"}'), '{"U"}')
+        self.assertEqual(reader.decode_1c_data('{"R",1:abc}'), '{"R",1:abc}')
+
+    def test_decode_1c_data_p_flatten(self):
+        """{"P",{...}} 1С не понимает → сворачиваем в Python в строковое значение {"S","..."}."""
+        raw = (
+            '{"P",\n{\n'
+            '{"S","C:\\Program Files\\Nikita\\Nikita.epf"},\n'
+            '{"S",""},\n{"B",0},\n{"S",""},\n{"B",1},\n{"S",""}\n}\n}'
+        )
+        self.assertEqual(
+            reader.decode_1c_data(raw),
+            '{"S","C:\\Program Files\\Nikita\\Nikita.epf; Нет; Да"}',
+        )
+
+    def test_decode_1c_data_p_escapes_quotes(self):
+        """Кавычки внутри развёрнутого значения экранируются удвоением для ЗначениеИзСтрокиВнутр."""
+        # внутреннее a"b (кавычка удвоена) → разворачиваем в a"b → кодируем обратно в a""b
+        raw = '{"P",{{"S","a""b"}}}'
+        self.assertEqual(reader.decode_1c_data(raw), '{"S","a""b"}')
+
+    def test_read_lgp_data_r12_p_flatten(self):
+        """LGP-путь: R12 со структурой {"P",{...}} приходит свёрнутым в {"S","..."}."""
+        record = (
+            ",\r\n{20231201120000,N,\r\n"
+            "{0,0},1,2,3,4,5,I,\"c\",1,\r\n"
+            "{\"P\",\r\n{\r\n{\"S\",\"C:\\path\"},\r\n{\"B\",0}\r\n}\r\n},\"Presentation\",6,7,8,9,1,\r\n"
+            "{0}\r\n}"
+        )
+        raw = record.encode("utf-8")
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".lgp")
+        try:
+            tmp.write(raw)
+            tmp.close()
+            data = reader.read_lgp_data({"file_name": tmp.name, "pos": 0, "len": len(raw)}, "TESTBASE")
+            self.assertIsNotNone(data, "read_lgp_data вернул None — запись не распозналась")
+            self.assertEqual(data[12], '{"S","C:\\path; Нет"}')
+        finally:
+            os.remove(tmp.name)
+
 if __name__ == '__main__':
     unittest.main()
