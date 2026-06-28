@@ -180,7 +180,7 @@ class reader():
                 data12                                      =   g.rexp.del_quotes.sub('',str(elem[12]))                 #-кавычки в начале и конце
                 data12                                      =   reader.force_decode(data12)
                 if      re.findall(r'^\{\"P\",',data12):
-                    data12                                  =   re.sub(r'^\{|\}$','',data12)                            # убираем {} скобки
+                    data12                                  =   '"S","' + reader.flatten_1c_p(data12).replace('"', '""') + '"' # {"P",{…}} 1С не десериализует (как в LGP, коммит f4a0f55) → разворачиваем в строку "S"; без внешних {} — формат R12 у LGD безскобочный
                 elif    g.rexp.find_1c_link.findall(data12):
                     data12                                  =   re.sub(r'([\w\d]+\:[\w\d]+)', '"R",' + r'\1', data12)   # дописываем R к ссылке
                 elif    data12:
