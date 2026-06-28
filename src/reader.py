@@ -154,14 +154,15 @@ class reader():
                                                                     workServerCode,
                                                                     primaryPortCode,
                                                                     secondaryPortCode,
-                                                                    session
+                                                                    session,
+                                                                    RowID
                                                                     from    EventLog
                                                                     Where RowID in ({placeholders})'''
-                                                                    
+
         parsed                                             =   t.sqlite3_exec(rld_file, query, tuple(items))       # выбираю сразу всю пачку с параметрами
-        ret                                                 =   []
         if not parsed:
             return
+        by_id                                              =   {}
         for elem                                            in parsed:
             data                                            =   {}
             data[0]                                         =   reader.int_1c_time_to_old_zhr_time(elem[0],islgd=True)  # исправляю дату
@@ -180,7 +181,7 @@ class reader():
                 data12                                      =   g.rexp.del_quotes.sub('',str(elem[12]))                 #-кавычки в начале и конце
                 data12                                      =   reader.force_decode(data12)
                 if      re.findall(r'^\{\"P\",',data12):
-                    data12                                  =   re.sub(r'^\{|\}$','',data12)                            # убираем {} скобки
+                    data12                                  =   '"S","' + reader.flatten_1c_p(data12).replace('"', '""') + '"' # {"P",{…}} 1С не десериализует (как в LGP, коммит f4a0f55) → разворачиваем в строку "S"; без внешних {} — формат R12 у LGD безскобочный
                 elif    g.rexp.find_1c_link.findall(data12):
                     data12                                  =   re.sub(r'([\w\d]+\:[\w\d]+)', '"R",' + r'\1', data12)   # дописываем R к ссылке
                 elif    data12:
@@ -197,8 +198,9 @@ class reader():
             data[15]                                        =   str(elem[15])
             data[16]                                        =   str(elem[16])
             data[17]                                        =   str(elem[17])
-            ret.append(data)                                                                                            # добавлю очередную запись в возвращаемый массив
-        return ret
+            by_id[elem[18]]                                 =   data                                                    # ключ — RowID (последняя колонка)
+        # SQLite для IN(...) отдаёт строки в rowid-порядке, а не в порядке items → восстанавливаем порядок запрошенных ids
+        return [by_id[i] for i in items if i in by_id]
     # ------------------------------------------------------------------------------------------------------------------
     # читаем запись нового формата
     # ------------------------------------------------------------------------------------------------------------------

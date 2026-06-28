@@ -115,5 +115,75 @@ class TestReader(unittest.TestCase):
             if tmp_name and os.path.exists(tmp_name):
                 os.remove(tmp_name)
 
+    # ------------------------------------------------------------------
+    # LGD (новый формат, SQLite) — путь чтения read_lgd_data
+    # ------------------------------------------------------------------
+    def _make_lgd(self, rows):
+        """Создаёт временный .lgd (SQLite) с таблицей EventLog как у реального 1Cv8.lgd.
+
+        rows — список dict со значениями колонок (минимум: data, опц. userCode и др.).
+        Возвращает путь к файлу (удалить должен вызывающий).
+        """
+        import sqlite3
+        fd, name = tempfile.mkstemp(suffix=".lgd")
+        os.close(fd)
+        con = sqlite3.connect(name)
+        con.execute(
+            "CREATE TABLE EventLog("
+            "rowID INTEGER PRIMARY KEY, severity INTEGER, date INTEGER, connectID INTEGER, "
+            "session INTEGER, transactionStatus INTEGER, transactionDate INTEGER, transactionID INTEGER, "
+            "userCode INTEGER, computerCode INTEGER, appCode INTEGER, eventCode INTEGER, comment TEXT, "
+            "metadataCodes TEXT, sessionDataSplitCode INTEGER, dataType INTEGER, data TEXT, "
+            "dataPresentation TEXT, workServerCode INTEGER, primaryPortCode INTEGER, secondaryPortCode INTEGER)"
+        )
+        defaults = dict(severity=1, date=639160827070000, connectID=0, session=1,
+                        transactionStatus=3, transactionDate=0, transactionID=0,
+                        userCode=0, computerCode=0, appCode=0, eventCode=0, comment="",
+                        metadataCodes="", sessionDataSplitCode=0, dataType=0, data="",
+                        dataPresentation="", workServerCode=0, primaryPortCode=0, secondaryPortCode=0)
+        for i, r in enumerate(rows, start=1):
+            rec = dict(defaults); rec["rowID"] = i; rec.update(r)
+            cols = ",".join(rec.keys())
+            con.execute(f"INSERT INTO EventLog ({cols}) VALUES ({','.join('?'*len(rec))})", tuple(rec.values()))
+        con.commit(); con.close()
+        return name
+
+    def test_read_lgd_data_r12_p_flatten(self):
+        """LGD-путь: R12 со структурой {"P",{...}} разворачивается в безскобочное "S","...".
+
+        Регрессия: раньше читалось как голое "P",..., которое 1С не десериализует.
+        """
+        # значения ASCII: data в реальном LGD — cp1251-mojibake, его чинит force_decode;
+        # на чистой кириллице force_decode сломал бы её, поэтому в фикстуре латиница
+        name = self._make_lgd([
+            {"comment": "one",   "data": '{"P",\r\n{1,\r\n{"S","abc"}\r\n}\r\n}'},                  # одиночная строка
+            {"comment": "two",   "data": '{"P",\r\n{2,\r\n{"S","Name"},\r\n{"S","Log"}\r\n}\r\n}'}, # несколько строк → "; "
+            {"comment": "empty", "data": ''},                                                       # пусто → "U"
+        ])
+        try:
+            rows = reader.read_lgd_data(name, [1, 2, 3])
+            self.assertIsNotNone(rows, "read_lgd_data вернул None")
+            by_comment = {rec[10]: rec for rec in rows}                                             # ключуем по уникальному полю, а не по порядку строк (SQLite IN не гарантирует порядок)
+            self.assertEqual(by_comment["one"][12], '"S","abc"')
+            self.assertEqual(by_comment["two"][12], '"S","Name; Log"')
+            self.assertEqual(by_comment["empty"][12], '"U"')
+        finally:
+            if os.path.exists(name):
+                os.remove(name)
+
+    def test_read_lgd_data_codes_are_strings(self):
+        """LGD-путь: коды (пользователь и т.п.) возвращаются строками — словари ЖР ключуются str."""
+        name = self._make_lgd([{"userCode": 5, "computerCode": 7, "eventCode": 3, "session": 42}])
+        try:
+            rec = reader.read_lgd_data(name, [1])[0]
+            self.assertIsInstance(rec[4], str)
+            self.assertEqual(rec[4], "5")        # userCode
+            self.assertEqual(rec[5], "7")        # computerCode
+            self.assertEqual(rec[8], "3")        # eventCode
+            self.assertEqual(rec[17], "42")      # session
+        finally:
+            if os.path.exists(name):
+                os.remove(name)
+
 if __name__ == '__main__':
     unittest.main()
