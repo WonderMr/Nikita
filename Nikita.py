@@ -619,8 +619,8 @@ def start_all(wait=False):
         g.threads.parser                                    =   p.parser("lgp")
         g.threads.parser.start(); # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # ~~~~~~~ создаю и запускаю потоки парсеров для нового формата ЖР ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        #g.threads.parser_new                                =   p.parser("lgd")
-        #g.threads.parser_new.start(); # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        g.threads.parser_new                                =   p.parser("lgd")
+        g.threads.parser_new.start()  # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # ~~~~~~~ создаю и запускаю потоки парсеров для обновления списка баз ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         g.threads.config_updater                            =   config_updater("IB monitor")
         g.threads.config_updater.start(); # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -775,7 +775,12 @@ def stop_all():
         if hasattr(g.threads, 'parser') and g.threads.parser:
             t.debug_print("Останавливаем Parser...")
             g.threads.parser.stop()
-            
+
+        # ~~~~~~~ останавливаю парсер нового формата ЖР (lgd) ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        if hasattr(g.threads, 'parser_new') and g.threads.parser_new:
+            t.debug_print("Останавливаем Parser (lgd)...")
+            g.threads.parser_new.stop()
+
         # ~~~~~~~ останавливаю обновлятель списка баз ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         if hasattr(g.threads, 'config_updater') and g.threads.config_updater:
             t.debug_print("Останавливаем Config Updater...")
@@ -789,7 +794,7 @@ def stop_all():
         # Дожидаемся завершения потоков (важно для сохранения state)
         join_timeout                                        =   15
         join_list                                           =   []
-        for th_name in ['parser', 'sender', 'config_updater', 'warming_cache', 'cherry', 'redis', 'solr']:
+        for th_name in ['parser', 'parser_new', 'sender', 'config_updater', 'warming_cache', 'cherry', 'redis', 'solr']:
             if hasattr(g.threads, th_name):
                 th                                          =   getattr(g.threads, th_name)
                 if th:

@@ -42,6 +42,38 @@ COLUMN_NAMES                                                 =   (
 FILE_NAME_INDEX                                             =   COLUMN_NAMES.index("file_name")
 FILE_POS_INDEX                                              =   COLUMN_NAMES.index("file_pos")
 BASE_NAME_RE                                                =   re.compile(r'^[a-zA-Z0-9_а-яА-ЯёЁ]+$')
+
+# Поля строгой схемы ядра Solr (g.conf.solr.schema), которые project_solr_doc
+# копирует в Solr-документ как есть. Запись parser.add_to_json_data двухцелевая:
+# вложенные/расшифрованные поля нужны ClickHouse, но в Solr нельзя слать unknown
+# field или вложенный Map — иначе HTTP 400, поэтому перед POST запись проецируется.
+# NB: финальный документ = эти поля ПЛЮС добавляемые в project_solr_doc поля
+# comment/data/data_pres (из *_raw) и расплющенные user_guid/meta_uuid; они тоже
+# объявлены в схеме (globals.py) — при изменении схемы синхронизируй оба места.
+SOLR_DOC_FIELDS                                            =   (
+                                                                    "id",
+                                                                    "file_name",
+                                                                    "pos",
+                                                                    "len",
+                                                                    "date",
+                                                                    "date_idx",
+                                                                    "t_status",
+                                                                    "t_id",
+                                                                    "t_pos",
+                                                                    "user_id",
+                                                                    "comp_id",
+                                                                    "app_id",
+                                                                    "conn_id",
+                                                                    "event_id",
+                                                                    "severity",
+                                                                    "meta_id",
+                                                                    "server_id",
+                                                                    "port_id",
+                                                                    "port_sec_id",
+                                                                    "session_id",
+                                                                    "area_id",
+                                                                    "area_sec_id",
+                                                                )
 RETRIABLE_SENDER_STATUSES                                  =   {404, 409, 429}
 CLICKHOUSE_DEDUPE_LOOKUP_CHUNK_SIZE                        =   100
 CLICKHOUSE_DEDUPE_LOOKUP_MAX_LITERAL_CHARS                  =   60000
@@ -231,14 +263,34 @@ def send_to_clickhouse(chclient: Any, data: List[Dict[str, Any]], base_name: str
         return False
 
 # ----------------------------------------------------------------------------------------------------------------------
+# Проекция записи в документ Solr (только поля схемы; вложенные dict-и расплющиваются)
+# ----------------------------------------------------------------------------------------------------------------------
+def project_solr_doc(rec: Dict[str, Any]) -> Dict[str, Any]:
+    doc                                                     =   {f: rec[f] for f in SOLR_DOC_FIELDS if f in rec}
+    # Текстовые поля индексируем по сырым значениям (без ClickHouse-экранирования кавычек/слешей)
+    doc["comment"]                                          =   rec.get("comment_raw", rec.get("comment", ""))
+    doc["data"]                                             =   rec.get("data_raw", rec.get("data", ""))
+    doc["data_pres"]                                        =   rec.get("data_pres_raw", rec.get("data_pres", ""))
+    # Расплющиваем вложенные {"uuid","name"} в строковые поля схемы
+    user                                                    =   rec.get("user")
+    if isinstance(user, dict):
+        doc["user_guid"]                                    =   user.get("uuid", "")
+    meta                                                    =   rec.get("metadata")
+    if isinstance(meta, dict):
+        doc["meta_uuid"]                                    =   meta.get("uuid", "")
+    return doc
+
+# ----------------------------------------------------------------------------------------------------------------------
 # Отправка пакета данных в Solr
 # ----------------------------------------------------------------------------------------------------------------------
 def send_to_solr(url: str, data: List[Dict[str, Any]], logger_name: str) -> int:
     start_time                                              =   time.time()
-    
+
     try:
         t.debug_print(f"→ SOLR: Отправка пакета на {url} (записей: {len(data)})", logger_name)
-        status_code                                         =   requests.post(url=url, json=data, timeout=30).status_code
+        solr_docs                                           =   [project_solr_doc(rec) for rec in data]                 # только поля схемы → нет HTTP 400 на unknown field
+        response                                            =   requests.post(url=url, json=solr_docs, timeout=30)
+        status_code                                         =   response.status_code
         elapsed_time                                        =   time.time() - start_time
         
         if status_code                                      ==  200:
@@ -251,6 +303,13 @@ def send_to_solr(url: str, data: List[Dict[str, Any]], logger_name: str) -> int:
             t.debug_print(f"✓ SOLR: Время выполнения: {elapsed_time:.3f} сек ({len(data)/elapsed_time:.1f} записей/сек)", logger_name)
             t.debug_print(f"✓ SOLR: Всего отправлено за сессию: {g.stats.solr_total_sent} записей", logger_name)
         else:
+            # Solr ещё поднимается: ядро ещё не создано -> /update отдаёт 404 (или 503).
+            # Пока Solr не помечен запущенным (g.execution.solr.started), это ожидаемо:
+            # не засоряем last_errors/solr_total_errors; статус retriable — пачка
+            # повторится и уйдёт, когда ядро будет создано.
+            if status_code in (404, 503) and not getattr(g.execution.solr, "started", False):
+                t.debug_print(f"SOLR: ядро ещё не готово (HTTP {status_code}), повтор позже: {url}", logger_name)
+                return status_code
             # Обновляем статистику ошибок
             g.stats.solr_total_errors                       +=  1
             g.stats.solr_last_error_time                    =   datetime.datetime.now()
@@ -264,6 +323,10 @@ def send_to_solr(url: str, data: List[Dict[str, Any]], logger_name: str) -> int:
                 g.stats.last_errors.pop(0)
             
             t.debug_print(f"✗ SOLR: Ошибка отправки, статус: {status_code}", logger_name)
+            try:
+                t.debug_print(f"✗ SOLR: ответ сервера: {response.text[:2000]}", logger_name)                            # тело ответа Solr — точная формулировка ошибки
+            except Exception:
+                pass
             t.debug_print(f"✗ SOLR: Всего ошибок за сессию: {g.stats.solr_total_errors}", logger_name)
         
         return status_code
@@ -272,6 +335,14 @@ def send_to_solr(url: str, data: List[Dict[str, Any]], logger_name: str) -> int:
         elapsed_time                                        =   time.time() - start_time
         error_msg                                           =   str(e)
         
+        # Solr ещё поднимается (или перезапускается): отказ в соединении на этом этапе —
+        # ожидаемое состояние, а не ошибка. Пока Solr не помечен запущенным
+        # (g.execution.solr.started), не засоряем last_errors/solr_total_errors и
+        # возвращаем retriable 503 — пачка повторится и уйдёт, когда Solr поднимется.
+        if isinstance(e, requests.exceptions.ConnectionError) and not getattr(g.execution.solr, "started", False):
+            t.debug_print(f"SOLR: сервер ещё не готов, повтор позже: {error_msg[:200]}", logger_name)
+            return 503
+
         # Обновляем статистику ошибок
         g.stats.solr_total_errors                           +=  1
         g.stats.solr_last_error_time                        =   datetime.datetime.now()

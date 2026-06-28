@@ -242,7 +242,7 @@ class parser(threading.Thread):
             local_json['len']                               =   fj_size                                                 # пятый - размер записи
             local_json['date']                              =   fj_rec[0]
             local_json['date_idx']                          =   fj_dt_sort_add
-            local_json['t_status']                          =   d.trans_state_full.get(fj_rec[1], fj_rec[1])
+            local_json['t_status']                          =   fj_rec[1]                                               # сырая буква 1С (C/U/R/N); ДОЛЖНА совпадать с reader.trans_id() в Solr-запросе и read_lgp_data()
             local_json['t_id_hex']                          =   "0x" + fj_rec[2]
             local_json['t_id']                              =   int(int(fj_rec[2],16)/10000)                            # в десятичном формате
             cc = 2
@@ -345,7 +345,7 @@ class parser(threading.Thread):
                 #    time.sleep(g.waits.solr_wait_start)
                 t.debug_print("Posting", self.name)
                 # первый запрос ----------------------------------------------------------------------------------------
-                spjd_post_url                               =   f"{g.execution.solr.url_main}/{spjd_base}/update?wt=json"
+                spjd_post_url                               =   f"{g.execution.solr.url_main}/{spjd_base}/update?wt=json&commit=true"  # commit=true -> add+commit атомарно: документы durable и видимы ДО пометки state как committed
                 spjd_ret_code                               =   snd.post_query(
                                                                     self.chclient,
                                                                     spjd_post_url,
@@ -374,7 +374,7 @@ class parser(threading.Thread):
                 #    t.debug_print(f"Post commit returned {str(spjd_ret_code)}, retrying")
                 #    time.sleep(g.waits.solr_on_bad_send_to)
                 #    #spjd_ret_code                           =   self.get_query(spjd_commit_url)
-                t.debug_print("Explicit Solr commit skipped; update request accepted", self.name)
+                t.debug_print("Solr commit done inline via /update?commit=true", self.name)
                 t.debug_print("Post took "+str(time.time()-start_time),self.name)
                 return True
             except Exception as ee:

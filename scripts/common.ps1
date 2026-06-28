@@ -170,6 +170,39 @@ function Test-Prerequisites {
         throw "pip не найден"
     }
 
+    # Проверка PyInstaller — ключевая зависимость сборки.
+    # На свежей машине её часто забывают поставить (scripts\install.python.modules.cmd),
+    # тогда сборка падает с невнятным "No module named PyInstaller".
+    # Чтобы build был самодостаточным (как с авто-загрузкой Java/Solr), ставим зависимости сами.
+    try {
+        & $Script:PythonPath -c "import PyInstaller" 2>$null
+        if ($LASTEXITCODE -eq 0) {
+            $pyinstallerVersion = & $Script:PythonPath -m PyInstaller --version 2>$null
+            Write-Success "PyInstaller найден: $pyinstallerVersion"
+        } else {
+            Write-Warning "PyInstaller не установлен в $Script:PythonPath"
+            $requirementsFile = Join-Path $Script:ProjectRoot "requirements.win"
+            if (Test-Path $requirementsFile) {
+                Write-Info "Установка зависимостей из requirements.win..."
+                & $Script:PythonPath -m pip install -r $requirementsFile
+                if ($LASTEXITCODE -ne 0) {
+                    throw "Не удалось установить зависимости из requirements.win (код: $LASTEXITCODE)"
+                }
+                # Повторная проверка после установки
+                & $Script:PythonPath -c "import PyInstaller" 2>$null
+                if ($LASTEXITCODE -ne 0) {
+                    throw "PyInstaller всё ещё недоступен после установки requirements.win"
+                }
+                Write-Success "Зависимости установлены, PyInstaller доступен"
+            } else {
+                throw "PyInstaller не установлен, а requirements.win не найден. Запустите scripts\install.python.modules.cmd"
+            }
+        }
+    } catch {
+        Write-Error "Проблема с PyInstaller: $($_.Exception.Message)"
+        throw
+    }
+
     # Проверка git (для некоторых операций)
     try {
         $gitVersion                                         =   git --version 2>&1

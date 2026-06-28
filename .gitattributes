@@ -1,0 +1,15 @@
+# Python — LF
+*.py    text eol=lf
+
+# Выгрузка обработок 1С — CRLF в рабочем дереве (как пишет Конфигуратор),
+# в репозитории git хранит LF и применяет фильтр прозрачно: диффы остаются чистыми.
+*.bsl   text eol=crlf
+*.xml   text eol=crlf
+*.html  text eol=crlf
+
+# Бинарные артефакты 1С — без конвертаций
+*.bin   binary
+*.mxl   binary
+*.epf   binary
+*.erf   binary
+*.png   binary
