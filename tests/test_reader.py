@@ -156,17 +156,17 @@ class TestReader(unittest.TestCase):
         # значения ASCII: data в реальном LGD — cp1251-mojibake, его чинит force_decode;
         # на чистой кириллице force_decode сломал бы её, поэтому в фикстуре латиница
         name = self._make_lgd([
-            {"data": '{"P",\r\n{1,\r\n{"S","abc"}\r\n}\r\n}'},                       # одиночная строка
-            {"data": '{"P",\r\n{2,\r\n{"S","Name"},\r\n{"S","Log"}\r\n}\r\n}'},      # несколько строк → "; "
-            {"data": ''},                                                            # пусто → "U"
+            {"comment": "one",   "data": '{"P",\r\n{1,\r\n{"S","abc"}\r\n}\r\n}'},                  # одиночная строка
+            {"comment": "two",   "data": '{"P",\r\n{2,\r\n{"S","Name"},\r\n{"S","Log"}\r\n}\r\n}'}, # несколько строк → "; "
+            {"comment": "empty", "data": ''},                                                       # пусто → "U"
         ])
         try:
             rows = reader.read_lgd_data(name, [1, 2, 3])
             self.assertIsNotNone(rows, "read_lgd_data вернул None")
-            by_id = {i + 1: rec for i, rec in enumerate(rows)}
-            self.assertEqual(by_id[1][12], '"S","abc"')
-            self.assertEqual(by_id[2][12], '"S","Name; Log"')
-            self.assertEqual(by_id[3][12], '"U"')
+            by_comment = {rec[10]: rec for rec in rows}                                             # ключуем по уникальному полю, а не по порядку строк (SQLite IN не гарантирует порядок)
+            self.assertEqual(by_comment["one"][12], '"S","abc"')
+            self.assertEqual(by_comment["two"][12], '"S","Name; Log"')
+            self.assertEqual(by_comment["empty"][12], '"U"')
         finally:
             if os.path.exists(name):
                 os.remove(name)

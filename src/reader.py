@@ -154,14 +154,15 @@ class reader():
                                                                     workServerCode,
                                                                     primaryPortCode,
                                                                     secondaryPortCode,
-                                                                    session
+                                                                    session,
+                                                                    RowID
                                                                     from    EventLog
                                                                     Where RowID in ({placeholders})'''
-                                                                    
+
         parsed                                             =   t.sqlite3_exec(rld_file, query, tuple(items))       # выбираю сразу всю пачку с параметрами
-        ret                                                 =   []
         if not parsed:
             return
+        by_id                                              =   {}
         for elem                                            in parsed:
             data                                            =   {}
             data[0]                                         =   reader.int_1c_time_to_old_zhr_time(elem[0],islgd=True)  # исправляю дату
@@ -197,8 +198,9 @@ class reader():
             data[15]                                        =   str(elem[15])
             data[16]                                        =   str(elem[16])
             data[17]                                        =   str(elem[17])
-            ret.append(data)                                                                                            # добавлю очередную запись в возвращаемый массив
-        return ret
+            by_id[elem[18]]                                 =   data                                                    # ключ — RowID (последняя колонка)
+        # SQLite для IN(...) отдаёт строки в rowid-порядке, а не в порядке items → восстанавливаем порядок запрошенных ids
+        return [by_id[i] for i in items if i in by_id]
     # ------------------------------------------------------------------------------------------------------------------
     # читаем запись нового формата
     # ------------------------------------------------------------------------------------------------------------------
