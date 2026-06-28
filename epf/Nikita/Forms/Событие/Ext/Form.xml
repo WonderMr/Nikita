@@ -882,7 +882,7 @@
 												<ChildItems>
 													<Button name="ТаблицаДанныхКонтекстноеМенюВывестиСписок1" id="383">
 														<Type>CommandBarButton</Type>
-														<CommandName>Form.Item.ТаблицаСвойствИзмененияРасширения.StandardCommand.OutputList</CommandName>
+														<CommandName>Form.Item.ТаблицаСвойствИзменениеНастроекЖурналаРегистрации.StandardCommand.OutputList</CommandName>
 														<LocationInCommandBar>InCommandBarAndInAdditionalSubmenu</LocationInCommandBar>
 														<ExtendedTooltip name="ТаблицаДанныхКонтекстноеМенюВывестиСписок1РасширеннаяПодсказка" id="384"/>
 													</Button>

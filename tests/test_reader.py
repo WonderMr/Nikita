@@ -54,11 +54,12 @@ class TestReader(unittest.TestCase):
             "{0}\r\n}"
         )
         raw = record.encode("utf-8")
-        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".lgp")
+        tmp_name = None
         try:
-            tmp.write(raw)
-            tmp.close()
-            rec = {"file_name": tmp.name, "pos": 0, "len": len(raw)}
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".lgp") as tmp:
+                tmp.write(raw)
+                tmp_name = tmp.name
+            rec = {"file_name": tmp_name, "pos": 0, "len": len(raw)}
             data = reader.read_lgp_data(rec, "TESTBASE")
             self.assertIsNotNone(data, "read_lgp_data вернул None — запись не распозналась")
             self.assertEqual(
@@ -66,7 +67,8 @@ class TestReader(unittest.TestCase):
                 "R12 должен сохранять внешние фигурные скобки сырого значения 1С",
             )
         finally:
-            os.remove(tmp.name)
+            if tmp_name and os.path.exists(tmp_name):
+                os.remove(tmp_name)
 
     def test_decode_1c_data_scalar_passthrough(self):
         """Скаляры отдаются сырыми — их 1С десериализует сама."""
@@ -101,15 +103,17 @@ class TestReader(unittest.TestCase):
             "{0}\r\n}"
         )
         raw = record.encode("utf-8")
-        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".lgp")
+        tmp_name = None
         try:
-            tmp.write(raw)
-            tmp.close()
-            data = reader.read_lgp_data({"file_name": tmp.name, "pos": 0, "len": len(raw)}, "TESTBASE")
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".lgp") as tmp:
+                tmp.write(raw)
+                tmp_name = tmp.name
+            data = reader.read_lgp_data({"file_name": tmp_name, "pos": 0, "len": len(raw)}, "TESTBASE")
             self.assertIsNotNone(data, "read_lgp_data вернул None — запись не распозналась")
             self.assertEqual(data[12], '{"S","C:\\path; Нет"}')
         finally:
-            os.remove(tmp.name)
+            if tmp_name and os.path.exists(tmp_name):
+                os.remove(tmp_name)
 
 if __name__ == '__main__':
     unittest.main()

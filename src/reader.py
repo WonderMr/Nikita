@@ -552,6 +552,7 @@ class reader():
         bsq_date_end                                        =   ""                                                      # отбор по дате - это конец
         bsq_status_trans                                    =   ""                                                      # r2 отбор по статусу транзакции
         bsq_users                                           =   ""                                                      # r4 отбор по пользователям
+        bsq_user_guids                                      =   ""                                                      # user_guid отбор по GUID пользователя
         bsq_computers                                       =   ""                                                      # r5 отбор по компьютерам
         bsq_applications                                    =   ""                                                      # r6 отбор по приложению
         bsq_actions                                         =   ""                                                      # r8 сюда наберу все отбираемые события
@@ -564,6 +565,7 @@ class reader():
         bsq_main_ports                                      =   ""                                                      # r15 отбор по основным портам
         bsq_add_ports                                       =   ""                                                      # r16 отбор по дополнительным портам
         bsq_seanses                                         =   ""                                                      # r17 отбор по номеру сеанса
+        bsq_connections                                     =   ""                                                      # conn_id отбор по соединению
         bsq_ext_main                                        =   ""                                                      # r18(21) отбор по основному разделителю #case 2020.05.21
         bsq_ext_add                                         =   ""                                                      # r19(22) отбор по дополнительному разделителю #case 2020.05.21
 
@@ -597,6 +599,8 @@ class reader():
                                                                                 g.execution.c1_dicts.users[ib_name],
                                                                                 gcr_name    =   user
                                                                             ) or "-1")                                   + " || "# формирую отбор по имени пользователя
+            for user_guid                                   in  g.rexp.q.user_guid_re.findall(param):
+                bsq_user_guids                              +=  'user_guid:"' + user_guid + '" || '                            # отбор по GUID пользователя
             # r5 - отбор по компьютерам ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             for computer                                    in  g.rexp.q.computer_re.findall(param):
                 bsq_computers                               +=  "comp_id:"   +   d.get_simple_id(
@@ -662,6 +666,8 @@ class reader():
             # r17 - отбор по сеансу ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             for seanse                                      in  g.rexp.q.seans_re.findall(param):
                 bsq_seanses                                 +=  "session_id:"  +   seanse                              + " || "# отбор по сеансу.
+            for connection                                  in  g.rexp.q.connections_re.findall(param):
+                bsq_connections                             +=  "conn_id:" + re.sub(r'\s+', '', connection) + " || "           # отбор по соединению
             # r18 - отбор по разделению основных данных ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#case 2020.05.21
             for ext_main_nmb                                in  g.rexp.q.ext_main.findall(param):                       #case 2020.05.21
                 bsq_ext_main                                +=  "area_id:"  +   ext_main_nmb                        + " || "# отбор по разделению основных данных.#case 2020.05.21
@@ -682,6 +688,7 @@ class reader():
         ret_query                                           =   bsq_dates                                               # r1 добавляю в запрос отбор по датам
         ret_query                                           +=  reader.q_prep("AND" ,bsq_status_trans)                  # r2 добавляю в запрос отбор по статусам транзакции
         ret_query                                           +=  reader.q_prep("AND" ,bsq_users)                         # r4 добавляю в запрос отбор по пользователям
+        ret_query                                           +=  reader.q_prep("AND", bsq_user_guids)                    # добавляю в запрос отбор по GUID пользователя
         ret_query                                           +=  reader.q_prep("AND" ,bsq_computers)                     # r5 добавляю в запрос отбор по компьютерам
         ret_query                                           +=  reader.q_prep("AND", bsq_applications)                  # r6 добавляю в запрос отбор по компьютерам
         ret_query                                           +=  reader.q_prep("AND" ,bsq_actions)                       # r8 добавляю в запрос отбор по событиям
@@ -694,6 +701,7 @@ class reader():
         ret_query                                           +=  reader.q_prep("AND", bsq_main_ports)                    # r15 добавляю в запрос отбор по основным портам
         ret_query                                           +=  reader.q_prep("AND", bsq_add_ports)                     # r16 добавляю в запрос отбор по дополнительным портам
         ret_query                                           +=  reader.q_prep("AND", bsq_seanses)                       # r17 добавляю в запрос отбор по сеансам
+        ret_query                                           +=  reader.q_prep("AND", bsq_connections)                   # добавляю в запрос отбор по соединению
         ret_query                                           +=  reader.q_prep("AND", bsq_ext_main)                      # r18(21) добавляю в запрос отбор по разделению основных данных
         ret_query                                           +=  reader.q_prep("AND", bsq_ext_add)                       # r19(22) добавляю в запрос отбор по разделению вспомогательных данных
         post_query                                          =   {}
