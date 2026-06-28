@@ -603,24 +603,24 @@ class reader():
                 bsq_user_guids                              +=  'user_guid:"' + user_guid + '" || '                            # отбор по GUID пользователя
             # r5 - отбор по компьютерам ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             for computer                                    in  g.rexp.q.computer_re.findall(param):
-                bsq_computers                               +=  "comp_id:"   +   d.get_simple_id(
+                bsq_computers                               +=  "comp_id:"   +   (d.get_simple_id(
                                                                                 g.execution.c1_dicts.computers[ib_name],
                                                                                 computer
-                                                                            )                                   + " || "# формирую отбор по компьютеру
+                                                                            ) or "-1")                          + " || "# формирую отбор по компьютеру
             # r6 - отбор по приложению ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             for application                                 in g.rexp.q.application_re.findall(param):
-                bsq_applications                            +=  "app_id:"   +   d.get_simple_id(
+                bsq_applications                            +=  "app_id:"   +   (d.get_simple_id(
                                                                                 g.execution.c1_dicts.applications[ib_name],
                                                                                 application
-                                                                            )                                   + " || "# формирую отбор по приложению
+                                                                            ) or "-1")                          + " || "# формирую отбор по приложению
             # r8 - пройдусь по событиям ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             for action                                      in  g.rexp.q.action_re.findall(param):
                 for each                                    in  d.actions:
                     action                                  =   each if d.actions[each] ==  action else action          # если это предопределённый action из словаря, то выбираем его внутреннее представление
-                bsq_actions                                 +=  "event_id:"   +   d.get_simple_id(
+                bsq_actions                                 +=  "event_id:"   +   (d.get_simple_id(
                                                                                 g.execution.c1_dicts.actions[ib_name],
                                                                                 action
-                                                                            )                                   + " || "# формирую отбор по событиям
+                                                                            ) or "-1")                          + " || "# формирую отбор по событиям
             # r9 - отбор по уровню важности ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             for level                                       in g.rexp.q.level_re.findall(param):
                 bsq_levels                                  +=  "severity:"   +   reader.rec_descr_id(level)          + " || "# формирую отбор по уровеню события
@@ -647,22 +647,22 @@ class reader():
                 bsq_data_presentations                      +=  "data_pres:"  +   '"*'+data_presentation+'*"'         + " || "# отбор по представлению данных
             # r14 - отбор по серверам ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             for server                                      in  g.rexp.q.server_re.findall(param):
-                bsq_servers                                 +=  "server_id:"  +   d.get_simple_id(
+                bsq_servers                                 +=  "server_id:"  +   (d.get_simple_id(
                                                                                 g.execution.c1_dicts.servers[ib_name],
                                                                                 server
-                                                                            )                                   + " || "# отбор по серверам
+                                                                            ) or "-1")                          + " || "# отбор по серверам
             # r15 - отбор по основному порту ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             for main_port                                   in  g.rexp.q.port_main_re.findall(param):
-                bsq_main_ports                              +=  "port_id:"  +   d.get_simple_id(
+                bsq_main_ports                              +=  "port_id:"  +   (d.get_simple_id(
                                                                                 g.execution.c1_dicts.ports_main[ib_name],
                                                                                 re.sub(r'\s+','',main_port)
-                                                                            )                                   + " || "# отбор по главным портам
+                                                                            ) or "-1")                          + " || "# отбор по главным портам
             # r16 - отбор по дополнительному порту ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             for add_port                                    in  g.rexp.q.port_add_re.findall(param):
-                bsq_add_ports                               +=  "port_sec_id:"  +   d.get_simple_id(
+                bsq_add_ports                               +=  "port_sec_id:"  +   (d.get_simple_id(
                                                                                 g.execution.c1_dicts.ports_add[ib_name],
                                                                                 re.sub(r'\s+', '', add_port)
-                                                                            )                                   + " || "# отбор по дополнительному порту
+                                                                            ) or "-1")                          + " || "# отбор по дополнительному порту
             # r17 - отбор по сеансу ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             for seanse                                      in  g.rexp.q.seans_re.findall(param):
                 bsq_seanses                                 +=  "session_id:"  +   seanse                              + " || "# отбор по сеансу.
