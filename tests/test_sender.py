@@ -1,0 +1,95 @@
+# -*- coding: utf-8 -*-
+import unittest
+import sys
+import os
+from unittest.mock import patch
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+import tests.mock_env
+tests.mock_env.setup_mocks()
+
+from src import sender
+from src import globals as g
+
+
+class _FakeResponse:
+    """Минимальная заглушка requests.Response для send_to_solr."""
+    def __init__(self, status_code, text=""):
+        self.status_code = status_code
+        self.text = text
+
+
+# Реальное тело ответа Solr, когда ядро ещё грузится (взято из debug-лога старта)
+SOLR_CORE_LOADING_BODY = (
+    '{\n  "error":{\n'
+    '    "metadata":["error-class","org.apache.solr.common.SolrException",'
+    '"root-error-class","org.apache.solr.common.SolrException"],\n'
+    '    "msg":"SolrCore is loading",\n'
+    '    "code":503\n  }\n}'
+)
+
+
+class TestSendToSolr(unittest.TestCase):
+    def setUp(self):
+        # debug_print не должен писать в файл во время теста
+        g.debug.on = False
+        # чистая статистика на каждый тест
+        g.stats.solr_total_errors = 0
+        g.stats.solr_total_sent = 0
+        g.stats.last_errors = []
+        g.stats.solr_connection_ok = False
+        g.stats.solr_last_error_msg = ""
+        # по умолчанию Solr считаем уже запущенным
+        g.execution.solr.started = True
+
+    def _send(self, status_code, body=""):
+        with patch.object(sender.requests, "post",
+                          return_value=_FakeResponse(status_code, body)):
+            return sender.send_to_solr(
+                "http://127.0.0.1:8983/solr/TEST/update?wt=json&commit=true",
+                [{"id": "1"}],
+                "test",
+            )
+
+    def test_core_loading_503_after_started_is_not_counted(self):
+        """Регресс: 503 'SolrCore is loading' пришёл ПОСЛЕ started=True (гонка
+        /admin/ping vs /update) — это транзиентное состояние, не ошибка сервиса."""
+        ret = self._send(503, SOLR_CORE_LOADING_BODY)
+        self.assertEqual(ret, 503)                                   # retriable -> пачка повторится
+        self.assertEqual(g.stats.solr_total_errors, 0)              # счётчик ошибок НЕ растёт
+        self.assertEqual(len(g.stats.last_errors), 0)               # дашборд не засоряется
+
+    def test_real_503_after_started_is_counted(self):
+        """Контроль: 503 без 'SolrCore is loading' после старта — настоящая ошибка,
+        подавлять её нельзя (иначе спрячем реальную недоступность Solr)."""
+        ret = self._send(503, '{"error":{"msg":"Service Unavailable","code":503}}')
+        self.assertEqual(ret, 503)
+        self.assertEqual(g.stats.solr_total_errors, 1)
+        self.assertEqual(len(g.stats.last_errors), 1)
+
+    def test_real_500_is_counted(self):
+        """Контроль: 500 после старта — настоящая ошибка, считается."""
+        ret = self._send(500, "Internal Server Error")
+        self.assertEqual(ret, 500)
+        self.assertEqual(g.stats.solr_total_errors, 1)
+        self.assertEqual(len(g.stats.last_errors), 1)
+
+    def test_404_before_started_is_not_counted(self):
+        """Существующее поведение: пока started=False, 404 (ядро ещё не создано)
+        ожидаем и не считаем ошибкой."""
+        g.execution.solr.started = False
+        ret = self._send(404, '{"error":{"msg":"Not Found","code":404}}')
+        self.assertEqual(ret, 404)
+        self.assertEqual(g.stats.solr_total_errors, 0)
+        self.assertEqual(len(g.stats.last_errors), 0)
+
+    def test_success_200_increments_sent(self):
+        """Успешная отправка увеличивает счётчик отправленных и не плодит ошибок."""
+        ret = self._send(200, "{}")
+        self.assertEqual(ret, 200)
+        self.assertEqual(g.stats.solr_total_errors, 0)
+        self.assertEqual(g.stats.solr_total_sent, 1)
+
+
+if __name__ == '__main__':
+    unittest.main()
