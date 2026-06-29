@@ -53,14 +53,14 @@ class TestSendToSolr(unittest.TestCase):
 
     def test_core_loading_503_after_started_is_not_counted(self):
         """Регресс: 503 'SolrCore is loading' пришёл ПОСЛЕ started=True (гонка
-        /admin/ping vs /update) — это транзиентное состояние, не ошибка сервиса."""
+        /admin/ping vs /update) - это транзиентное состояние, не ошибка сервиса."""
         ret = self._send(503, SOLR_CORE_LOADING_BODY)
         self.assertEqual(ret, 503)                                   # retriable -> пачка повторится
         self.assertEqual(g.stats.solr_total_errors, 0)              # счётчик ошибок НЕ растёт
         self.assertEqual(len(g.stats.last_errors), 0)               # дашборд не засоряется
 
     def test_real_503_after_started_is_counted(self):
-        """Контроль: 503 без 'SolrCore is loading' после старта — настоящая ошибка,
+        """Контроль: 503 без 'SolrCore is loading' после старта - настоящая ошибка,
         подавлять её нельзя (иначе спрячем реальную недоступность Solr)."""
         ret = self._send(503, '{"error":{"msg":"Service Unavailable","code":503}}')
         self.assertEqual(ret, 503)
@@ -68,7 +68,7 @@ class TestSendToSolr(unittest.TestCase):
         self.assertEqual(len(g.stats.last_errors), 1)
 
     def test_real_500_is_counted(self):
-        """Контроль: 500 после старта — настоящая ошибка, считается."""
+        """Контроль: 500 после старта - настоящая ошибка, считается."""
         ret = self._send(500, "Internal Server Error")
         self.assertEqual(ret, 500)
         self.assertEqual(g.stats.solr_total_errors, 1)

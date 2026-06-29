@@ -61,7 +61,7 @@ class TestReader(unittest.TestCase):
                 tmp_name = tmp.name
             rec = {"file_name": tmp_name, "pos": 0, "len": len(raw)}
             data = reader.read_lgp_data(rec, "TESTBASE")
-            self.assertIsNotNone(data, "read_lgp_data вернул None — запись не распозналась")
+            self.assertIsNotNone(data, "read_lgp_data вернул None - запись не распозналась")
             self.assertEqual(
                 data[12], '{"S","Data"}',
                 "R12 должен сохранять внешние фигурные скобки сырого значения 1С",
@@ -71,7 +71,7 @@ class TestReader(unittest.TestCase):
                 os.remove(tmp_name)
 
     def test_decode_1c_data_scalar_passthrough(self):
-        """Скаляры отдаются сырыми — их 1С десериализует сама."""
+        """Скаляры отдаются сырыми - их 1С десериализует сама."""
         self.assertEqual(reader.decode_1c_data('{"S","abc"}'), '{"S","abc"}')
         self.assertEqual(reader.decode_1c_data('{"U"}'), '{"U"}')
         self.assertEqual(reader.decode_1c_data('{"R",1:abc}'), '{"R",1:abc}')
@@ -109,19 +109,19 @@ class TestReader(unittest.TestCase):
                 tmp.write(raw)
                 tmp_name = tmp.name
             data = reader.read_lgp_data({"file_name": tmp_name, "pos": 0, "len": len(raw)}, "TESTBASE")
-            self.assertIsNotNone(data, "read_lgp_data вернул None — запись не распозналась")
+            self.assertIsNotNone(data, "read_lgp_data вернул None - запись не распозналась")
             self.assertEqual(data[12], '{"S","C:\\path; Нет"}')
         finally:
             if tmp_name and os.path.exists(tmp_name):
                 os.remove(tmp_name)
 
     # ------------------------------------------------------------------
-    # LGD (новый формат, SQLite) — путь чтения read_lgd_data
+    # LGD (новый формат, SQLite) - путь чтения read_lgd_data
     # ------------------------------------------------------------------
     def _make_lgd(self, rows):
         """Создаёт временный .lgd (SQLite) с таблицей EventLog как у реального 1Cv8.lgd.
 
-        rows — список dict со значениями колонок (минимум: data, опц. userCode и др.).
+        rows - список dict со значениями колонок (минимум: data, опц. userCode и др.).
         Возвращает путь к файлу (удалить должен вызывающий).
         """
         import sqlite3
@@ -153,7 +153,7 @@ class TestReader(unittest.TestCase):
 
         Регрессия: раньше читалось как голое "P",..., которое 1С не десериализует.
         """
-        # значения ASCII: data в реальном LGD — cp1251-mojibake, его чинит force_decode;
+        # значения ASCII: data в реальном LGD - cp1251-mojibake, его чинит force_decode;
         # на чистой кириллице force_decode сломал бы её, поэтому в фикстуре латиница
         name = self._make_lgd([
             {"comment": "one",   "data": '{"P",\r\n{1,\r\n{"S","abc"}\r\n}\r\n}'},                  # одиночная строка
@@ -172,7 +172,7 @@ class TestReader(unittest.TestCase):
                 os.remove(name)
 
     def test_read_lgd_data_codes_are_strings(self):
-        """LGD-путь: коды (пользователь и т.п.) возвращаются строками — словари ЖР ключуются str."""
+        """LGD-путь: коды (пользователь и т.п.) возвращаются строками - словари ЖР ключуются str."""
         name = self._make_lgd([{"userCode": 5, "computerCode": 7, "eventCode": 3, "session": 42}])
         try:
             rec = reader.read_lgd_data(name, [1])[0]

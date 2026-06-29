@@ -46,10 +46,10 @@ BASE_NAME_RE                                                =   re.compile(r'^[a
 # Поля строгой схемы ядра Solr (g.conf.solr.schema), которые project_solr_doc
 # копирует в Solr-документ как есть. Запись parser.add_to_json_data двухцелевая:
 # вложенные/расшифрованные поля нужны ClickHouse, но в Solr нельзя слать unknown
-# field или вложенный Map — иначе HTTP 400, поэтому перед POST запись проецируется.
+# field или вложенный Map - иначе HTTP 400, поэтому перед POST запись проецируется.
 # NB: финальный документ = эти поля ПЛЮС добавляемые в project_solr_doc поля
 # comment/data/data_pres (из *_raw) и расплющенные user_guid/meta_uuid; они тоже
-# объявлены в схеме (globals.py) — при изменении схемы синхронизируй оба места.
+# объявлены в схеме (globals.py) - при изменении схемы синхронизируй оба места.
 SOLR_DOC_FIELDS                                            =   (
                                                                     "id",
                                                                     "file_name",
@@ -311,7 +311,7 @@ def send_to_solr(url: str, data: List[Dict[str, Any]], logger_name: str) -> int:
                 response_text                               =   ""
             # Solr ещё поднимается: ядро ещё не создано -> /update отдаёт 404 (или 503).
             # Пока Solr не помечен запущенным (g.execution.solr.started), это ожидаемо:
-            # не засоряем last_errors/solr_total_errors; статус retriable — пачка
+            # не засоряем last_errors/solr_total_errors; статус retriable - пачка
             # повторится и уйдёт, когда ядро будет создано.
             #
             # Отдельный случай гонки: 503 с телом "SolrCore is loading". Признак
@@ -319,7 +319,7 @@ def send_to_solr(url: str, data: List[Dict[str, Any]], logger_name: str) -> int:
             # обработчик /update у ещё грузящегося ядра продолжает отдавать 503. Ответ
             # на уже отправленный POST может прийти ПОСЛЕ started=True (видно в debug-логе
             # старта), и тогда проверка "not started" его пропускала и засчитывала как
-            # ошибку сервиса. Такой 503 всегда транзиентный — трактуем как "ещё не готов".
+            # ошибку сервиса. Такой 503 всегда транзиентный - трактуем как "ещё не готов".
             core_is_loading                                 =   status_code == 503 \
                                                                 and "solrcore is loading" in response_text.lower()
             if core_is_loading \
@@ -340,7 +340,7 @@ def send_to_solr(url: str, data: List[Dict[str, Any]], logger_name: str) -> int:
             
             t.debug_print(f"✗ SOLR: Ошибка отправки, статус: {status_code}", logger_name)
             if response_text:
-                t.debug_print(f"✗ SOLR: ответ сервера: {response_text[:2000]}", logger_name)                            # тело ответа Solr — точная формулировка ошибки
+                t.debug_print(f"✗ SOLR: ответ сервера: {response_text[:2000]}", logger_name)                            # тело ответа Solr - точная формулировка ошибки
             t.debug_print(f"✗ SOLR: Всего ошибок за сессию: {g.stats.solr_total_errors}", logger_name)
         
         return status_code
@@ -349,10 +349,10 @@ def send_to_solr(url: str, data: List[Dict[str, Any]], logger_name: str) -> int:
         elapsed_time                                        =   time.time() - start_time
         error_msg                                           =   str(e)
         
-        # Solr ещё поднимается (или перезапускается): отказ в соединении на этом этапе —
+        # Solr ещё поднимается (или перезапускается): отказ в соединении на этом этапе -
         # ожидаемое состояние, а не ошибка. Пока Solr не помечен запущенным
         # (g.execution.solr.started), не засоряем last_errors/solr_total_errors и
-        # возвращаем retriable 503 — пачка повторится и уйдёт, когда Solr поднимется.
+        # возвращаем retriable 503 - пачка повторится и уйдёт, когда Solr поднимется.
         if isinstance(e, requests.exceptions.ConnectionError) and not getattr(g.execution.solr, "started", False):
             t.debug_print(f"SOLR: сервер ещё не готов, повтор позже: {error_msg[:200]}", logger_name)
             return 503

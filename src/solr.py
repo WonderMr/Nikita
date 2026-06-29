@@ -95,7 +95,7 @@ class solr_thread(threading.Thread):
     def start2(self):
         # Solr ВСЕГДА запускается на встроенной Java из подкаталога установки <self_dir>/java
         # (внутри уже лежит bin/java). Системные переменные SOLR_JAVA_HOME / JAVA_HOME
-        # намеренно игнорируются — используется только встроенная Java.
+        # намеренно игнорируются - используется только встроенная Java.
         if not g.execution.self_dir:
             t.debug_print("Cannot locate bundled Java: install directory (self_dir) is empty.", self.name)
             return False
