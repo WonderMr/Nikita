@@ -23,6 +23,13 @@ class TestReader(unittest.TestCase):
         self.assertEqual(reader.trans_id('не завершена'), 'U')
         self.assertEqual(reader.trans_id('отменена'), 'R')
         self.assertEqual(reader.trans_id('нет транзакции'), 'N')
+        # Passthrough: на вход уже пришёл буквенный код 1С — возвращаем как есть
+        # (этот путь достижим из build_solr_query, когда значение фильтра Solr — буква)
+        self.assertEqual(reader.trans_id('C'), 'C')
+        self.assertEqual(reader.trans_id('U'), 'U')
+        self.assertEqual(reader.trans_id('R'), 'R')
+        self.assertEqual(reader.trans_id('N'), 'N')
+        self.assertEqual(reader.trans_id('c'), 'C')                  # регистр не важен (strip().upper())
     
     def test_trans_descr(self):
         """Проверка обратного преобразования: код транзакции → описание"""

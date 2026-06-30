@@ -325,6 +325,12 @@ def send_to_solr(url: str, data: List[Dict[str, Any]], logger_name: str) -> int:
             if core_is_loading \
                or (status_code in (404, 503) and not getattr(g.execution.solr, "started", False)):
                 t.debug_print(f"SOLR: ядро ещё не готово (HTTP {status_code}), повтор позже: {url}", logger_name)
+                # Наблюдаемость застрявшего ядра: solr_total_errors/last_errors не трогаем
+                # (иначе вернётся шум на каждый рестарт), но текущее здоровье помечаем not-ok.
+                # На штатной гонке старта ближайший успешный POST вернёт флаг в True; у реально
+                # залипшего "SolrCore is loading" ядра он останется False и будет виден на дашборде.
+                if core_is_loading:
+                    g.stats.solr_connection_ok                  =   False
                 return status_code
             # Обновляем статистику ошибок
             g.stats.solr_total_errors                       +=  1

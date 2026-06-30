@@ -58,6 +58,7 @@ class TestSendToSolr(unittest.TestCase):
         self.assertEqual(ret, 503)                                   # retriable -> пачка повторится
         self.assertEqual(g.stats.solr_total_errors, 0)              # счётчик ошибок НЕ растёт
         self.assertEqual(len(g.stats.last_errors), 0)               # дашборд не засоряется
+        self.assertFalse(g.stats.solr_connection_ok)               # но текущее здоровье -> not-ok (видимость залипшего ядра)
 
     def test_real_503_after_started_is_counted(self):
         """Контроль: 503 без 'SolrCore is loading' после старта - настоящая ошибка,
@@ -77,6 +78,8 @@ class TestSendToSolr(unittest.TestCase):
     def test_404_before_started_is_not_counted(self):
         """Существующее поведение: пока started=False, 404 (ядро ещё не создано)
         ожидаем и не считаем ошибкой."""
+        # глобал восстановим, чтобы тест не утекал состоянием в другие модули (порядок-независимость)
+        self.addCleanup(setattr, g.execution.solr, "started", g.execution.solr.started)
         g.execution.solr.started = False
         ret = self._send(404, '{"error":{"msg":"Not Found","code":404}}')
         self.assertEqual(ret, 404)
@@ -89,6 +92,7 @@ class TestSendToSolr(unittest.TestCase):
         self.assertEqual(ret, 200)
         self.assertEqual(g.stats.solr_total_errors, 0)
         self.assertEqual(g.stats.solr_total_sent, 1)
+        self.assertTrue(g.stats.solr_connection_ok)                 # успех восстанавливает здоровье (само-сброс сигнала core-loading)
 
 
 if __name__ == '__main__':
