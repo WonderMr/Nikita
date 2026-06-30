@@ -39,6 +39,8 @@ class TestSendToSolr(unittest.TestCase):
         g.stats.last_errors = []
         g.stats.solr_connection_ok = False
         g.stats.solr_last_error_msg = ""
+        # восстановим started после теста, чтобы состояние не утекло в другие модули (порядок-независимость)
+        self.addCleanup(setattr, g.execution.solr, "started", g.execution.solr.started)
         # по умолчанию Solr считаем уже запущенным
         g.execution.solr.started = True
 
@@ -78,9 +80,7 @@ class TestSendToSolr(unittest.TestCase):
     def test_404_before_started_is_not_counted(self):
         """Существующее поведение: пока started=False, 404 (ядро ещё не создано)
         ожидаем и не считаем ошибкой."""
-        # глобал восстановим, чтобы тест не утекал состоянием в другие модули (порядок-независимость)
-        self.addCleanup(setattr, g.execution.solr, "started", g.execution.solr.started)
-        g.execution.solr.started = False
+        g.execution.solr.started = False                        # восстановление зарегистрировано в setUp
         ret = self._send(404, '{"error":{"msg":"Not Found","code":404}}')
         self.assertEqual(ret, 404)
         self.assertEqual(g.stats.solr_total_errors, 0)

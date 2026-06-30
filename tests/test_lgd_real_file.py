@@ -39,10 +39,24 @@ from src import sender as snd
 REAL_LGD_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'test_data', '1cv8.lgd'))
 BASE = 'UU'
 ROW_LIMIT = int(os.getenv('NIKITA_LGD_TEST_LIMIT', '20000'))    # 0 -> весь файл
-TOTAL_ROWS = 179580                                            # всего записей в реальной фикстуре
 
 # 1С-таймстамп (0.0001 c с 0001 года): соответствует ~2025-01-01, валиден для fromtimestamp
 _TS_2025 = 638719344000000
+
+# Словари c1_dicts, которые read_new_ib_dictionary заполняет под ключом базы
+_C1_DICT_ATTRS = (
+    "users", "computers", "applications", "actions", "metadata",
+    "servers", "ports_main", "ports_add",
+    "ext_main_id", "ext_add_id", "ext_area_main_ids", "ext_area_add_ids",
+)
+
+
+def _restore_globals(prev_debug_on):
+    """Возвращает процессные глобалы в исходное состояние после класса тестов:
+    g.debug.on и записи словарей под ключом BASE (их добавляет read_new_ib_dictionary)."""
+    g.debug.on = prev_debug_on
+    for attr in _C1_DICT_ATTRS:
+        getattr(g.execution.c1_dicts, attr).pop(BASE, None)
 
 
 def _make_parser_instance():
@@ -138,6 +152,7 @@ class TestParseSyntheticLgd(unittest.TestCase):
     """Всегда-выполняемый CI-регресс: настоящий parse_lgd_file поверх синтетического LGD."""
     @classmethod
     def setUpClass(cls):
+        cls._prev_debug_on = g.debug.on
         g.debug.on = False
         cls.tmp = tempfile.mkdtemp(prefix='nikita_lgd_test_')
         cls.path = os.path.join(cls.tmp, 'synthetic.lgd')
@@ -148,6 +163,7 @@ class TestParseSyntheticLgd(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
+        _restore_globals(cls._prev_debug_on)
         shutil.rmtree(cls.tmp, ignore_errors=True)
 
     def test_parses_without_graceful_shutdown(self):
@@ -178,10 +194,17 @@ class TestParseRealLgd(unittest.TestCase):
     """Опциональный полный прогон на реальном журнале, если он есть локально."""
     @classmethod
     def setUpClass(cls):
+        cls._prev_debug_on = g.debug.on
         g.debug.on = False
+        with sqlite3.connect(REAL_LGD_PATH) as conn:           # ожидание выводим из самого файла
+            cls.total_rows = conn.execute("SELECT COUNT(*) FROM EventLog").fetchone()[0]
         d.read_new_ib_dictionary(BASE, REAL_LGD_PATH)
         cls.collected = []
         cls.gs_called, cls.gs_calls = _run_parse(REAL_LGD_PATH, BASE, ROW_LIMIT, cls.collected)
+
+    @classmethod
+    def tearDownClass(cls):
+        _restore_globals(cls._prev_debug_on)
 
     def test_parses_without_graceful_shutdown(self):
         self.assertFalse(
@@ -190,7 +213,9 @@ class TestParseRealLgd(unittest.TestCase):
         )
 
     def test_expected_row_count(self):
-        expected = ROW_LIMIT if ROW_LIMIT else TOTAL_ROWS
+        # фикстура не коммитится и может отличаться -> сверяемся с самим файлом,
+        # с тем же кэпом, что применяет _run_parse
+        expected = min(ROW_LIMIT, self.total_rows) if ROW_LIMIT else self.total_rows
         self.assertEqual(len(self.collected), expected)
 
 
