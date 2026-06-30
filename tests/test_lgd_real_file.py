@@ -196,8 +196,11 @@ class TestParseRealLgd(unittest.TestCase):
     def setUpClass(cls):
         cls._prev_debug_on = g.debug.on
         g.debug.on = False
-        with sqlite3.connect(REAL_LGD_PATH) as conn:           # ожидание выводим из самого файла
+        conn = sqlite3.connect(REAL_LGD_PATH)                  # ожидание выводим из самого файла
+        try:                                                   # __exit__ sqlite3 делает только commit/rollback, не close
             cls.total_rows = conn.execute("SELECT COUNT(*) FROM EventLog").fetchone()[0]
+        finally:
+            conn.close()
         d.read_new_ib_dictionary(BASE, REAL_LGD_PATH)
         cls.collected = []
         cls.gs_called, cls.gs_calls = _run_parse(REAL_LGD_PATH, BASE, ROW_LIMIT, cls.collected)
