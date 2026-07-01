@@ -567,13 +567,13 @@ class parser(threading.Thread):
                             r1_nmb                          =   0
                         prev_date                           =   rslt[0]
                         rslt[1]                             =   d.trans_state.get(str(rec[1]))                          # Статус Транзакции
-                        rslt[2]                             =   format(rec[2], 'x')                                     # время транзакции в hex БЕЗ префикса 0x — add_to_json_data сам припишет "0x" (иначе t_id_hex = "0x0x…")
-                        rslt[3]                             =   format(rec[3], 'x')                                     # ID транзакции в hex БЕЗ префикса 0x — по той же причине
+                        rslt[2]                             =   format(rec[2], 'x')                                     # время транзакции в hex БЕЗ префикса 0x - add_to_json_data сам припишет "0x" (иначе t_id_hex = "0x0x…")
+                        rslt[3]                             =   format(rec[3], 'x')                                     # ID транзакции в hex БЕЗ префикса 0x - по той же причине
                         for l_i in range (4,9):
                             rslt[l_i]                       =   str(rec[l_i])                                           # коды строками: словари ЖР ключуются str(code), add_to_json_data ждёт строки (как из LGP). 4-пользователь 5-компьютер 6-приложение 7-соединение 8-событие
                         rslt[9]                             =   d.severity.get(str(rec[9]))                             # 9 - Severity - Важность
                         rslt[10]                            =   "" if rec[10] is None else str(rec[10])                 # 10- комментарий (NULL-safe: add_to_json_data зовёт .replace())
-                        rslt[11]                            =   str(rec[11]) if str(rec[11]).isdigit() else "0"         # 11- номер метаданных строкой ("0", а не int 0 — иначе проверка fj_rec[11]=="0" в add_to_json_data не срабатывает → KeyError)
+                        rslt[11]                            =   str(rec[11]) if str(rec[11]).isdigit() else "0"         # 11- номер метаданных строкой ("0", а не int 0 - иначе проверка fj_rec[11]=="0" в add_to_json_data не срабатывает → KeyError)
                         rslt[12]                            =   r.reader.force_decode("" if rec[12] is None else str(rec[12])) # 12- данные (NULL-safe: force_decode упал бы на None)
                         rslt[13]                            =   "" if rec[13] is None else str(rec[13])                 # 13- представление данных (NULL-safe: add_to_json_data зовёт .replace())
                         for l_i in range (14,18):

@@ -353,9 +353,9 @@ class conf:
         for reg in regs:
             clstr_dir                                       =   os.path.join(d2_srvinfo, reg)
             t.debug_print(f"clstr_dir={str(clstr_dir)}")
-            # Реестр кластера 1С может лежать в двух файлах — 1CV8Clst.lst и 1CV8Clsto.lst.
+            # Реестр кластера 1С может лежать в двух файлах - 1CV8Clst.lst и 1CV8Clsto.lst.
             # Среди существующих НЕПУСТЫХ файлов берём самый свежий по времени записи (mtime),
-            # при равном mtime — больший по размеру; пустой/устаревший файл так не выбираем.
+            # при равном mtime - больший по размеру; пустой/устаревший файл так не выбираем.
             clstr_candidates                                =   [
                                                                     os.path.join(clstr_dir, g.conf.c1.cluster_file),
                                                                     os.path.join(clstr_dir, g.conf.c1.cluster_file_o),
